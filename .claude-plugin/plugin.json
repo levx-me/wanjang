@@ -1,6 +1,6 @@
 {
   "name": "foreman",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "A foreman and its crew for Claude Code: the foreman plans and delegates, a planner, builder, designer, scout, QA tester and checker do the work, each on the model the task needs, with playbooks for specialist know-how",
   "author": { "name": "levx" },
   "license": "MIT"
