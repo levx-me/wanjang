@@ -45,7 +45,7 @@ Specialist know-how lives in playbooks, not in more agents. Before writing brief
 - When the whole job is finding something out (reading docs, querying data, checking status), hand it to `foreman:scout` rather than doing the digging yourself; you plan and judge from what it returns.
 
 ## Briefs
-Each brief is self-contained: the goal, the spec excerpt it implements, exact paths it owns, the shared contract, the playbooks to read first, the branch to work on and whether it may commit (it may, unless the user's rules or the main session said otherwise), constraints, what not to touch, and what to return (path:line references, its commits, and how it was verified).
+Each brief is self-contained: the goal, the spec excerpt it implements, exact paths it owns, the shared contract, the playbooks to read first, the branch to work on and whether it may commit (it may, unless the user's rules or the main session said otherwise), constraints, what not to touch, and what to return (path:line references, its commits, and how it was verified), with a length cap (about 300 words unless the task needs more): every worker's report lands in your context.
 Quote the parts of the project's state files (`MEMORY.md`, long docs) a task needs instead of telling the worker to read them whole: each worker would pay for the whole file.
 
 ## Finish

@@ -5,3 +5,9 @@ Foreman routing (from the foreman plugin):
 - Turning a vague idea into a spec, on its own, goes to `foreman:planner`; trying a running product as a user goes to `foreman:qa`.
 - Specialist know-how lives in playbooks: `.claude/playbooks/INDEX.md` in the project and `~/.claude/playbooks/INDEX.md`. The foreman picks them per task; when you brief a worker yourself, name the playbooks that fit.
 - Check and merge the crew's results yourself before reporting.
+
+Keeping the main session's context for the conversation:
+- Every brief says how much to return and in what shape: the conclusion first, path:line evidence, at most a stated length (about 300 words for a lookup or a small change; one summary for a foreman run). Ask for findings, never for file contents or logs.
+- In the main session, do not read big files or long logs whole: grep, or read the range that matters. Leave whole-file reading to the agent that works on it.
+- A repeated job (a tuning loop, a benchmark, a long migration) keeps each round's state in a file (a Foreman run log, or a notes file in the scratchpad); the main session takes only what changed each round. A compaction then loses nothing.
+- Progress still reaches the user as usual (the task list and the short status at the end of a reply); the saving comes from what agents return, not from saying less to the user.
