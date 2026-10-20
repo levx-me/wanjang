@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+# PreToolUse hook (Bash): the foreman manages and never builds, so a Bash call from the
+# foreman agent that would change files is refused with a pointer to its builder.
+# Writes into a temp directory (scratch notes, logs) stay allowed.
+# ponytail: pattern match on the command line, so a determined write can slip past;
+# it catches the usual ways (redirects, heredoc scripts, sed -i, tee, git commits).
+set -u
+input=$(cat)
+type=$(printf '%s' "$input" | jq -r '.agent_type // empty')
+case "$type" in foreman:foreman|foreman) ;; *) exit 0 ;; esac
+cmd=$(printf '%s' "$input" | jq -r '.tool_input.command // empty')
+
+# Drop redirects that go nowhere or into temp dirs, then look for what is left.
+probe=$(printf '%s' "$cmd" | sed -E \
+  -e 's#[0-9]?>>?[[:space:]]*/dev/null##g' -e 's#[0-9]?>&[0-9]##g' \
+  -e 's#>>?[[:space:]]*"?(/tmp|/private/tmp|/var/folders|\$TMPDIR|\$\{TMPDIR[^}]*\}|\$S|\$SP)[^[:space:];|&]*##g')
+writes='(^|[^<>=-])>>?[[:space:]]*[^[:space:]&|=]|(^|[;&|[:space:]])(tee|truncate|install|patch)[[:space:]]|sed[[:space:]]+(-[a-zA-Z]*i|--in-place)|perl[[:space:]]+-[a-zA-Z]*i|(^|[;&|[:space:]])(rm|mv|cp|mkdir|touch|ln)[[:space:]]|git[[:space:]]+(-C[[:space:]]+[^[:space:]]+[[:space:]]+)?(commit|add|rm|mv|reset|checkout|restore|apply|am|merge|rebase|cherry-pick|stash|push|tag)|\.write_text|\.write\(|open\([^)]*["'"'"'][wa]\+?["'"'"']'
+
+if printf '%s' "$probe" | grep -Eq "$writes"; then
+  jq -n '{hookSpecificOutput: {hookEventName: "PreToolUse", permissionDecision: "deny",
+    permissionDecisionReason: "The foreman does not change files itself. Send this change to foreman:builder (model haiku for a mechanical fix) or to the worker who owns that part. Bash is for looking: reading, running tests and builds, checking git state."}}'
+fi
+exit 0

@@ -1,0 +1,14 @@
+{
+  "name": "foreman",
+  "owner": {
+    "name": "levx"
+  },
+  "description": "Foreman: a crew of Claude Code agents led by a foreman",
+  "plugins": [
+    {
+      "name": "foreman",
+      "source": "./",
+      "description": "A foreman and its crew: plan, delegate by role and model, verify with QA and a checker"
+    }
+  ]
+}

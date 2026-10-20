@@ -1,0 +1,11 @@
+{
+  "description": "Foreman: put the routing rule into every session, and keep the foreman from changing files itself",
+  "hooks": {
+    "SessionStart": [
+      { "matcher": "*", "hooks": [{ "type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}/bin/route\"", "timeout": 5 }] }
+    ],
+    "PreToolUse": [
+      { "matcher": "Bash", "hooks": [{ "type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}/bin/guard\"", "timeout": 5 }] }
+    ]
+  }
+}

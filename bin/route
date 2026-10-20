@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+# SessionStart hook: puts the Foreman routing rule into every session's context.
+jq -Rs '{hookSpecificOutput: {hookEventName: "SessionStart", additionalContext: .}}' "$(dirname "$0")/../ROUTING.md"
