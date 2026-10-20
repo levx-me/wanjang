@@ -1,0 +1,168 @@
+#!/usr/bin/env python3
+"""usage [--session ID] [--cwd DIR] [--json]: where this Claude Code session's tokens go,
+read from its transcripts on disk, so a check costs the main context almost nothing.
+
+  main        context in use now (est.), and since the last compaction the tool results
+              that took the most, plus files read three times or more
+  agents      subagents written to in the last 10 minutes: model, tokens so far, tokens in
+              the last 5 minutes, and an error repeated three times or more
+  background  background shell commands not reported finished, with their output size
+  runs        Foreman runs in this repository still in progress, with tasks left
+
+Exit codes: 0 report printed, 2 session transcript not found."""
+import argparse, glob, json, os, re, subprocess, sys, time
+from collections import Counter, defaultdict
+from datetime import datetime
+
+ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
+ap.add_argument("--session", default=os.environ.get("CLAUDE_CODE_SESSION_ID", ""))
+ap.add_argument("--cwd", default=os.getcwd())
+ap.add_argument("--json", action="store_true", help="machine-readable output on stdout")
+a = ap.parse_args()
+
+home = os.environ.get("CLAUDE_CONFIG_DIR") or os.path.expanduser("~/.claude")
+found = glob.glob(f"{home}/projects/*/{a.session}.jsonl") if a.session else []
+if not found:
+    print(f"usage: no transcript for session {a.session or '(none given)'}", file=sys.stderr)
+    sys.exit(2)
+main_path = max(found, key=os.path.getmtime)
+now = time.time()
+
+
+def rows(path):
+    with open(path, errors="replace") as f:
+        for line in f:
+            try:
+                yield json.loads(line)
+            except ValueError:
+                pass
+
+
+def when(row):
+    try:
+        return datetime.fromisoformat(row["timestamp"].replace("Z", "+00:00")).timestamp()
+    except (KeyError, ValueError, AttributeError):
+        return 0
+
+
+def text_of(content):
+    if isinstance(content, str):
+        return content
+    return " ".join(c.get("text", "") if isinstance(c, dict) else str(c) for c in content or [])
+
+
+def label(use):
+    i = use.get("input", {})
+    what = i.get("file_path") or i.get("description") or i.get("command") or i.get("pattern") or i.get("prompt") or ""
+    return f"{use.get('name')} {str(what).splitlines()[0][:70] if what else ''}".strip()
+
+
+# Main session: since the last compaction.
+uses, results, reads = {}, Counter(), Counter()
+context, model, bg, done_bg = 0, "", {}, set()
+for r in rows(main_path):
+    if r.get("type") == "system" and r.get("subtype") == "compact_boundary":
+        results, reads = Counter(), Counter()
+    msg = r.get("message") if isinstance(r.get("message"), dict) else {}
+    if r.get("type") == "assistant":
+        u = msg.get("usage") or {}
+        if u:
+            context = u.get("input_tokens", 0) + u.get("cache_read_input_tokens", 0) + u.get("cache_creation_input_tokens", 0)
+            model = msg.get("model") or model
+        for c in msg.get("content") or []:
+            if isinstance(c, dict) and c.get("type") == "tool_use":
+                uses[c["id"]] = c
+                if c["name"] == "Read":
+                    reads[c["input"].get("file_path", "")] += 1
+    elif r.get("type") == "user":
+        content = msg.get("content")
+        for c in content if isinstance(content, list) else []:
+            if isinstance(c, dict) and c.get("type") == "tool_result":
+                use = uses.get(c.get("tool_use_id"), {})
+                body = text_of(c.get("content"))
+                results[label(use)] += len(body) // 4
+                found_id = re.search(r"running in background with ID: (\w+)", body)
+                if found_id and use.get("name") == "Bash":
+                    bg[found_id.group(1)] = label(use)
+        for tid in re.findall(r"<task-id>(\w+)</task-id>.*?<status>(?:completed|failed|killed)", text_of(content), re.S):
+            done_bg.add(tid)
+window = 1_000_000 if re.search(r"(opus|sonnet)-5|\[1m\]", model or "") else 200_000
+
+# Subagents written to lately.
+agents = []
+for path in glob.glob(main_path[:-len(".jsonl")] + "/subagents/**/agent-*.jsonl", recursive=True):
+    if now - os.path.getmtime(path) > 600:
+        continue
+    try:
+        with open(path[:-len(".jsonl")] + ".meta.json") as f:
+            meta = json.load(f)
+    except (OSError, ValueError):
+        meta = {}
+    total = recent = last_ctx = 0
+    amodel, errors = "", Counter()
+    for r in rows(path):
+        msg = r.get("message") if isinstance(r.get("message"), dict) else {}
+        u = msg.get("usage") or {}
+        if r.get("type") == "assistant" and u:
+            spent = u.get("cache_creation_input_tokens", 0) + u.get("input_tokens", 0) + u.get("output_tokens", 0)
+            total += spent + u.get("cache_read_input_tokens", 0) // 10  # cache reads cost a tenth
+            recent += spent if now - when(r) < 300 else 0
+            last_ctx = u.get("input_tokens", 0) + u.get("cache_read_input_tokens", 0) + u.get("cache_creation_input_tokens", 0)
+            amodel = msg.get("model") or amodel
+        for c in msg.get("content") if isinstance(msg.get("content"), list) else []:
+            if isinstance(c, dict) and c.get("type") == "tool_result" and c.get("is_error"):
+                errors[text_of(c.get("content"))[:80]] += 1
+    loop = next((e for e, n in errors.most_common(1) if n >= 3), "")
+    agents.append({"name": meta.get("name") or meta.get("agentType") or os.path.basename(path)[6:-6],
+                   "task": meta.get("description", ""), "model": amodel.replace("claude-", ""),
+                   "tokens": total, "last_5min": recent, "context": last_ctx, "repeated_error": loop,
+                   "quiet_s": int(now - os.path.getmtime(path))})
+
+# Background commands not reported finished.
+background = []
+for tid, what in bg.items():
+    if tid in done_bg:
+        continue
+    out = glob.glob(f"/private/tmp/claude-{os.getuid()}/*/{a.session}/tasks/{tid}.output") + \
+        glob.glob(f"/tmp/claude-{os.getuid()}/*/{a.session}/tasks/{tid}.output")
+    if out:  # gone when it ended
+        background.append({"id": tid, "what": what, "output_kb": os.path.getsize(out[0]) // 1024})
+
+# Foreman runs still in progress in this repository.
+runs = []
+try:
+    git = subprocess.run(["git", "-C", a.cwd, "rev-parse", "--path-format=absolute", "--git-common-dir"],
+                         capture_output=True, text=True, timeout=5).stdout.strip()
+except (OSError, subprocess.TimeoutExpired):
+    git = ""
+for log in glob.glob(f"{git}/foreman/*/log.md") + glob.glob(f"{git}/foreman/*.md") if git else []:
+    text = open(log, errors="replace").read()
+    if re.search(r"^Status: in progress", text, re.M):
+        left = len(re.findall(r"\|\s*(todo|running)\s*\|", text))
+        runs.append({"log": log, "tasks_left": left})
+
+report = {"main": {"context": context, "window_est": window, "model": model,
+                   "biggest_results": results.most_common(8),
+                   "reread": [(p, n) for p, n in reads.most_common() if n >= 3][:5]},
+          "agents": sorted(agents, key=lambda x: -x["last_5min"]), "background": background, "runs": runs}
+if a.json:
+    print(json.dumps(report))
+    sys.exit(0)
+
+k = lambda n: f"{n / 1000:.1f}k" if n < 1_000_000 else f"{n / 1e6:.2f}M"
+m = report["main"]
+print(f"main: {k(m['context'])} of ~{k(window)} context ({100 * m['context'] // window}%), {m['model'].replace('claude-', '')}")
+for what, n in m["biggest_results"]:
+    print(f"  {k(n):>7}  {what}")
+for p, n in m["reread"]:
+    print(f"  read {n}x  {p}")
+print(f"agents active in the last 10 min: {len(agents)}")
+for x in report["agents"]:
+    flag = f"  REPEATS: {x['repeated_error']}" if x["repeated_error"] else ""
+    print(f"  {x['name']} ({x['model']}) {k(x['tokens'])} so far, {k(x['last_5min'])} in 5 min, "
+          f"context {k(x['context'])}, quiet {x['quiet_s']}s — {x['task'][:50]}{flag}")
+print(f"background commands still running: {len(background)}")
+for x in background:
+    print(f"  {x['id']}  {x['output_kb']} KB output  {x['what']}")
+for x in runs:
+    print(f"foreman run in progress: {x['tasks_left']} tasks left  {x['log']}")
