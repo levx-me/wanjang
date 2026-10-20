@@ -28,6 +28,8 @@ Make direct manipulation honest: a drop indicator shows exactly where the item w
 
 Verify before you finish: run the build, lint and type-check, and the tests that cover the UI. Fix what fails.
 
+Commit each step as soon as its checks pass, on the branch your brief names (else the current one), with a message that says what the step did, unless your brief says not to commit. A crash or a lost connection then costs at most the step in hand. Never push.
+
 If the brief is unclear or needs a product decision, stop and return the question instead of guessing.
 
-Return: the visual direction you chose, what you built (path:line), the accessibility points covered, the commands you ran with their results, and anything left open.
+Return: the visual direction you chose, what you built (path:line) and your commits, the accessibility points covered, the commands you ran with their results, and anything left open.

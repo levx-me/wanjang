@@ -8,6 +8,18 @@ set -u
 input=$(cat)
 type=$(printf '%s' "$input" | jq -r '.agent_type // empty')
 case "$type" in foreman:foreman|foreman) ;; *) exit 0 ;; esac
+
+# Write and Edit: the foreman's run log is the one file it may write.
+case "$(printf '%s' "$input" | jq -r '.tool_name // empty')" in Write|Edit)
+  file=$(printf '%s' "$input" | jq -r '.tool_input.file_path // empty')
+  case "$file" in
+    */.git/foreman/*.md|"$HOME"/.claude/foreman/runs/*.md) ;;
+    *) jq -n '{hookSpecificOutput: {hookEventName: "PreToolUse", permissionDecision: "deny",
+         permissionDecisionReason: "The foreman writes only its run log (<git common dir>/foreman/*.md). Send this change to foreman:builder or to the worker who owns that part."}}' ;;
+  esac
+  exit 0 ;;
+esac
+
 cmd=$(printf '%s' "$input" | jq -r '.tool_input.command // empty')
 
 # Drop redirects that go nowhere or into temp dirs, then look for what is left.

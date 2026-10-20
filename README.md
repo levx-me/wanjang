@@ -17,6 +17,7 @@ The foreman plans and delegates; a planner, builder, designer, scout, QA tester 
 - **Playbooks instead of a hundred agents.** Specialist know-how lives in Markdown playbooks that cost no context until the foreman picks one for a brief.
 - **Verified before it reports.** QA uses the running product like a user; the checker runs the build and tests and checks every requirement, the docs and the accessibility basics, with a security review for auth, payments and permissions.
 - **On by default.** A session-start hook puts the routing rule in every session; `/foreman` forces a hand-over.
+- **Survives a crash.** A run log, step commits and `/foreman resume` pick a stopped run up where it was.
 
 ## Quick start
 
@@ -57,6 +58,18 @@ flowchart LR
   F -->|one summary| main
 ```
 
+## When a run stops
+
+A crash, a lost connection or a restart kills the foreman and its workers mid-run. Three things keep the work:
+
+- **Run log.** The foreman writes its plan and each task's status to `.git/foreman/<date>-<slug>.md` (never committed) and updates it as workers start and return.
+- **Step commits.** The builder and designer commit each step as soon as its checks pass, so a crash costs at most the step in hand.
+- **Resume.** A new session in that repository is told about any run still `in progress`. `/foreman resume` hands it back to a foreman, which checks the log against git, keeps what is done and carries on with the rest.
+
+```text
+/foreman resume
+```
+
 ## Playbooks
 
 A playbook is a Markdown file of know-how for one kind of work (a Postgres migration, Stripe webhooks, a security review). The foreman reads the indexes when it splits work and names the playbooks that fit in a worker's brief:
@@ -76,8 +89,8 @@ Add one when a kind of work keeps coming back. Nothing is loaded until it is pic
 |---|---|
 | `agents/` | The seven agents |
 | `ROUTING.md` | The routing rule a session-start hook adds to every session |
-| `bin/route` | That hook |
-| `bin/guard` | PreToolUse hook: refuses Bash file writes from the foreman |
+| `bin/route` | That hook; it also names any unfinished run in the repository |
+| `bin/guard` | PreToolUse hook: refuses file writes from the foreman, except its run log |
 | `skills/foreman/` | The `/foreman` command |
 | `test/guard.sh` | Checks the guard on commands the foreman might send |
 

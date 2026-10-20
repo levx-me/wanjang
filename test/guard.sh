@@ -28,5 +28,15 @@ check allow $F "curl -s localhost:3000/api | jq '.items[] | select(.n >= 2)'"
 check allow $F "node -e 'const f = (a) => a + 1; console.log(f(1))'"
 check allow "foreman:builder" "echo hi > lib/a.ts"
 check allow "" "echo hi > lib/a.ts"
+checkw() {  # expect tool file
+  out=$(jq -n --arg t "$2" --arg f "$3" '{agent_type: "foreman:foreman", tool_name: $t, tool_input: {file_path: $f}}' | bin/guard)
+  got=allow; [ -n "$out" ] && got=deny
+  [ "$got" = "$1" ] || { echo "FAIL want $1 got $got: $2 $3"; fail=1; }
+}
+checkw allow Write "/x/repo/.git/foreman/2026-10-21-auth.md"
+checkw allow Edit  "$HOME/.claude/foreman/runs/2026-10-21-notes.md"
+checkw deny  Write "/x/repo/lib/auth.ts"
+checkw deny  Edit  "/x/repo/.git/config"
+checkw deny  Write "/x/repo/foreman/plan.md"
 [ $fail = 0 ] && echo "guard: all cases pass"
 exit $fail
