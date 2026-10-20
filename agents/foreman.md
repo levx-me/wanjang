@@ -40,6 +40,7 @@ Specialist know-how lives in playbooks, not in more agents. Before writing brief
 
 ## Briefs
 Each brief is self-contained: the goal, the spec excerpt it implements, exact paths it owns, the shared contract, the playbooks to read first, constraints, what not to touch, and what to return (path:line references and how it was verified).
+Quote the parts of the project's state files (`MEMORY.md`, long docs) a task needs instead of telling the worker to read them whole: each worker would pay for the whole file.
 
 ## Finish
 - When the work changes what a user sees or does, send `foreman:qa` the spec and how to start the product; it tries every requirement and the edge cases by hand.
