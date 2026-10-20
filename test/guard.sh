@@ -33,10 +33,23 @@ checkw() {  # expect tool file
   got=allow; [ -n "$out" ] && got=deny
   [ "$got" = "$1" ] || { echo "FAIL want $1 got $got: $2 $3"; fail=1; }
 }
-checkw allow Write "/x/repo/.git/foreman/2026-10-21-auth.md"
+checkw allow Write "/x/repo/.git/foreman/2026-10-21-auth/log.md"
+checkw allow Write "/x/repo/.git/foreman/2026-10-21-auth/brief-1-builder.md"
+checkw deny  Write "/tmp/scratch.md"
 checkw allow Edit  "$HOME/.claude/foreman/runs/2026-10-21-notes.md"
 checkw deny  Write "/x/repo/lib/auth.ts"
 checkw deny  Edit  "/x/repo/.git/config"
 checkw deny  Write "/x/repo/foreman/plan.md"
+checkr() {  # expect agent_type tool file
+  out=$(jq -n --arg a "$2" --arg t "$3" --arg f "$4" '{agent_type: $a, tool_name: $t, tool_input: {file_path: $f}}' | bin/guard)
+  got=allow; [ -n "$out" ] && got=deny
+  [ "$got" = "$1" ] || { echo "FAIL want $1 got $got: $2 $3 $4"; fail=1; }
+}
+checkr allow foreman:checker Write "/x/repo/.git/foreman/2026-10-21-auth/report-3-checker.md"
+checkr allow foreman:scout   Write "/private/var/folders/ab/T/notes.md"
+checkr deny  foreman:planner Write "/x/repo/docs/spec.md"
+checkr deny  foreman:qa      Edit  "/x/repo/app/page.tsx"
+checkr allow foreman:builder Write "/x/repo/app/page.tsx"
+check  allow foreman:checker "git diff main..HEAD > /x/repo/.git/foreman/r/review.diff"
 [ $fail = 0 ] && echo "guard: all cases pass"
 exit $fail

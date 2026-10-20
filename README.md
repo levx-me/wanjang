@@ -18,6 +18,7 @@ The foreman plans and delegates; a planner, builder, designer, scout, QA tester 
 - **Verified before it reports.** QA uses the running product like a user; the checker runs the build and tests and checks every requirement, the docs and the accessibility basics, with a security review for auth, payments and permissions.
 - **On by default.** A session-start hook puts the routing rule in every session; `/foreman` forces a hand-over.
 - **Survives a crash.** A run log, step commits and `/foreman resume` pick a stopped run up where it was.
+- **Light on context.** Briefs and reports travel as files in the run folder; workers return a status line, fixes resume the same worker, and the main session keeps only what it needs.
 
 ## Quick start
 
@@ -62,7 +63,7 @@ flowchart LR
 
 A crash, a lost connection or a restart kills the foreman and its workers mid-run. Three things keep the work:
 
-- **Run log.** The foreman writes its plan and each task's status to `.git/foreman/<date>-<slug>.md` (never committed) and updates it as workers start and return.
+- **Run folder.** Each run keeps its log (goal, contract, decisions, tasks, files touched, next), the briefs and the workers' reports in `.git/foreman/<date>-<slug>/` (never committed), updated as workers start and return.
 - **Step commits.** The builder and designer commit each step as soon as its checks pass, so a crash costs at most the step in hand.
 - **Resume.** A new session in that repository is told about any run still `in progress`. `/foreman resume` hands it back to a foreman, which checks the log against git, keeps what is done and carries on with the rest.
 
@@ -90,7 +91,7 @@ Add one when a kind of work keeps coming back. Nothing is loaded until it is pic
 | `agents/` | The seven agents |
 | `ROUTING.md` | The routing rule a session-start hook adds to every session |
 | `bin/route` | That hook; it also names any unfinished run in the repository |
-| `bin/guard` | PreToolUse hook: refuses file writes from the foreman, except its run log |
+| `bin/guard` | PreToolUse hook: the foreman and the read-only crew write only into run folders (and temp dirs for the read-only crew) |
 | `skills/foreman/` | The `/foreman` command |
 | `test/guard.sh` | Checks the guard on commands the foreman might send |
 

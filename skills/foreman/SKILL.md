@@ -7,8 +7,8 @@ argument-hint: <the work to hand over> | resume [run]
 Arguments: $ARGUMENTS
 
 **`resume`** (optionally followed by a run log's name): pick up a Foreman run that stopped (a crash, a lost connection, a restart).
-- Run logs live in `$(git rev-parse --git-common-dir)/foreman/` (outside a git repository, `~/.claude/foreman/runs/`). Take the one named, else the newest whose `Status:` is `in progress`. None: say so and stop. Several and none named: ask which with AskUserQuestion.
-- Hand it to the `foreman:foreman` agent with the Agent tool: "Resume the run log at <path>", plus anything this conversation adds. Do not redo its work yourself.
+- Each run has a folder in `$(git rev-parse --git-common-dir)/foreman/` (outside a git repository, `~/.claude/foreman/runs/`) with its `log.md`. Take the run named, else the newest whose `log.md` says `Status: in progress`. None: say so and stop. Several and none named: ask which with AskUserQuestion.
+- Hand it to the `foreman:foreman` agent with the Agent tool: "Resume the run in <folder>", plus anything this conversation adds. Do not redo its work yourself.
 
 **Anything else**: hand this work to the `foreman:foreman` agent with the Agent tool, and do not do it yourself.
 - If nothing follows /foreman, hand over the request the user made last in this conversation.

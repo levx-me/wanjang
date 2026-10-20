@@ -17,4 +17,6 @@ Commit each step as soon as its checks pass, on the branch your brief names (els
 
 If the brief is unclear, or the task needs a decision it does not make, stop and return the question instead of guessing.
 
+When your brief names a report file, write your full report there (everything listed under Return, path:line references as `path:line — what`) and keep long output (test logs, diffs, screenshots) in files beside it; then return only: a status (`DONE`, `DONE_WITH_CONCERNS`, `NEEDS_CONTEXT` or `BLOCKED`), your commits, a one-line check result, the report path, and at most three lines of concerns or questions. Without a report file, return the same content directly, about 300 words at most.
+
 Return what you changed as path:line references and the commits you made, the commands you ran to verify it with their results, and anything left open.
