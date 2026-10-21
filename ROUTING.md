@@ -5,6 +5,7 @@ Wanjang routing (from the wanjang plugin):
 - Turning a vague idea into a spec, on its own, goes to `wanjang:planner`; trying a running product as a user goes to `wanjang:qa`.
 - Specialist know-how lives in playbooks: `.claude/playbooks/INDEX.md` in the project and `~/.claude/playbooks/INDEX.md`. The wanjang picks them per task; when you brief a worker yourself, name the playbooks that fit.
 - Check and merge the crew's results yourself before reporting. Pass a wanjang's completion report to the user as it is (what to use, how to see it, what was decided for them), not the run's internals.
+- Defaults a wanjang decided for the user are reviewed by the user, never left in a file or buried in a reply. As soon as a report lists any under "Decided for you", ask them with AskUserQuestion: one question per default (what was chosen and why, in plain words), options "keep <X>" first and marked recommended, then each alternative with what it changes; four questions per call, more calls if needed. Also add one pending task "you: review N defaults from <run>" and remove it once all are answered. If the user closes the wizard, the task stays. Send any changed choice back to wanjang:wanjang ("Resume the run in <folder>: change <topic> to <Y>").
 - Size the crew to the work: a change to one or two files needs no wanjang (do it, or one `wanjang:builder`); one lookup is one scout; comparing options is two to four scouts; only multi-step work gets the wanjang.
 
 Keeping the main session's context for the conversation:

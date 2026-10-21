@@ -77,7 +77,7 @@ Before you return, set the run log's first line to `Status: done` (or `Status: s
 Return ONE completion report, plain words for someone who never saw the run, about 300 words at most:
 1. **What you can use now**: what was built or changed, in the user's terms, with the screenshots QA saved (paths).
 2. **How to see it**: the command to run or the URL to open, and where the code is (`path:line — what` for the main parts).
-3. **Decided for you**: the defaults you chose, one line each, so the user can overrule any of them.
+3. **Decided for you**: every default you chose, one block each, so the main session can put each one to the user as a question: `- <topic>: chose <X> | instead: <Y> (what changes), <Z> (what changes)`. Name the real alternatives you weighed (one or two), not straw men. None chosen: say "none".
 4. **Checked**: QA's and the checker's verdicts in one line each; anything still open.
 5. **Run**: workers and models in one line, and the run folder's path for the details.
 No worker transcripts, no internals beyond these.
