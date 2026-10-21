@@ -5,7 +5,7 @@
 **A crew of Claude Code agents, run by one that never picks up a tool.**
 
 [![Claude Code plugin](https://img.shields.io/badge/Claude_Code-plugin-d97757)](https://code.claude.com/docs/en/plugins)
-[![version](https://img.shields.io/badge/version-0.4.0-blue)](.claude-plugin/plugin.json)
+[![version](https://img.shields.io/badge/version-0.5.5-blue)](.claude-plugin/plugin.json)
 [![license](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
 </div>
@@ -23,8 +23,12 @@
   checking, Opus for UI and the genuinely hard parts. A task that fails moves one tier up.
 - **Nothing ships unchecked.** QA uses the product like a user; the checker builds, tests and walks the spec,
   with a security review for auth, payments and permissions.
-- **A crash costs a step, not the run.** Workers commit as they go, the wanjang keeps a run log, and
-  `/wanjang:wanjang resume` picks up where it stopped.
+- **A crash costs a step, not the run.** Workers commit as they go, the wanjang keeps a run log, and the next
+  session picks the run up on its own.
+- **No questions mid-run.** Sensible defaults are decided and listed; when the run ends you review each one in a
+  single wizard (keep it, or pick the alternative). Only what cannot be undone is asked up front.
+- **A completion report, not a transcript.** What you can use now (with QA's screenshots), how to see it, what was
+  decided for you, what was checked.
 
 ## Quick start
 
@@ -108,9 +112,9 @@ Each run keeps everything in `.git/wanjang/<date>-<slug>/` (inside `.git`, so it
 | `report-<n>-<worker>.md` | What it did: `path:line — what`, commands and results |
 | `review.diff`, logs | Long output, kept out of everyone's context |
 
-A new session in that repository is told about any run still in progress (touched in the last week), and
-`/wanjang:wanjang resume` hands it to a fresh wanjang that checks the log against git, keeps what is done and
-carries on.
+A new session in that repository resumes any run still in progress (touched in the last week) on its own, with a
+one-line notice; `/wanjang:wanjang resume` does it by hand. A fresh wanjang checks the log against git, keeps what
+is done and carries on. A hook sends the wanjang back once if it tries to report with its log still open.
 
 ## Playbooks
 
@@ -134,11 +138,13 @@ flow; a blind Opus review scores the code on seven criteria (35 points).
 |---|:-:|:-:|--:|--:|
 | Claude Code alone | 20/20 | 26 | $1.29 | 5.8 min |
 | oh-my-claudecode (ultrawork) | 20/20 | 31 | $2.29 | 8.5 min |
-| wanjang 0.3.2 | 20/20 | 31 | $3.16 | 22.9 min |
+| wanjang 0.5.4 | 20/20 | 30 | $2.53 | 12.6 min |
 
-Each setup ran once, the scores come from two review rounds, and blind scores move by about two points between rounds, so read the gaps as rough. What
-moved quality in our runs: Opus on the UI, and QA and a checker on every UI change. What cut cost: Sonnet for the
-lead, and fresh workers instead of resuming long-running ones.
+Each setup ran once, the scores come from several review rounds, and blind scores move by about two points between
+rounds, so read the gaps as rough. What moved quality in our runs: Opus on the UI, QA and a checker on every UI
+change, and a playbook for the bugs runs kept repeating (an optimistic-UI playbook removed the stale-reload and
+rollback races). What cut cost and time: Sonnet for the lead, fresh workers instead of resuming long-running ones,
+and leaving browser testing to QA.
 
 ## What is in the plugin
 
