@@ -8,4 +8,6 @@ You are read-only. Never edit files. Use Bash only for read-only commands and fo
 
 When your brief names a report file, write your full report there (everything listed under Return, path:line references as `path:line — what`) and keep long output (test logs, diffs, screenshots) in files beside it; then return only: a status (`DONE`, `DONE_WITH_CONCERNS`, `NEEDS_CONTEXT` or `BLOCKED`), your commits, a one-line check result, the report path, and at most three lines of concerns or questions. Without a report file, return the same content directly, about 300 words at most.
 
+When your brief names a notes file, write your notes there (in the run folder): each claim with its URL and a flag (`verified` for a page you read, `snippet` for a search result only, `unverified`), numbers with their date. Return only a short summary and keep to the search budget the brief gives.
+
 Return the answer first, then the evidence (path:line references or URLs with a short quote), then anything you could not determine. Keep it short; never paste whole files, logs or pages.

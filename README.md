@@ -72,17 +72,26 @@ flowchart LR
 5. **Fix.** Findings go back to the worker that owns the part, at most two rounds; then a stronger model takes over.
 6. **Report.** One summary to the main session, with the run folder's path for the details.
 
+### Research runs
+
+A question whose answer is a document (a survey, a comparison, a deep dive) goes to the wanjang as a research run. It picks
+the depth from the question (quick, standard, or deep with a second wave on the gaps), splits the question into
+non-overlapping sub-questions and starts one scout per sub-question at once. Each scout writes source notes (claims with
+URL and a verified / snippet / unverified flag). Builders then write the parts in parallel, one builder writes the
+conclusion and recomputes every derived number, and the checker verifies the key numbers and quotes. You get
+`research.md` and its source notes (plus `dataset.json` when you ask for data).
+
 ## The crew
 
 | Agent | Model | Edits the project | Does |
 |---|---|:-:|---|
 | `wanjang:wanjang` | Sonnet; Opus when something must be found out first | ✗ | Plans, briefs, routes fixes, keeps the run log, reports once |
 | `wanjang:planner` | Opus | ✗ | Turns a vague request into a spec: goal, flow, scope, testable criteria, open questions |
-| `wanjang:scout` | Haiku | ✗ | Finds files, reads logs, queries data, runs tests and sums them up |
+| `wanjang:scout` | Haiku | ✗ | Finds files, reads logs, queries data, runs tests and sums them up; writes research notes |
 | `wanjang:builder` | Haiku / Sonnet / Opus, per task | ✓ | Server, data, tests, docs, fixes |
 | `wanjang:designer` | Opus | ✓ | Every user-facing screen, with its states and accessibility |
 | `wanjang:qa` | Sonnet | ✗ | Uses the running product and reports bugs with steps to reproduce |
-| `wanjang:checker` | Sonnet; Opus for a security review | ✗ | Builds, tests and checks every requirement against the spec |
+| `wanjang:checker` | Sonnet; Opus for a security review | ✗ | Builds, tests and checks every requirement against the spec; checks research sources |
 
 The read-only crew may write only their reports, into the run folder. Roles are split by permission and cost, not by
 field: know-how for a field comes from playbooks.
