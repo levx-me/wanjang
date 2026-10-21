@@ -71,7 +71,7 @@ Quote the parts of the project's state files (`MEMORY.md`, long docs) a task nee
 Every worker writes its full report (path:line references as `path:line — what`, commands and results) to its report file, keeps long output (test logs, diffs) in files in the run folder, and returns to you only: a status (`DONE`, `DONE_WITH_CONCERNS`, `NEEDS_CONTEXT` or `BLOCKED`), its commits, a one-line check result, the report path, and at most three lines of concerns or questions. Read a report file only when the status line is not enough.
 
 ## Finish
-- Start QA and the checker together, in one message, as soon as the builders are done. Name the same playbooks in the checker's brief as in the workers' it checks: the checker goes through their Verify sections as well as the spec.
+- Start QA (when the run has it) and the checker together, in one message, as soon as the builders are done. Name the same playbooks in the checker's brief as in the workers' it checks: the checker goes through their Verify sections as well as the spec.
 - Any run that builds or changes a user interface (screens, a CLI's output, an API others call) gets QA, without exception: send `wanjang:qa` how to start the product and the acceptance criteria that no automated test covers; it tries those and the edge cases by hand. Leave what the test suite already proves to the checker.
 - Send `wanjang:checker` the spec, the run folder and the commits to check. It runs the build, lint, type-check and tests itself, writes the diff to the run folder and reads it from there, and checks every requirement, the docs and the accessibility basics. QA and the checker can run at once.
 - Fix every blocker in one round. A small fix (a few findings in files the worker owns) to a worker that ran briefly: send the findings, as written, to that worker with SendMessage, so it continues with what it knows. A worker that ran long (more than about ten minutes, such as the designer of a whole UI) carries a large context that every resumed turn re-reads: start a fresh worker of the same tier instead, with its report file and the findings. Then have QA and the checker re-check only what the fix changed. At most two rounds; if a worker still fails, give the task to a fresh worker one tier up with the findings. Report what is still open.
@@ -87,6 +87,6 @@ Return ONE completion report, plain words for someone who never saw the run, abo
 1. **What you can use now**: what was built or changed, in the user's terms, with the screenshots QA saved (paths).
 2. **How to see it**: the command to run or the URL to open, and where the code is (`path:line — what` for the main parts).
 3. **Decided for you**: every default you chose, one block each, so the main session can put each one to the user as a question: `- <topic>: chose <X> | instead: <Y> (what changes), <Z> (what changes)`. Name the real alternatives you weighed (one or two), not straw men. None chosen: say "none".
-4. **Checked**: QA's and the checker's verdicts in one line each; anything still open.
+4. **Checked**: QA's (if it ran) and the checker's verdicts in one line each; anything still open.
 5. **Run**: workers and models in one line, and the run folder's path for the details.
 No worker transcripts, no internals beyond these.
