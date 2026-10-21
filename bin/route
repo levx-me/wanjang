@@ -6,7 +6,8 @@ input=$(cat)
 cwd=$(printf '%s' "$input" | jq -r '.cwd // empty')
 text=$(cat "$(dirname "$0")/../ROUTING.md")
 if dir=$(git -C "${cwd:-.}" rev-parse --path-format=absolute --git-common-dir 2>/dev/null); then
-  open=$(grep -l '^Status: in progress' "$dir"/foreman/*/log.md "$dir"/foreman/*.md 2>/dev/null)
+  # Only logs touched in the last week: an older one was abandoned, not interrupted.
+  open=$(find "$dir/foreman" -maxdepth 2 -name '*.md' -mtime -7 2>/dev/null | xargs grep -l '^Status: in progress' 2>/dev/null)
   if [ -n "$open" ]; then
     text+=$'\n\nUnfinished Foreman runs in this repository (they stopped before reporting). Tell the user once, early, and offer `/foreman resume`; do not redo their work from scratch:\n'
     text+=$(printf '%s\n' "$open" | sed 's/^/- /')
