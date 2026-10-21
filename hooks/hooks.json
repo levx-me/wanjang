@@ -1,5 +1,5 @@
 {
-  "description": "Wanjang: put the routing rule (and any unfinished run) into every session, and keep the wanjang from changing project files itself",
+  "description": "Wanjang: put the routing rule (and any unfinished run) into every session, keep the wanjang from changing project files, and keep it from reporting with its run log still open",
   "hooks": {
     "SessionStart": [
       {
@@ -20,6 +20,18 @@
           {
             "type": "command",
             "command": "\"${CLAUDE_PLUGIN_ROOT}/bin/guard\"",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/bin/close\"",
             "timeout": 5
           }
         ]

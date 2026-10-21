@@ -148,12 +148,14 @@ lead, and fresh workers instead of resuming long-running ones.
 | `ROUTING.md` | The routing rule a session-start hook adds to every session |
 | `bin/route` | That hook; it also names unfinished runs in the repository |
 | `bin/guard` | PreToolUse hook: the wanjang and the read-only crew write only into run folders |
+| `bin/close` | SubagentStop hook: sends the wanjang back once if it tries to report with its run log still open |
 | `bin/usage` | The token report behind `/wanjang:optimize` |
 | `skills/` | `/wanjang:wanjang` and `/wanjang:optimize` |
-| `test/` | `guard.sh` and `usage.sh` |
+| `test/` | `guard.sh`, `close.sh` and `usage.sh` |
 
 ```sh
 test/guard.sh   # guard: all cases pass
+test/close.sh   # close: all cases pass
 test/usage.sh   # usage: all cases pass
 ```
 
