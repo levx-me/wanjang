@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="240" viewBox="0 0 960 240" role="img" aria-label="Wanjang (완장): one agent wears the armband and bosses the crew">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#16181d"/>
+      <stop offset="1" stop-color="#22262e"/>
+    </linearGradient>
+  </defs>
+  <rect width="960" height="240" rx="18" fill="url(#bg)"/>
+  <!-- the armband: a sleeve with a red band and the word on it -->
+  <g transform="translate(72 52)">
+    <path d="M0 8 Q0 0 8 0 H128 Q136 0 136 8 V128 Q136 136 128 136 H8 Q0 136 0 128 Z" fill="#2c313a"/>
+    <rect x="-6" y="44" width="148" height="48" rx="6" fill="#c8102e"/>
+    <rect x="-6" y="44" width="148" height="6" fill="#e2384d" opacity=".6"/>
+    <text x="68" y="78" text-anchor="middle" font-family="'Apple SD Gothic Neo','Noto Sans KR',sans-serif" font-size="28" font-weight="800" fill="#fff" letter-spacing="6">완 장</text>
+  </g>
+  <text x="252" y="112" font-family="ui-sans-serif,-apple-system,'Segoe UI',sans-serif" font-size="58" font-weight="800" fill="#f2f3f5" letter-spacing="1">wanjang</text>
+  <text x="254" y="150" font-family="ui-sans-serif,-apple-system,'Segoe UI',sans-serif" font-size="20" fill="#a7adb7">One agent wears the armband. The crew does the work.</text>
+  <text x="254" y="180" font-family="ui-monospace,'SF Mono',Menlo,monospace" font-size="15" fill="#6f7682">planner · scout · builder · designer · qa · checker</text>
+</svg>
