@@ -76,7 +76,7 @@ flowchart LR
 
 A question whose answer is a document (a survey, a comparison, a deep dive) goes to the wanjang as a research run. It picks
 the depth from the question (quick, standard, or deep with a second wave on the gaps), splits the question into
-non-overlapping sub-questions and starts one scout per sub-question at once. Each scout writes source notes (claims with
+non-overlapping sub-questions and starts one scout per sub-question, up to five at once. Each scout writes source notes (claims with
 URL and a verified / snippet / unverified flag). Builders then write the parts in parallel, one builder writes the
 conclusion and recomputes every derived number, and the checker verifies the key numbers and quotes. You get
 `research.md` and its source notes (plus `dataset.json` when you ask for data).
