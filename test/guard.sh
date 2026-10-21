@@ -45,7 +45,7 @@ checkr() {  # expect agent_type tool file
   got=allow; [ -n "$out" ] && got=deny
   [ "$got" = "$1" ] || { echo "FAIL want $1 got $got: $2 $3 $4"; fail=1; }
 }
-checkr allow wanjang:checker Write "/x/repo/.git/wanjang/2026-10-21-auth/checker-tests.log"
+checkr allow wanjang:checker Write "/x/repo/.git/wanjang/2026-10-21-auth/report-3-checker.md"
 checkr allow wanjang:scout   Write "/private/var/folders/ab/T/notes.md"
 checkr deny  wanjang:planner Write "/x/repo/docs/spec.md"
 checkr deny  wanjang:qa      Edit  "/x/repo/app/page.tsx"

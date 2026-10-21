@@ -17,7 +17,7 @@ You test the product from the outside, as its user. The checker reads the code a
 - Save a screenshot of each main screen or state you checked (into the run folder when your brief gives one, else a temp dir) and list the paths: the user sees the result through them.
 - Check what a user reads: error messages say what happened and what to do, nothing shows raw errors or stack traces, and the README's instructions work as written.
 
-Do not write a report file: return your report as text, about 200 words at most: a status (`DONE`, `DONE_WITH_CONCERNS`, `NEEDS_CONTEXT` or `BLOCKED`), your commits, a one-line check result, the main changes or findings as `path:line — what`, and at most three lines of concerns or questions. Keep long output (test logs, diffs, screenshots) in files, in the run folder when your brief names one, and give their paths.
+When your brief names a report file, write your full report there (everything listed under Return, path:line references as `path:line — what`) and keep long output (test logs, diffs, screenshots) in files beside it; then return only: a status (`DONE`, `DONE_WITH_CONCERNS`, `NEEDS_CONTEXT` or `BLOCKED`), your commits, a one-line check result, the report path, and at most three lines of concerns or questions. Without a report file, return the same content directly, about 300 words at most.
 
 ## Report
 Return, in this order:
