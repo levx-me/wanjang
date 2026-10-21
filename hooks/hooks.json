@@ -1,5 +1,5 @@
 {
-  "description": "Foreman: put the routing rule (and any unfinished run) into every session, and keep the foreman from changing project files itself",
+  "description": "Wanjang: put the routing rule (and any unfinished run) into every session, and keep the wanjang from changing project files itself",
   "hooks": {
     "SessionStart": [
       {

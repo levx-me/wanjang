@@ -1,6 +1,6 @@
 ---
 name: designer
-description: "Foreman's designer (Opus): builds all user-facing UI from a brief: layout, components, styles, interaction states and accessibility, production grade and with a deliberate look. Use for any screen, component or styling work."
+description: "Wanjang's designer (Opus): builds all user-facing UI from a brief: layout, components, styles, interaction states and accessibility, production grade and with a deliberate look. Use for any screen, component or styling work."
 model: opus
 disallowedTools: Agent
 ---

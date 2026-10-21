@@ -1,6 +1,6 @@
 ---
 name: scout
-description: "Foreman's scout (Haiku, read-only): finds files and symbols, reads logs and diffs, runs tests or linters and summarises the output, looks up docs. Returns conclusions, not dumps."
+description: "Wanjang's scout (Haiku, read-only): finds files and symbols, reads logs and diffs, runs tests or linters and summarises the output, looks up docs. Returns conclusions, not dumps."
 model: haiku
 tools: Read, Write, Glob, Grep, Bash, WebSearch, WebFetch
 ---

@@ -16,7 +16,7 @@ py() { python3 -c "import json,sys; print(json.dumps(json.loads(sys.argv[1])))" 
   py '{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"b1","content":"Command running in background with ID: bg1. Output is being written to: x"}]}}'
 } > "$P/$S.jsonl"
 mkdir -p "$T/tmp"; out=/private/tmp/claude-$(id -u)/usage-test-$$/$S/tasks; mkdir -p "$out"; head -c 3000 /dev/zero > "$out/bg1.output"
-echo '{"agentType":"foreman:builder","description":"Fix the login"}' > "$P/$S/subagents/agent-a1.meta.json"
+echo '{"agentType":"wanjang:builder","description":"Fix the login"}' > "$P/$S/subagents/agent-a1.meta.json"
 for i in 1 2 3; do
   py "{\"type\":\"assistant\",\"timestamp\":\"$now\",\"message\":{\"model\":\"claude-sonnet-5-5\",\"usage\":{\"input_tokens\":100,\"output_tokens\":50,\"cache_creation_input_tokens\":1000,\"cache_read_input_tokens\":0}}}"
   py '{"type":"user","message":{"content":[{"type":"tool_result","is_error":true,"content":"Error: cannot find module x"}]}}'
@@ -27,7 +27,7 @@ want() { got=$(printf '%s' "$json" | jq -r "$1"); [ "$got" = "$2" ] || { echo "F
 want '.main.context' 500005
 want '.main.reread[0] | "\(.[0]) \(.[1])"' '/big.ts 3'
 want '[.main.reread[][0]] | index("/old.md")' null   # before the compaction: not counted
-want '.agents[0].name' foreman:builder
+want '.agents[0].name' wanjang:builder
 want '.agents[0].last_5min' 3450
 want '.agents[0].repeated_error' 'Error: cannot find module x'
 want '.background[0].id' bg1

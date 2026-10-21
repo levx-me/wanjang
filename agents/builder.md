@@ -1,6 +1,6 @@
 ---
 name: builder
-description: "Foreman's builder: does one well-specified implementation task from a brief (server code, data, refactors, tests, fixes). The foreman picks the model per task (haiku mechanical, sonnet standard, opus hard); sonnet when none is passed. Not for UI work, which goes to the designer."
+description: "Wanjang's builder: does one well-specified implementation task from a brief (server code, data, refactors, tests, fixes). The wanjang picks the model per task (haiku mechanical, sonnet standard, opus hard); sonnet when none is passed. Not for UI work, which goes to the designer."
 model: sonnet
 disallowedTools: Agent
 ---

@@ -1,6 +1,6 @@
 ---
 name: checker
-description: "Foreman's checker (Sonnet, read-only): verifies finished work against the spec with fresh evidence before it is reported: runs build, lint, type-check and tests itself, checks every requirement, the docs and the accessibility basics (plus a security review when the brief asks for one), and returns PASS / FAIL with the blockers."
+description: "Wanjang's checker (Sonnet, read-only): verifies finished work against the spec with fresh evidence before it is reported: runs build, lint, type-check and tests itself, checks every requirement, the docs and the accessibility basics (plus a security review when the brief asks for one), and returns PASS / FAIL with the blockers."
 model: sonnet
 disallowedTools: Agent, Edit, NotebookEdit
 ---

@@ -1,15 +1,15 @@
 #!/usr/bin/env bash
-# SessionStart hook: puts the Foreman routing rule into every session's context, and a note
-# about any Foreman run in this repository that stopped before it finished.
+# SessionStart hook: puts the Wanjang routing rule into every session's context, and a note
+# about any Wanjang run in this repository that stopped before it finished.
 set -u
 input=$(cat)
 cwd=$(printf '%s' "$input" | jq -r '.cwd // empty')
 text=$(cat "$(dirname "$0")/../ROUTING.md")
 if dir=$(git -C "${cwd:-.}" rev-parse --path-format=absolute --git-common-dir 2>/dev/null); then
   # Only logs touched in the last week: an older one was abandoned, not interrupted.
-  open=$(find "$dir/foreman" -maxdepth 2 -name '*.md' -mtime -7 2>/dev/null | xargs grep -l '^Status: in progress' 2>/dev/null)
+  open=$(find "$dir/wanjang" -maxdepth 2 -name '*.md' -mtime -7 2>/dev/null | xargs grep -l '^Status: in progress' 2>/dev/null)
   if [ -n "$open" ]; then
-    text+=$'\n\nUnfinished Foreman runs in this repository (they stopped before reporting). Tell the user once, early, and offer `/foreman resume`; do not redo their work from scratch:\n'
+    text+=$'\n\nUnfinished Wanjang runs in this repository (they stopped before reporting). Tell the user once, early, and offer `/wanjang:wanjang resume`; do not redo their work from scratch:\n'
     text+=$(printf '%s\n' "$open" | sed 's/^/- /')
   fi
 fi

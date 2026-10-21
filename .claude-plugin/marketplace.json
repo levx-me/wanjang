@@ -1,14 +1,14 @@
 {
-  "name": "foreman",
+  "name": "wanjang",
   "owner": {
     "name": "levx"
   },
-  "description": "Foreman: a crew of Claude Code agents led by a foreman",
+  "description": "Wanjang: a crew of Claude Code agents led by a wanjang",
   "plugins": [
     {
-      "name": "foreman",
+      "name": "wanjang",
       "source": "./",
-      "description": "A foreman and its crew: plan, delegate by role and model, verify with QA and a checker"
+      "description": "A wanjang and its crew: plan, delegate by role and model, verify with QA and a checker"
     }
   ]
 }

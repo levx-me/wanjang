@@ -1,6 +1,6 @@
 ---
 name: qa
-description: "Foreman's QA tester (Sonnet): uses the running product the way a user would (a web app in a browser, an API over HTTP, a CLI in a shell) and reports what breaks, with exact steps to reproduce, expected and actual. Explores edge cases the spec and the tests miss. Never edits the product's code."
+description: "Wanjang's QA tester (Sonnet): uses the running product the way a user would (a web app in a browser, an API over HTTP, a CLI in a shell) and reports what breaks, with exact steps to reproduce, expected and actual. Explores edge cases the spec and the tests miss. Never edits the product's code."
 model: sonnet
 disallowedTools: Agent, Edit, NotebookEdit
 ---

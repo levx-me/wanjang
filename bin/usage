@@ -7,7 +7,7 @@ read from its transcripts on disk, so a check costs the main context almost noth
   agents      subagents written to in the last 10 minutes: model, tokens so far, tokens in
               the last 5 minutes, and an error repeated three times or more
   background  background shell commands not reported finished, with their output size
-  runs        Foreman runs in this repository still in progress, with tasks left
+  runs        Wanjang runs in this repository still in progress, with tasks left
 
 Exit codes: 0 report printed, 2 session transcript not found."""
 import argparse, glob, json, os, re, subprocess, sys, time
@@ -128,14 +128,14 @@ for tid, what in bg.items():
     if out:  # gone when it ended
         background.append({"id": tid, "what": what, "output_kb": os.path.getsize(out[0]) // 1024})
 
-# Foreman runs still in progress in this repository.
+# Wanjang runs still in progress in this repository.
 runs = []
 try:
     git = subprocess.run(["git", "-C", a.cwd, "rev-parse", "--path-format=absolute", "--git-common-dir"],
                          capture_output=True, text=True, timeout=5).stdout.strip()
 except (OSError, subprocess.TimeoutExpired):
     git = ""
-for log in glob.glob(f"{git}/foreman/*/log.md") + glob.glob(f"{git}/foreman/*.md") if git else []:
+for log in glob.glob(f"{git}/wanjang/*/log.md") + glob.glob(f"{git}/wanjang/*.md") if git else []:
     text = open(log, errors="replace").read()
     if re.search(r"^Status: in progress", text, re.M):
         left = len(re.findall(r"\|\s*(todo|running)\s*\|", text))
@@ -165,4 +165,4 @@ print(f"background commands still running: {len(background)}")
 for x in background:
     print(f"  {x['id']}  {x['output_kb']} KB output  {x['what']}")
 for x in runs:
-    print(f"foreman run in progress: {x['tasks_left']} tasks left  {x['log']}")
+    print(f"wanjang run in progress: {x['tasks_left']} tasks left  {x['log']}")
