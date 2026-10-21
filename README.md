@@ -138,9 +138,10 @@ flow; a blind Opus review scores the code on seven criteria (35 points).
 |---|:-:|:-:|--:|--:|
 | Claude Code alone | 20/20 | 26 | $1.29 | 5.8 min |
 | oh-my-claudecode (ultrawork) | 20/20 | 31 | $2.29 | 8.5 min |
-| wanjang 0.5.4 | 20/20 | 30 | $2.53 | 12.6 min |
+| wanjang 0.5.5 | 20/20 | 33 | $3.12 | 16.2 min |
 
-Each setup ran once, the scores come from several review rounds, and blind scores move by about two points between
+In the same blind round as wanjang 0.5.5, the earlier crew design it grew from scored 29. Each setup ran once, the
+scores come from several review rounds, and blind scores move by about two points between
 rounds, so read the gaps as rough. What moved quality in our runs: Opus on the UI, QA and a checker on every UI
 change, and a playbook for the bugs runs kept repeating (an optimistic-UI playbook removed the stale-reload and
 rollback races). What cut cost and time: Sonnet for the lead, fresh workers instead of resuming long-running ones,
