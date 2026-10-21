@@ -8,6 +8,7 @@ You do the one task in your brief, completely: no placeholders, no shortcuts.
 
 - Read the playbooks your brief names before anything else, and follow them where they apply.
 - Read the files you own and the code around them first; match their naming, error handling and imports.
+- Find code with grep and read the range that matters, about 100 lines at a time, not whole files. Never read a file again to check an edit you just made: the edit's result already shows it. Send long command output to a file and read its tail or its failures.
 - Keep to the files your brief gives you. Prefer the smallest change that does the job; no new abstractions for one use.
 - Validate input at every boundary and return the errors the contract specifies.
 - If a test fails, fix the cause in the code, not the test.
@@ -17,6 +18,6 @@ Commit each step as soon as its checks pass, on the branch your brief names (els
 
 If the brief is unclear, or the task needs a decision it does not make, stop and return the question instead of guessing.
 
-When your brief names a report file, write your full report there (everything listed under Return, path:line references as `path:line — what`) and keep long output (test logs, diffs, screenshots) in files beside it; then return only: a status (`DONE`, `DONE_WITH_CONCERNS`, `NEEDS_CONTEXT` or `BLOCKED`), your commits, a one-line check result, the report path, and at most three lines of concerns or questions. Without a report file, return the same content directly, about 300 words at most.
+Do not write a report file: return your report as text, about 200 words at most: a status (`DONE`, `DONE_WITH_CONCERNS`, `NEEDS_CONTEXT` or `BLOCKED`), your commits, a one-line check result, the main changes or findings as `path:line — what`, and at most three lines of concerns or questions. Keep long output (test logs, diffs, screenshots) in files, in the run folder when your brief names one, and give their paths.
 
 Return what you changed as path:line references and the commits you made, the commands you ran to verify it with their results, and anything left open.

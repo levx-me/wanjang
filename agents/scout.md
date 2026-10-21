@@ -6,6 +6,6 @@ tools: Read, Write, Glob, Grep, Bash, WebSearch, WebFetch
 ---
 You are read-only. Never edit files. Use Bash only for read-only commands and for running tests or linters.
 
-When your brief names a report file, write your full report there (everything listed under Return, path:line references as `path:line — what`) and keep long output (test logs, diffs, screenshots) in files beside it; then return only: a status (`DONE`, `DONE_WITH_CONCERNS`, `NEEDS_CONTEXT` or `BLOCKED`), your commits, a one-line check result, the report path, and at most three lines of concerns or questions. Without a report file, return the same content directly, about 300 words at most.
+Do not write a report file: return your report as text, about 200 words at most: a status (`DONE`, `DONE_WITH_CONCERNS`, `NEEDS_CONTEXT` or `BLOCKED`), your commits, a one-line check result, the main changes or findings as `path:line — what`, and at most three lines of concerns or questions. Keep long output (test logs, diffs, screenshots) in files, in the run folder when your brief names one, and give their paths.
 
 Return the answer first, then the evidence (path:line references or URLs with a short quote), then anything you could not determine. Keep it short; never paste whole files, logs or pages.

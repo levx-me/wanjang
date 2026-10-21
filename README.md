@@ -18,7 +18,7 @@
 ## Why
 
 - **Your main session stays small.** Multi-step work goes to the wanjang; what comes back is one short summary.
-  Briefs, reports and logs live in files, not in anyone's context.
+  Briefs, logs and long output live in files, not in anyone's context; workers return a short text report.
 - **Each task gets the model it needs.** Haiku for lookups and mechanical edits, Sonnet for ordinary building and
   checking, Opus for UI and the genuinely hard parts. A task that fails moves one tier up.
 - **Nothing ships unchecked.** QA uses the product like a user; the checker builds, tests and walks the spec,
@@ -55,7 +55,7 @@ flowchart LR
   W -->|vague request| P[planner]
   W -->|brief files| B[builder]
   W -->|brief files| D[designer]
-  B & D -->|status line + report file| W
+  B & D -->|short text report| W
   W --> Q[qa]
   W --> C[checker]
   Q & C -->|blockers| W
@@ -63,11 +63,12 @@ flowchart LR
 ```
 
 1. **Plan.** A vague request goes to the planner for a spec with testable acceptance criteria. The wanjang splits
-   the work by layer (data and server, UI, tests, docs), agrees the contract between them and writes it down.
+   the work by layer (data and server, UI, tests, docs), cuts a layer that is too big into groups of files that do
+   not overlap so those groups run at once, agrees the contract between them and writes it down.
 2. **Brief.** Each worker gets a brief file: the playbooks to read, the contract, the decisions every worker must
    share, the files it owns, and what to return.
 3. **Build.** Workers run in parallel where they own different files, commit each step once its checks pass, and
-   return a one-line status with the path of their full report.
+   return a short text report.
 4. **Verify.** QA tries what no test covers; the checker runs the build and tests and checks every requirement.
 5. **Fix.** Findings go back to the worker that owns the part, at most two rounds; then a stronger model takes over.
 6. **Report.** One summary to the main session, with the run folder's path for the details.
@@ -84,8 +85,8 @@ flowchart LR
 | `wanjang:qa` | Sonnet | ✗ | Uses the running product and reports bugs with steps to reproduce |
 | `wanjang:checker` | Sonnet; Opus for a security review | ✗ | Builds, tests and checks every requirement against the spec |
 
-The read-only crew may write only their reports, into the run folder. Roles are split by permission and cost, not by
-field: know-how for a field comes from playbooks.
+The read-only crew write only scratch files and long output, into the run folder or a temp dir. Roles are split by
+permission and cost, not by field: know-how for a field comes from playbooks.
 
 ## Commands
 
@@ -109,7 +110,7 @@ Each run keeps everything in `.git/wanjang/<date>-<slug>/` (inside `.git`, so it
 |---|---|
 | `log.md` | `Status`, goal, contract, decisions, tasks and their status, files touched, next |
 | `brief-<n>-<worker>.md` | What the worker was asked to do |
-| `report-<n>-<worker>.md` | What it did: `path:line — what`, commands and results |
+| `spec.md` | The planner's spec, which the wanjang plans from |
 | `review.diff`, logs | Long output, kept out of everyone's context |
 
 A new session in that repository resumes any run still in progress (touched in the last week) on its own, with a
