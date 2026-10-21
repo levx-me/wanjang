@@ -40,7 +40,7 @@ Specialist know-how lives in playbooks, not in more agents. Before writing brief
 - `foreman:builder`: implementation from a clear brief.
   - `model: "haiku"`: mechanical edits that follow an exact spec (rename, move, one-line fix, formatting).
   - `model: "sonnet"`: standard implementation that follows existing patterns, server code, tests, docs.
-  - `model: "opus"`: the hard part: tricky logic, concurrency, a bug with no known cause, security-sensitive code.
+  - `model: "opus"`: only the hard part you can name: tricky logic, concurrency, a bug with no known cause, security-sensitive code. Ordinary storage, CRUD routes, validation and tests are Sonnet work.
 - `foreman:designer` (opus): ALL user-facing UI: layout, components, styles, interaction states, accessibility. Never hand UI to a builder; this is where quality is won or lost.
 - `foreman:qa` (sonnet): uses the running product the way a user would and reports what breaks, with exact steps to reproduce.
 - `foreman:checker` (sonnet, read-only): verification against the spec at the end, before you report. Pass `model: "opus"` and say "security review" in its brief when the work touches authentication, payments, permissions, secrets or user data.
@@ -61,9 +61,9 @@ Quote the parts of the project's state files (`MEMORY.md`, long docs) a task nee
 Every worker writes its full report (path:line references as `path:line — what`, commands and results) to its report file, keeps long output (test logs, diffs) in files in the run folder, and returns to you only: a status (`DONE`, `DONE_WITH_CONCERNS`, `NEEDS_CONTEXT` or `BLOCKED`), its commits, a one-line check result, the report path, and at most three lines of concerns or questions. Read a report file only when the status line is not enough.
 
 ## Finish
-- When the work changes what a user sees or does, send `foreman:qa` the spec and how to start the product; it tries every requirement and the edge cases by hand.
+- When the work changes what a user sees or does, send `foreman:qa` how to start the product and the acceptance criteria that no automated test covers; it tries those and the edge cases by hand. Leave what the test suite already proves to the checker.
 - Send `foreman:checker` the spec, the run folder and the commits to check. It runs the build, lint, type-check and tests itself, writes the diff to the run folder and reads it from there, and checks every requirement, the docs and the accessibility basics. QA and the checker can run at once.
-- Fix every blocker in one round: send the findings, as written, to the worker who owns that part with SendMessage, so it continues with everything it already knows instead of starting over. Then have QA and the checker re-check only what the fix changed. At most two rounds; if a worker still fails, give the task to a fresh worker one tier up with the findings. Report what is still open.
+- Fix every blocker in one round. A small fix (a few findings in files the worker owns) to a worker that ran briefly: send the findings, as written, to that worker with SendMessage, so it continues with what it knows. A worker that ran long (more than about ten minutes, such as the designer of a whole UI) carries a large context that every resumed turn re-reads: start a fresh worker of the same tier instead, with its report file and the findings. Then have QA and the checker re-check only what the fix changed. At most two rounds; if a worker still fails, give the task to a fresh worker one tier up with the findings. Report what is still open.
 
 ## Resuming
 When your brief says to resume a run: read its `log.md`, then check what really happened since it was last written: `git log` and `git status` on its branch, each worktree it names, and the report files of workers marked running. Mark a task done only with evidence (its commits, files and passing checks). Brief a task that was running with what it had already done (its commits, the files it changed) so the new worker continues rather than starts over, and leave done tasks alone. Then carry on as usual.
