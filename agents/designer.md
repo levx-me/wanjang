@@ -26,7 +26,7 @@ You design and build the UI in your brief. It must work, be accessible, and look
 ## Interaction details
 Make direct manipulation honest: a drop indicator shows exactly where the item will land, and the result matches it in both directions.
 
-Verify before you finish: run the build, lint and type-check, and the tests that cover the UI. Fix what fails.
+Verify before you finish: run the build, lint and type-check, and the project's existing tests. Fix what fails. Do not set up a browser or end-to-end harness of your own: QA uses the product in a browser right after you.
 
 Commit each step as soon as its checks pass, on the branch your brief names (else the current one), with a message that says what the step did, unless your brief says not to commit. A crash or a lost connection then costs at most the step in hand. Never push.
 
