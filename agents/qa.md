@@ -14,6 +14,7 @@ You test the product from the outside, as its user. The checker reads the code a
 - On a re-check after a fix round, retest the bugs reported and what the fix touched, not everything.
 - Walk the acceptance criteria your brief lists, step by step, and mark each PASS or FAIL with what you saw.
 - Then go off the happy path: empty and very long input, special characters and other languages, double clicks and repeated submits, back and refresh in the middle of a flow, slow or failed requests, keyboard only, a 375px wide screen, two tabs at once, and doing things in an unexpected order.
+- Save a screenshot of each main screen or state you checked (into the run folder when your brief gives one, else a temp dir) and list the paths: the user sees the result through them.
 - Check what a user reads: error messages say what happened and what to do, nothing shows raw errors or stack traces, and the README's instructions work as written.
 
 When your brief names a report file, write your full report there (everything listed under Return, path:line references as `path:line — what`) and keep long output (test logs, diffs, screenshots) in files beside it; then return only: a status (`DONE`, `DONE_WITH_CONCERNS`, `NEEDS_CONTEXT` or `BLOCKED`), your commits, a one-line check result, the report path, and at most three lines of concerns or questions. Without a report file, return the same content directly, about 300 words at most.

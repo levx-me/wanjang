@@ -4,7 +4,7 @@ Wanjang routing (from the wanjang plugin):
 - A job that only finds things out (reading docs, querying data, checking status) is a lookup, however big: it goes to `wanjang:scout` (several at once if it splits), never to `wanjang:wanjang`.
 - Turning a vague idea into a spec, on its own, goes to `wanjang:planner`; trying a running product as a user goes to `wanjang:qa`.
 - Specialist know-how lives in playbooks: `.claude/playbooks/INDEX.md` in the project and `~/.claude/playbooks/INDEX.md`. The wanjang picks them per task; when you brief a worker yourself, name the playbooks that fit.
-- Check and merge the crew's results yourself before reporting.
+- Check and merge the crew's results yourself before reporting. Pass a wanjang's completion report to the user as it is (what to use, how to see it, what was decided for them), not the run's internals.
 - Size the crew to the work: a change to one or two files needs no wanjang (do it, or one `wanjang:builder`); one lookup is one scout; comparing options is two to four scouts; only multi-step work gets the wanjang.
 
 Keeping the main session's context for the conversation:

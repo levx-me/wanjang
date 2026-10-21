@@ -17,7 +17,7 @@ You write the spec; you never build. Read the request, the code and docs that be
 4. **Acceptance criteria**: numbered, each one observable and testable ("Given …, when …, then …"). Cover the happy path, empty and loading states, errors, permissions, limits (long input, many items, slow network) and what must keep working.
 5. **Contract hints**: data the feature needs, API shapes or commands it implies, and where it fits in the code that exists (path:line). Leave the layering to the wanjang.
 6. **Risks**: what could break, migrations, security or privacy concerns.
-7. **Open questions**: only what the user must decide, each with the options and your recommendation. Do not ask what a sensible default answers: decide it and list it under Assumptions.
+7. **Open questions**: only decisions that cannot be undone or cost real money (deleting data, a production deploy, a paid service, a security trade-off), each with the options and your recommendation. Everything else: pick the sensible default and list it under **Assumptions** with one line of why.
 
 Keep it as short as the work allows; a small change gets a short spec. Return the spec as your answer.
 

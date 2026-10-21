@@ -9,7 +9,7 @@ if dir=$(git -C "${cwd:-.}" rev-parse --path-format=absolute --git-common-dir 2>
   # Only logs touched in the last week: an older one was abandoned, not interrupted.
   open=$(find "$dir/wanjang" -maxdepth 2 -name '*.md' -mtime -7 2>/dev/null | xargs grep -l '^Status: in progress' 2>/dev/null)
   if [ -n "$open" ]; then
-    text+=$'\n\nUnfinished Wanjang runs in this repository (they stopped before reporting). Tell the user once, early, and offer `/wanjang:wanjang resume`; do not redo their work from scratch:\n'
+    text+=$'\n\nUnfinished Wanjang runs in this repository (they stopped before reporting). Resume the newest one right away: hand it to wanjang:wanjang in the background with \"Resume the run in <its folder>\", and tell the user in one line that it is carrying on. Ask first only if the first message from the user starts something that would clash with it. Never redo its work from scratch:\n'
     text+=$(printf '%s\n' "$open" | sed 's/^/- /')
   fi
 fi
