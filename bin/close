@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# SubagentStop hook: the wanjang may not report while a run log it wrote is still "in progress".
+# SubagentStop hook: the PM may not report while a run log it wrote is still "in progress".
 # It is sent back once to close the log (Status: done, or stopped with why); the second stop
 # goes through (stop_hook_active), so it can never loop.
 set -u
 input=$(cat)
-case "$(printf '%s' "$input" | jq -r '.agent_type // empty')" in wanjang:wanjang|wanjang) ;; *) exit 0 ;; esac
+case "$(printf '%s' "$input" | jq -r '.agent_type // empty')" in wanjang:pm|pm|wanjang:wanjang|wanjang) ;; *) exit 0 ;; esac  # the old name still runs in sessions started before the rename
 [ "$(printf '%s' "$input" | jq -r '.stop_hook_active // false')" = true ] && exit 0
 cwd=$(printf '%s' "$input" | jq -r '.cwd // empty')
 dir=$(git -C "${cwd:-.}" rev-parse --path-format=absolute --git-common-dir 2>/dev/null) || exit 0

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # PreToolUse hook (Bash, Write, Edit) for the Wanjang crew.
-# - The wanjang manages and never builds: it may write only into a run folder, and a Bash
+# - The PM manages and never builds: it may write only into a run folder, and a Bash
 #   call of its that would change files is refused with a pointer to its builder.
 # - The read-only crew (planner, scout, checker, qa) write only their reports and scratch
 #   files: into a run folder or a temp directory, never into the project.
@@ -11,7 +11,7 @@ set -u
 input=$(cat)
 type=$(printf '%s' "$input" | jq -r '.agent_type // empty')
 case "$type" in
-  wanjang:wanjang|wanjang) role=wanjang ;;
+  wanjang:pm|pm|wanjang:wanjang|wanjang) role=wanjang ;;  # old name kept for sessions started before the rename
   wanjang:planner|wanjang:scout|wanjang:checker|wanjang:qa) role=reader ;;
   *) exit 0 ;;
 esac
@@ -23,9 +23,9 @@ case "$(printf '%s' "$input" | jq -r '.tool_name // empty')" in Write|Edit)
   file=$(printf '%s' "$input" | jq -r '.tool_input.file_path // empty')
   case "$file" in
     */.git/wanjang/*|"$HOME"/.claude/wanjang/runs/*) ;;
-    /tmp/*|/private/tmp/*|/var/folders/*|/private/var/folders/*) [ "$role" = reader ] || deny "The wanjang writes only into its run folder (<git common dir>/wanjang/<run>/). Send this change to wanjang:builder or to the worker who owns that part." ;;
+    /tmp/*|/private/tmp/*|/var/folders/*|/private/var/folders/*) [ "$role" = reader ] || deny "The PM writes only into its run folder (<git common dir>/wanjang/<run>/). Send this change to wanjang:builder or to the worker who owns that part." ;;
     *) if [ "$role" = wanjang ]; then
-         deny "The wanjang writes only into its run folder (<git common dir>/wanjang/<run>/). Send this change to wanjang:builder or to the worker who owns that part."
+         deny "The PM writes only into its run folder (<git common dir>/wanjang/<run>/). Send this change to wanjang:builder or to the worker who owns that part."
        else
          deny "You are read-only on the project: write your report into the run folder your brief names (or a temp dir for scratch files), never into the repository."
        fi ;;
@@ -43,6 +43,6 @@ probe=$(printf '%s' "$cmd" | sed -E \
 writes='(^|[^<>=-])>>?[[:space:]]*[^[:space:]&|=]|(^|[;&|[:space:]])(tee|truncate|install|patch)[[:space:]]|sed[[:space:]]+(-[a-zA-Z]*i|--in-place)|perl[[:space:]]+-[a-zA-Z]*i|(^|[;&|[:space:]])(rm|mv|cp|mkdir|touch|ln)[[:space:]]|git[[:space:]]+(-C[[:space:]]+[^[:space:]]+[[:space:]]+)?(commit|add|rm|mv|reset|checkout|restore|apply|am|merge|rebase|cherry-pick|stash|push|tag)|\.write_text|\.write\(|open\([^)]*["'"'"'][wa]\+?["'"'"']'
 
 if printf '%s' "$probe" | grep -Eq "$writes"; then
-  deny "The wanjang does not change files itself. Send this change to wanjang:builder (model haiku for a mechanical fix) or to the worker who owns that part. Bash is for looking: reading, running tests and builds, checking git state."
+  deny "The PM does not change files itself. Send this change to wanjang:builder (model haiku for a mechanical fix) or to the worker who owns that part. Bash is for looking: reading, running tests and builds, checking git state."
 fi
 exit 0

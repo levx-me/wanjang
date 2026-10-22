@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Runs bin/guard on commands the wanjang might send; fails on any wrong verdict.
+# Runs bin/guard on commands the PM might send; fails on any wrong verdict.
 cd "$(dirname "$0")/.." || exit 2
 fail=0
 check() {  # expect(deny|allow) agent_type command
@@ -7,7 +7,7 @@ check() {  # expect(deny|allow) agent_type command
   got=allow; [ -n "$out" ] && got=deny
   [ "$got" = "$1" ] || { echo "FAIL want $1 got $got: $3"; fail=1; }
 }
-F=wanjang:wanjang
+F=wanjang:pm
 check deny  $F "cd /x; python3 - <<'EOF'
 open('lib/a.ts','w').write(s)
 EOF"
@@ -27,9 +27,10 @@ check allow $F "S=/private/tmp/claude-501/p/s; npx eslint a.ts > \$S/lint.txt 2>
 check allow $F "curl -s localhost:3000/api | jq '.items[] | select(.n >= 2)'"
 check allow $F "node -e 'const f = (a) => a + 1; console.log(f(1))'"
 check allow "wanjang:builder" "echo hi > lib/a.ts"
+check deny  wanjang:wanjang "echo hi > lib/a.ts"  # old name is still the PM
 check allow "" "echo hi > lib/a.ts"
 checkw() {  # expect tool file
-  out=$(jq -n --arg t "$2" --arg f "$3" '{agent_type: "wanjang:wanjang", tool_name: $t, tool_input: {file_path: $f}}' | bin/guard)
+  out=$(jq -n --arg t "$2" --arg f "$3" '{agent_type: "wanjang:pm", tool_name: $t, tool_input: {file_path: $f}}' | bin/guard)
   got=allow; [ -n "$out" ] && got=deny
   [ "$got" = "$1" ] || { echo "FAIL want $1 got $got: $2 $3"; fail=1; }
 }

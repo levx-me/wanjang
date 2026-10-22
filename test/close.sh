@@ -10,12 +10,13 @@ check() {  # want(block|pass) agent_type stop_hook_active
   [ "$got" = "$1" ] || { echo "FAIL want $1 got $got: $2 active=$3 ($(head -1 "$T/.git/wanjang/run1/log.md"))"; fail=1; }
 }
 printf 'Status: in progress\n' > "$T/.git/wanjang/run1/log.md"
-check block wanjang:wanjang false   # still open: sent back once
-check pass  wanjang:wanjang true    # the second stop goes through
-check pass  wanjang:builder false   # not the wanjang
+check block wanjang:pm false   # still open: sent back once
+check pass  wanjang:pm true    # the second stop goes through
+check pass  wanjang:builder false   # not the PM
+check block wanjang:wanjang false   # old name: still the PM
 printf 'Status: done\n' > "$T/.git/wanjang/run1/log.md"
-check pass  wanjang:wanjang false   # closed
+check pass  wanjang:pm false   # closed
 printf 'Status: in progress\n' > "$T/.git/wanjang/run1/log.md"; touch -t 202601010000 "$T/.git/wanjang/run1/log.md"
-check pass  wanjang:wanjang false   # an old log is not this run's
+check pass  wanjang:pm false   # an old log is not this run's
 [ $fail = 0 ] && echo "close: all cases pass"
 exit $fail
