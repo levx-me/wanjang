@@ -12,7 +12,7 @@
 
 > **완장 (wanjang)** is the armband a site overseer wears in Korea, and the word for what happens when a little
 > authority goes to someone's head: *완장 차더니 사람이 달라졌다*, "he put the armband on and became a different
-> man". Here the armband goes to one agent. It plans, hands out work, checks it and reports. It never builds
+> man". Here the armband goes to the PM. It plans, hands out work, checks it and reports. It never builds
 > anything itself; a hook makes sure of that.
 
 ## Why
