@@ -17,13 +17,13 @@
 
 ## Why
 
-- **Your main session stays small.** Multi-step work goes to the wanjang; what comes back is one short summary.
+- **Your main session stays small.** Multi-step work goes to the PM; what comes back is one short summary.
   Briefs, reports and logs live in files, not in anyone's context.
 - **Each task gets the model it needs.** Haiku for lookups and mechanical edits, Sonnet for ordinary building and
   checking, Opus for UI and the genuinely hard parts. A task that fails moves one tier up.
 - **Nothing ships unchecked.** QA uses the product like a user; the checker builds, tests and walks the spec,
   with a security review for auth, payments and permissions.
-- **A crash costs a step, not the run.** Workers commit as they go, the wanjang keeps a run log, and the next
+- **A crash costs a step, not the run.** Workers commit as they go, the PM keeps a run log, and the next
   session picks the run up on its own.
 - **No questions mid-run.** Sensible defaults are decided and listed; when the run ends you review each one in a
   single wizard (keep it, or pick the alternative). Only what cannot be undone is asked up front.
@@ -37,7 +37,7 @@ claude plugin marketplace add levx-me/wanjang
 claude plugin install wanjang@wanjang
 ```
 
-Start a new session (or restart the current one). Ask for a feature as usual: multi-step work goes to the wanjang
+Start a new session (or restart the current one). Ask for a feature as usual: multi-step work goes to the PM
 on its own, because a session-start hook adds the routing rule to every session. To hand something over yourself:
 
 ```text
@@ -50,7 +50,7 @@ Typing `/wanjang` and Enter is enough; it is the first match.
 
 ```mermaid
 flowchart LR
-  main[main session] -->|multi-step work| W[wanjang]
+  main[main session] -->|multi-step work| W[PM]
   main -->|lookups| S[scout]
   W -->|vague request| P[planner]
   W -->|brief files| B[builder]
@@ -62,7 +62,7 @@ flowchart LR
   W -->|one summary| main
 ```
 
-1. **Plan.** A vague request goes to the planner for a spec with testable acceptance criteria. The wanjang splits
+1. **Plan.** A vague request goes to the planner for a spec with testable acceptance criteria. The PM splits
    the work by layer (data and server, UI, tests, docs), agrees the contract between them and writes it down.
 2. **Brief.** Each worker gets a brief file: the playbooks to read, the contract, the decisions every worker must
    share, the files it owns, and what to return.
@@ -74,7 +74,7 @@ flowchart LR
 
 ### Research runs
 
-A question whose answer is a document (a survey, a comparison, a deep dive) goes to the wanjang as a research run. It picks
+A question whose answer is a document (a survey, a comparison, a deep dive) goes to the PM as a research run. It picks
 the depth from the question (quick, standard, or deep with a second wave on the gaps), splits the question into
 non-overlapping sub-questions and starts one scout per sub-question, up to five at once. Each scout writes source notes (claims with
 URL and a verified / snippet / unverified flag). Builders then write the parts in parallel, one builder writes the
@@ -85,7 +85,7 @@ conclusion and recomputes every derived number, and the checker verifies the key
 
 | Agent | Model | Edits the project | Does |
 |---|---|:-:|---|
-| `wanjang:wanjang` | Sonnet; Opus when something must be found out first | ✗ | Plans, briefs, routes fixes, keeps the run log, reports once |
+| `wanjang:pm` | Sonnet; Opus when something must be found out first | ✗ | Plans, briefs, routes fixes, keeps the run log, reports once |
 | `wanjang:planner` | Opus | ✗ | Turns a vague request into a spec: goal, flow, scope, testable criteria, open questions |
 | `wanjang:scout` | Haiku | ✗ | Finds files, reads logs, queries data, runs tests and sums them up; writes research notes |
 | `wanjang:builder` | Haiku / Sonnet / Opus, per task | ✓ | Server, data, tests, docs, fixes |
@@ -100,7 +100,7 @@ field: know-how for a field comes from playbooks.
 
 | Command | What it does |
 |---|---|
-| `/wanjang:wanjang <work>` | Hand the work to the wanjang instead of doing it in this session |
+| `/wanjang:wanjang <work>` | Hand the work to the PM instead of doing it in this session |
 | `/wanjang:wanjang resume [run]` | Pick up a run that stopped (a crash, a lost connection, a restart) |
 | `/wanjang:optimize` | See where this session's tokens go and fix what applies, with agents still running |
 
@@ -108,7 +108,7 @@ field: know-how for a field comes from playbooks.
 main context, the tool results that took the most, files read again and again, agents active in the last ten
 minutes with their recent spend and any error they keep repeating, background commands still running, and runs in
 progress. It then offers only the fixes that apply: a checkpoint and a ready-made `/compact` line, telling a running
-wanjang to economise, winding down a runaway agent, stopping a noisy background command. Nothing stops without a yes.
+PM to economise, winding down a runaway agent, stopping a noisy background command. Nothing stops without a yes.
 
 ## Run folders and resuming
 
@@ -122,12 +122,12 @@ Each run keeps everything in `.git/wanjang/<date>-<slug>/` (inside `.git`, so it
 | `review.diff`, logs | Long output, kept out of everyone's context |
 
 A new session in that repository resumes any run still in progress (touched in the last week) on its own, with a
-one-line notice; `/wanjang:wanjang resume` does it by hand. A fresh wanjang checks the log against git, keeps what
-is done and carries on. A hook sends the wanjang back once if it tries to report with its log still open.
+one-line notice; `/wanjang:wanjang resume` does it by hand. A fresh PM checks the log against git, keeps what
+is done and carries on. A hook sends the PM back once if it tries to report with its log still open.
 
 ## Playbooks
 
-Specialist know-how lives in Markdown playbooks, not in more agents. The wanjang reads the indexes when it splits
+Specialist know-how lives in Markdown playbooks, not in more agents. The PM reads the indexes when it splits
 work and names the one or two that fit in a worker's brief; nothing is loaded until it is picked.
 
 1. `.claude/playbooks/INDEX.md` in the project (read first)
@@ -163,8 +163,8 @@ and leaving browser testing to QA.
 | `agents/` | The seven agents |
 | `ROUTING.md` | The routing rule a session-start hook adds to every session |
 | `bin/route` | That hook; it also names unfinished runs in the repository |
-| `bin/guard` | PreToolUse hook: the wanjang and the read-only crew write only into run folders |
-| `bin/close` | SubagentStop hook: sends the wanjang back once if it tries to report with its run log still open |
+| `bin/guard` | PreToolUse hook: the PM and the read-only crew write only into run folders |
+| `bin/close` | SubagentStop hook: sends the PM back once if it tries to report with its run log still open |
 | `bin/usage` | The token report behind `/wanjang:optimize` |
 | `skills/` | `/wanjang:wanjang` and `/wanjang:optimize` |
 | `test/` | `guard.sh`, `close.sh` and `usage.sh` |

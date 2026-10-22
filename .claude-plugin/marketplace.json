@@ -3,12 +3,12 @@
   "owner": {
     "name": "levx"
   },
-  "description": "Wanjang: a crew of Claude Code agents led by a wanjang",
+  "description": "Wanjang: a crew of Claude Code agents led by a PM",
   "plugins": [
     {
       "name": "wanjang",
       "source": "./",
-      "description": "A wanjang and its crew: plan, delegate by role and model, verify with QA and a checker"
+      "description": "A PM and its crew: plan, delegate by role and model, verify with QA and a checker"
     }
   ]
 }
