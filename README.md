@@ -8,6 +8,8 @@
 [![version](https://img.shields.io/badge/version-0.5.5-blue)](.claude-plugin/plugin.json)
 [![license](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
+English | [한국어](README.ko.md)
+
 </div>
 
 > **완장 (wanjang)** is the armband a site overseer wears in Korea, and the word for what happens when a little
