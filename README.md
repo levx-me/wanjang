@@ -95,7 +95,7 @@ conclusion and recomputes every derived number, and the checker verifies the key
 | `wanjang:qa` | Sonnet | ✗ | Uses the running product and reports bugs with steps to reproduce |
 | `wanjang:checker` | Sonnet; Opus for a security review | ✗ | Builds, tests and checks every requirement against the spec; checks research sources |
 
-The read-only crew may write only their reports, into the run folder. Roles are split by permission and cost, not by
+The read-only crew write only into the run folder (reports, notes, long output). Roles are split by permission and cost, not by
 field: know-how for a field comes from playbooks.
 
 ## Commands
