@@ -1,5 +1,5 @@
 {
-  "description": "Wanjang: put the routing rule (and any unfinished run) into every session, keep the wanjang from changing project files, and keep it from reporting with its run log still open",
+  "description": "Wanjang: put the routing rule (and any unfinished run) into every session, keep the PM from changing project files, and keep it from reporting with its run log still open",
   "hooks": {
     "SessionStart": [
       {
