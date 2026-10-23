@@ -105,12 +105,19 @@ field: know-how for a field comes from playbooks.
 | `/wanjang:wanjang <work>` | Hand the work to the PM instead of doing it in this session |
 | `/wanjang:wanjang resume [run]` | Pick up a run that stopped (a crash, a lost connection, a restart) |
 | `/wanjang:optimize` | See where this session's tokens go and fix what applies, with agents still running |
+| `/wanjang:provider openrouter\|claude\|status` | Move this session between the claude.ai subscription and OpenRouter, no restart |
 
 `/wanjang:optimize` runs `bin/usage`, which reads the session's transcripts on disk and prints a short report: the
 main context, the tool results that took the most, files read again and again, agents active in the last ten
 minutes with their recent spend and any error they keep repeating, background commands still running, and runs in
 progress. It then offers only the fixes that apply: a checkpoint and a ready-made `/compact` line, telling a running
 PM to economise, winding down a runaway agent, stopping a noisy background command. Nothing stops without a yes.
+
+`/wanjang:provider` runs `bin/provider`, which rewrites `env` and `apiKeyHelper` in this project's
+`.claude/settings.local.json`; the running session reloads the file on save. `--user` writes `~/.claude/settings.json`
+and so switches every open session. The OpenRouter key comes from the macOS keychain, Linux `secret-tool` or
+`OPENROUTER_API_KEY`, never from a file; the subscription's login token goes only to Anthropic and is never proxied.
+Measured: one session answered on the subscription, then on OpenRouter, then on the subscription again, with no restart.
 
 ## Run folders and resuming
 
@@ -168,13 +175,15 @@ and leaving browser testing to QA.
 | `bin/guard` | PreToolUse hook: the PM and the read-only crew write only into run folders |
 | `bin/close` | SubagentStop hook: sends the PM back once if it tries to report with its run log still open |
 | `bin/usage` | The token report behind `/wanjang:optimize` |
-| `skills/` | `/wanjang:wanjang` and `/wanjang:optimize` |
-| `test/` | `guard.sh`, `close.sh` and `usage.sh` |
+| `bin/provider`, `bin/openrouter-key` | `/wanjang:provider` and its key helper |
+| `skills/` | `/wanjang:wanjang`, `/wanjang:optimize` and `/wanjang:provider` |
+| `test/` | `guard.sh`, `close.sh`, `usage.sh` and `provider.sh` |
 
 ```sh
 test/guard.sh   # guard: all cases pass
 test/close.sh   # close: all cases pass
 test/usage.sh   # usage: all cases pass
+test/provider.sh  # provider: all cases pass
 ```
 
 Requires `bash`, `jq`, `git` and `python3`.

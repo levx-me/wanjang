@@ -1,0 +1,67 @@
+#!/usr/bin/env bash
+# provider openrouter|claude|status [--user] [--file PATH] [--opus M] [--sonnet M] [--haiku M]
+# Switches Claude Code between the claude.ai login and OpenRouter by rewriting the `env` and
+# `apiKeyHelper` of one settings file; a running session reloads that file when it changes.
+# Default file: <repo root or cwd>/.claude/settings.local.json (this project only).
+# --user writes ~/.claude/settings.json instead, which switches EVERY open session.
+# Values are overwritten, never deleted: a running session ignores a removed env variable.
+set -euo pipefail
+here=$(cd "$(dirname "$0")" && pwd)
+
+mode=${1:-status}; shift || true
+root=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
+file="$root/.claude/settings.local.json"
+opus="" sonnet="" haiku=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --user) file="$HOME/.claude/settings.json" ;;
+    --file) file=$2; shift ;;
+    --opus) opus=$2; shift ;;
+    --sonnet) sonnet=$2; shift ;;
+    --haiku) haiku=$2; shift ;;
+    *) echo "provider: unknown option $1" >&2; exit 2 ;;
+  esac
+  shift
+done
+
+mkdir -p "$(dirname "$file")"
+[ -s "$file" ] || echo '{}' > "$file"
+
+write() {  # [jq options] filter: rewrite the file atomically, so a reload never sees half a file
+  local tmp; tmp=$(mktemp "$file.XXXX")
+  jq "$@" "$file" > "$tmp" && mv "$tmp" "$file"
+}
+
+case "$mode" in
+  openrouter)
+    "$here/openrouter-key" >/dev/null 2>&1 || {
+      echo 'provider: no OpenRouter key found. Store it once, then run this again:' >&2
+      echo '  macOS: security add-generic-password -s openrouter-claude -a "$USER" -w' >&2
+      echo '  Linux: secret-tool store --label=OpenRouter service openrouter-claude' >&2
+      echo '  or set OPENROUTER_API_KEY in the environment Claude Code starts from' >&2
+      exit 3
+    }
+    write --arg o "$opus" --arg s "$sonnet" --arg h "$haiku" --arg k "$here/openrouter-key" '
+      .apiKeyHelper = $k
+      | .env.ANTHROPIC_BASE_URL = "https://openrouter.ai/api"
+      | .env.ANTHROPIC_AUTH_TOKEN = ""
+      | .env.ANTHROPIC_API_KEY = ""
+      | .env.CLAUDE_CODE_API_KEY_HELPER_TTL_MS = "5000"
+      | if $o != "" then .env.ANTHROPIC_DEFAULT_OPUS_MODEL = $o else . end
+      | if $s != "" then .env.ANTHROPIC_DEFAULT_SONNET_MODEL = $s else . end
+      | if $h != "" then .env.ANTHROPIC_DEFAULT_HAIKU_MODEL = $h else . end' ;;
+  claude)
+    # Back to the subscription: no helper, empty credentials, Anthropic's own endpoint and model names.
+    write '
+      del(.apiKeyHelper)
+      | .env.ANTHROPIC_BASE_URL = "https://api.anthropic.com"
+      | .env.ANTHROPIC_AUTH_TOKEN = ""
+      | .env.ANTHROPIC_API_KEY = ""
+      | reduce ("OPUS","SONNET","HAIKU") as $m (.; if .env["ANTHROPIC_DEFAULT_\($m)_MODEL"] then .env["ANTHROPIC_DEFAULT_\($m)_MODEL"] = "" else . end)' ;;
+  status) ;;
+  *) echo "usage: provider openrouter|claude|status [--user] [--file PATH] [--opus M] [--sonnet M] [--haiku M]" >&2; exit 2 ;;
+esac
+
+now=claude
+[ "$(jq -r '.env.ANTHROPIC_BASE_URL // ""' "$file")" = "https://openrouter.ai/api" ] && now=openrouter
+echo "provider: $now ($file)"

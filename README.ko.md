@@ -105,12 +105,19 @@ flowchart LR
 | `/wanjang:wanjang <work>` | 이 세션에서 하지 않고 PM에게 일을 넘겨요 |
 | `/wanjang:wanjang resume [run]` | 멈춘 run을 이어 해요(충돌, 연결 끊김, 재시작) |
 | `/wanjang:optimize` | 에이전트를 멈추지 않은 채로, 이 세션의 토큰이 어디에 쓰이는지 보고 해당하는 것만 고쳐요 |
+| `/wanjang:provider openrouter\|claude\|status` | 재시작 없이 이 세션을 claude.ai 구독과 OpenRouter 사이에서 옮겨요 |
 
 `/wanjang:optimize`는 `bin/usage`를 실행해요. 디스크에 있는 세션 기록을 읽고 짧은 보고서를 보여 줘요. 메인
 컨텍스트 크기, 가장 많이 차지한 도구 결과, 여러 번 다시 읽은 파일, 최근 10분 동안 일한 에이전트와 그 사용량,
 계속 반복되는 오류, 아직 돌고 있는 백그라운드 명령, 진행 중인 run이요. 그다음 해당하는 해결책만 제안해요.
 체크포인트와 바로 칠 수 있는 `/compact` 한 줄, 진행 중인 PM에게 아끼라고 알리기, 폭주하는 에이전트 정리하기,
 출력이 많은 백그라운드 명령 멈추기요. 동의 없이 멈추는 건 없어요.
+
+`/wanjang:provider`는 `bin/provider`를 실행해요. 이 프로젝트의 `.claude/settings.local.json`에서 `env`와
+`apiKeyHelper`를 바꾸고, 실행 중인 세션은 저장하는 순간 그 파일을 다시 읽어요. `--user`를 주면
+`~/.claude/settings.json`을 바꿔서 열린 세션 전부가 바뀌어요. OpenRouter 키는 파일이 아니라 macOS 키체인, 리눅스
+`secret-tool`, 또는 `OPENROUTER_API_KEY`에서 읽어요. 구독 로그인 토큰은 Anthropic에만 가고 프록시로 넘기지 않아요.
+실제로 한 세션이 재시작 없이 구독 → OpenRouter → 구독 순서로 응답하는 걸 확인했어요.
 
 ## run 폴더와 이어 하기
 
@@ -167,13 +174,15 @@ Sonnet, 오래 일한 워커를 이어 쓰는 대신 새로 띄우기, 브라우
 | `bin/guard` | PreToolUse 훅: PM과 읽기 전용 크루는 run 폴더에만 쓸 수 있어요 |
 | `bin/close` | SubagentStop 훅: run 기록이 열린 채로 보고하려 하면 PM을 한 번 돌려보내요 |
 | `bin/usage` | `/wanjang:optimize`의 토큰 보고서 |
-| `skills/` | `/wanjang:wanjang`과 `/wanjang:optimize` |
-| `test/` | `guard.sh`, `close.sh`, `usage.sh` |
+| `bin/provider`, `bin/openrouter-key` | `/wanjang:provider`와 그 키 도우미 |
+| `skills/` | `/wanjang:wanjang`, `/wanjang:optimize`, `/wanjang:provider` |
+| `test/` | `guard.sh`, `close.sh`, `usage.sh`, `provider.sh` |
 
 ```sh
 test/guard.sh   # guard: all cases pass
 test/close.sh   # close: all cases pass
 test/usage.sh   # usage: all cases pass
+test/provider.sh  # provider: all cases pass
 ```
 
 `bash`, `jq`, `git`, `python3`가 필요해요.

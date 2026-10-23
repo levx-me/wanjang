@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+# apiKeyHelper for OpenRouter: prints the key from the OS secret store, never from a file.
+# macOS keychain, then Linux secret-tool, then the OPENROUTER_API_KEY variable. Store it once with:
+#   macOS:  security add-generic-password -s openrouter-claude -a "$USER" -w
+#   Linux:  secret-tool store --label=OpenRouter service openrouter-claude
+if command -v security >/dev/null && security find-generic-password -s openrouter-claude -a "$USER" -w 2>/dev/null; then exit 0; fi
+if command -v secret-tool >/dev/null && secret-tool lookup service openrouter-claude 2>/dev/null; then exit 0; fi
+[ -n "${OPENROUTER_API_KEY:-}" ] && { printf '%s\n' "$OPENROUTER_API_KEY"; exit 0; }
+exit 1
