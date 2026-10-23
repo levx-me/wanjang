@@ -105,7 +105,7 @@ field: know-how for a field comes from playbooks.
 | `/wanjang:wanjang <work>` | Hand the work to the PM instead of doing it in this session |
 | `/wanjang:wanjang resume [run]` | Pick up a run that stopped (a crash, a lost connection, a restart) |
 | `/wanjang:optimize` | See where this session's tokens go and fix what applies, with agents still running |
-| `/wanjang:provider openrouter\|claude\|status` | Move this session between the claude.ai subscription and OpenRouter, no restart |
+| `/wanjang:provider openrouter\|claude\|key\|status` | Move this session between the claude.ai subscription and OpenRouter, no restart |
 
 `/wanjang:optimize` runs `bin/usage`, which reads the session's transcripts on disk and prints a short report: the
 main context, the tool results that took the most, files read again and again, agents active in the last ten
@@ -116,7 +116,10 @@ PM to economise, winding down a runaway agent, stopping a noisy background comma
 `/wanjang:provider` runs `bin/provider`, which rewrites `env` and `apiKeyHelper` in this project's
 `.claude/settings.local.json`; the running session reloads the file on save. `--user` writes `~/.claude/settings.json`
 and so switches every open session. The OpenRouter key comes from the macOS keychain, Linux `secret-tool` or
-`OPENROUTER_API_KEY`, never from a file; the subscription's login token goes only to Anthropic and is never proxied (Anthropic does not allow
+`OPENROUTER_API_KEY`, never from a file. Installing wanjang never asks for a key: the first `/wanjang:provider openrouter`
+with no stored key opens an OS password dialog (macOS, or `zenity` on Linux) and stores what you type straight in the
+keychain; `/wanjang:provider key` enters or replaces it later; `status` and `claude` never ask. Without a dialog (over
+SSH) it prints the command to store the key yourself; the subscription's login token goes only to Anthropic and is never proxied (Anthropic does not allow
 subscription logins in third-party tools or proxies). While on OpenRouter, features that need the claude.ai login
 (Remote Control, voice, claude.ai connectors) are off.
 Measured: one session answered on the subscription, then on OpenRouter, then on the subscription again, with no restart.

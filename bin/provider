@@ -1,10 +1,13 @@
 #!/usr/bin/env bash
-# provider openrouter|claude|status [--user] [--file PATH] [--opus M] [--sonnet M] [--haiku M]
+# provider openrouter|claude|key|status [--user] [--file PATH] [--opus M] [--sonnet M] [--haiku M]
 # Switches Claude Code between the claude.ai login and OpenRouter by rewriting the `env` and
 # `apiKeyHelper` of one settings file; a running session reloads that file when it changes.
 # Default file: <repo root or cwd>/.claude/settings.local.json (this project only).
 # --user writes ~/.claude/settings.json instead, which switches EVERY open session.
 # Values are overwritten, never deleted: a running session ignores a removed env variable.
+# `key` asks for the OpenRouter key in an OS password dialog and stores it in the keychain
+# (macOS) or secret-tool (Linux); the key goes from the dialog to the store on a pipe, never
+# through argv, a file or this script's output. `openrouter` does the same when no key is found.
 set -euo pipefail
 here=$(cd "$(dirname "$0")" && pwd -P)
 
@@ -24,7 +27,7 @@ while [ $# -gt 0 ]; do
   shift
 done
 
-if [ "$mode" != status ]; then
+if [ "$mode" != status ] && [ "$mode" != key ]; then
   mkdir -p "$(dirname "$file")"
   [ -s "$file" ] || echo '{}' > "$file"
 fi
@@ -34,15 +37,52 @@ write() {  # [jq options] filter: rewrite the file atomically, so a reload never
   jq "$@" "$file" > "$tmp" && mv "$tmp" "$file" || { rm -f "$tmp"; echo "provider: $file is not valid JSON; left it as it was" >&2; exit 4; }
 }
 
+# For test/provider.sh only: PROVIDER_ASK_CMD replaces the dialog (prints a key, or exits non-zero
+# as a cancel; "none" means no dialog is available) and PROVIDER_STORE_CMD replaces the store
+# (reads the key on stdin), so tests never show a dialog or touch the real keychain.
+ask_cmd=${PROVIDER_ASK_CMD:-}
+if [ -z "$ask_cmd" ]; then
+  if command -v osascript >/dev/null && [ -z "${SSH_CONNECTION:-}" ]; then
+    ask_cmd='osascript -e "text returned of (display dialog \"OpenRouter API key (stored in your keychain)\" default answer \"\" with hidden answer with title \"wanjang provider\")"'
+  elif command -v zenity >/dev/null && [ -n "${DISPLAY:-}${WAYLAND_DISPLAY:-}" ]; then
+    ask_cmd='zenity --password --title="OpenRouter API key (wanjang provider)"'
+  else
+    ask_cmd=none
+  fi
+fi
+
+store() {  # the key on stdin -> the OS secret store
+  if [ -n "${PROVIDER_STORE_CMD:-}" ]; then bash -c "$PROVIDER_STORE_CMD"
+  elif command -v security >/dev/null; then
+    # security -i reads its command from stdin, so the key never appears in any process's argv.
+    { read -r k; printf 'add-generic-password -U -s openrouter-claude -a "%s" -w "%s"\n' "$USER" "$k"; } |
+      security -i >/dev/null 2>&1 && security find-generic-password -s openrouter-claude -a "$USER" >/dev/null 2>&1
+  else secret-tool store --label=OpenRouter service openrouter-claude
+  fi
+}
+
+manual() {
+  echo 'provider: no password dialog here. Store the key once yourself, then run this again:' >&2
+  echo '  macOS: security add-generic-password -s openrouter-claude -a "$USER" -w' >&2
+  echo '  Linux: secret-tool store --label=OpenRouter service openrouter-claude' >&2
+  echo '  or set OPENROUTER_API_KEY in the environment Claude Code starts from' >&2
+  exit 3
+}
+
+ask_and_store() {
+  [ "$ask_cmd" = none ] && manual
+  local k
+  k=$(bash -c "$ask_cmd" 2>/dev/null) || { echo 'provider: cancelled; no key stored' >&2; exit 5; }
+  # Keys are letters, digits, - _ . : anything else (quotes, newlines) is refused, not stored.
+  [[ $k =~ ^[A-Za-z0-9._-]+$ ]] || { echo 'provider: that does not look like an API key; nothing stored' >&2; exit 5; }
+  printf '%s\n' "$k" | store || { echo 'provider: could not store the key' >&2; exit 6; }
+  echo 'provider: key stored' >&2
+}
+
 case "$mode" in
+  key) ask_and_store; exit 0 ;;
   openrouter)
-    "$here/openrouter-key" >/dev/null 2>&1 || {
-      echo 'provider: no OpenRouter key found. Store it once, then run this again:' >&2
-      echo '  macOS: security add-generic-password -s openrouter-claude -a "$USER" -w' >&2
-      echo '  Linux: secret-tool store --label=OpenRouter service openrouter-claude' >&2
-      echo '  or set OPENROUTER_API_KEY in the environment Claude Code starts from' >&2
-      exit 3
-    }
+    "$here/openrouter-key" >/dev/null 2>&1 || ask_and_store
     write --arg o "$opus" --arg s "$sonnet" --arg h "$haiku" --arg k "$here/openrouter-key" '
       .apiKeyHelper = $k
       | .env.ANTHROPIC_BASE_URL = "https://openrouter.ai/api"
@@ -61,7 +101,7 @@ case "$mode" in
       | .env.ANTHROPIC_API_KEY = ""
       | reduce ("OPUS","SONNET","HAIKU") as $m (.; if .env["ANTHROPIC_DEFAULT_\($m)_MODEL"] then .env["ANTHROPIC_DEFAULT_\($m)_MODEL"] = "" else . end)' ;;
   status) ;;
-  *) echo "usage: provider openrouter|claude|status [--user] [--file PATH] [--opus M] [--sonnet M] [--haiku M]" >&2; exit 2 ;;
+  *) echo "usage: provider openrouter|claude|key|status [--user] [--file PATH] [--opus M] [--sonnet M] [--haiku M]" >&2; exit 2 ;;
 esac
 
 now=claude

@@ -7,11 +7,36 @@ fail=0
 bad() { echo "FAIL $1"; fail=1; }
 q() { jq -r "$1" "$F"; }
 echo '{"permissions":{"allow":["Bash(ls)"]},"env":{"FOO":"1"}}' > "$F"
-# No key anywhere (keychain and secret-tool looked up under a name that does not exist): stops, file untouched.
+# The dialog and the store are replaced (PROVIDER_ASK_CMD / PROVIDER_STORE_CMD) so no dialog shows and
+# the real keychain is never touched; keychain and secret-tool are looked up under a user that does not exist.
+export USER=wanjang-test-nobody OPENROUTER_API_KEY=
 cp "$F" "$T/before"
-USER=wanjang-test-nobody OPENROUTER_API_KEY= bin/provider openrouter --file "$F" >/dev/null 2>&1; rc=$?
-[ $rc = 3 ] || bad "missing key: exit $rc, want 3"
-cmp -s "$F" "$T/before" || bad "missing key changed the file"
+# No key and no dialog available: stops with the manual command, file untouched.
+PROVIDER_ASK_CMD=none bin/provider openrouter --file "$F" >/dev/null 2>&1; rc=$?
+[ $rc = 3 ] || bad "no dialog: exit $rc, want 3"
+cmp -s "$F" "$T/before" || bad "no dialog changed the file"
+# No key, dialog cancelled: exit 5, nothing stored, file untouched.
+PROVIDER_ASK_CMD='exit 1' PROVIDER_STORE_CMD="cat > $T/stored" bin/provider openrouter --file "$F" >/dev/null 2>&1; rc=$?
+[ $rc = 5 ] || bad "cancel: exit $rc, want 5"
+[ ! -e "$T/stored" ] && cmp -s "$F" "$T/before" || bad "cancel stored a key or changed the file"
+# status and claude never prompt: a dialog that would fail the test is never run.
+PROVIDER_ASK_CMD="touch $T/asked" bin/provider status --file "$F" >/dev/null
+PROVIDER_ASK_CMD="touch $T/asked" bin/provider claude --file "$F" >/dev/null
+[ ! -e "$T/asked" ] || bad "status or claude opened the dialog"
+cp "$T/before" "$F"
+# `key`: the dialog's answer reaches the store and never the output.
+out=$(PROVIDER_ASK_CMD='printf sk-or-v1-testsecret' PROVIDER_STORE_CMD="cat > $T/stored" bin/provider key 2>&1) || bad "key: exit $?"
+[ "$(cat "$T/stored" 2>/dev/null)" = sk-or-v1-testsecret ] || bad "key: not stored"
+case "$out" in *testsecret*) bad "key: the key appeared in the output" ;; esac
+# A non-key answer (quotes) is refused, not stored.
+rm -f "$T/stored"
+PROVIDER_ASK_CMD="printf 'a\"b'" PROVIDER_STORE_CMD="cat > $T/stored" bin/provider key >/dev/null 2>&1; rc=$?
+[ $rc = 5 ] && [ ! -e "$T/stored" ] || bad "bad key: exit $rc or stored"
+# openrouter with no key: asks, stores, switches; the key is in neither the output nor the settings file.
+out=$(PROVIDER_ASK_CMD='printf sk-or-v1-testsecret' PROVIDER_STORE_CMD="cat > $T/stored" bin/provider openrouter --file "$F" 2>&1) || bad "first use: exit $?"
+[ "$(q .env.ANTHROPIC_BASE_URL)" = https://openrouter.ai/api ] || bad "first use: did not switch"
+case "$out$(cat "$F")" in *testsecret*) bad "first use: the key leaked into output or settings" ;; esac
+cp "$T/before" "$F"
 # To OpenRouter, with a key from the environment.
 OPENROUTER_API_KEY=sk-test bin/provider openrouter --file "$F" --haiku x/h >/dev/null || bad "openrouter: exit $?"
 [ "$(q .env.ANTHROPIC_BASE_URL)" = https://openrouter.ai/api ] || bad "openrouter: base url"
