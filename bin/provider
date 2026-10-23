@@ -6,7 +6,7 @@
 # --user writes ~/.claude/settings.json instead, which switches EVERY open session.
 # Values are overwritten, never deleted: a running session ignores a removed env variable.
 set -euo pipefail
-here=$(cd "$(dirname "$0")" && pwd)
+here=$(cd "$(dirname "$0")" && pwd -P)
 
 mode=${1:-status}; shift || true
 root=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
@@ -24,12 +24,14 @@ while [ $# -gt 0 ]; do
   shift
 done
 
-mkdir -p "$(dirname "$file")"
-[ -s "$file" ] || echo '{}' > "$file"
+if [ "$mode" != status ]; then
+  mkdir -p "$(dirname "$file")"
+  [ -s "$file" ] || echo '{}' > "$file"
+fi
 
 write() {  # [jq options] filter: rewrite the file atomically, so a reload never sees half a file
   local tmp; tmp=$(mktemp "$file.XXXX")
-  jq "$@" "$file" > "$tmp" && mv "$tmp" "$file"
+  jq "$@" "$file" > "$tmp" && mv "$tmp" "$file" || { rm -f "$tmp"; echo "provider: $file is not valid JSON; left it as it was" >&2; exit 4; }
 }
 
 case "$mode" in
@@ -63,5 +65,5 @@ case "$mode" in
 esac
 
 now=claude
-[ "$(jq -r '.env.ANTHROPIC_BASE_URL // ""' "$file")" = "https://openrouter.ai/api" ] && now=openrouter
+[ "$(jq -r '.env.ANTHROPIC_BASE_URL // ""' "$file" 2>/dev/null)" = "https://openrouter.ai/api" ] && now=openrouter
 echo "provider: $now ($file)"

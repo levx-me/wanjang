@@ -116,7 +116,9 @@ PM to economise, winding down a runaway agent, stopping a noisy background comma
 `/wanjang:provider` runs `bin/provider`, which rewrites `env` and `apiKeyHelper` in this project's
 `.claude/settings.local.json`; the running session reloads the file on save. `--user` writes `~/.claude/settings.json`
 and so switches every open session. The OpenRouter key comes from the macOS keychain, Linux `secret-tool` or
-`OPENROUTER_API_KEY`, never from a file; the subscription's login token goes only to Anthropic and is never proxied.
+`OPENROUTER_API_KEY`, never from a file; the subscription's login token goes only to Anthropic and is never proxied (Anthropic does not allow
+subscription logins in third-party tools or proxies). While on OpenRouter, features that need the claude.ai login
+(Remote Control, voice, claude.ai connectors) are off.
 Measured: one session answered on the subscription, then on OpenRouter, then on the subscription again, with no restart.
 
 ## Run folders and resuming

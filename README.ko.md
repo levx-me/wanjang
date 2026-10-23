@@ -116,7 +116,9 @@ flowchart LR
 `/wanjang:provider`는 `bin/provider`를 실행해요. 이 프로젝트의 `.claude/settings.local.json`에서 `env`와
 `apiKeyHelper`를 바꾸고, 실행 중인 세션은 저장하는 순간 그 파일을 다시 읽어요. `--user`를 주면
 `~/.claude/settings.json`을 바꿔서 열린 세션 전부가 바뀌어요. OpenRouter 키는 파일이 아니라 macOS 키체인, 리눅스
-`secret-tool`, 또는 `OPENROUTER_API_KEY`에서 읽어요. 구독 로그인 토큰은 Anthropic에만 가고 프록시로 넘기지 않아요.
+`secret-tool`, 또는 `OPENROUTER_API_KEY`에서 읽어요. 구독 로그인 토큰은 Anthropic에만 가고 프록시로 넘기지 않아요(Anthropic은 구독 로그인을 제3자 도구나
+프록시에서 쓰는 걸 허용하지 않아요). OpenRouter로 가 있는 동안에는 claude.ai 로그인이 필요한 기능(원격 제어, 음성 입력,
+claude.ai 커넥터)이 꺼져요.
 실제로 한 세션이 재시작 없이 구독 → OpenRouter → 구독 순서로 응답하는 걸 확인했어요.
 
 ## run 폴더와 이어 하기
