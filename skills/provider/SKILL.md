@@ -3,6 +3,8 @@ name: provider
 description: Switch this Claude Code session between the claude.ai subscription and OpenRouter without restarting. Use when the user types /wanjang:provider, or asks to move to OpenRouter or back to the Claude login.
 argument-hint: "openrouter [--opus M --sonnet M --haiku M | --preset NAME] [--save NAME] | models | presets | claude | key | status  [--user]"
 ---
+Normally you never see this: a hook (`bin/provider-hook`) runs `/wanjang:provider <args>` as typed, with no model call, and shows the result, so switching back works even when the current provider cannot answer. You are reached only for `models`, or if the hook is missing; then follow the steps below. The escape hatch that always works is `! <plugin dir>/bin/provider claude`.
+
 Run `"<this skill's base directory>/../../bin/provider" $ARGUMENTS` with the Bash tool (no arguments: `status`), and report its last line.
 
 Choosing models: `openrouter` with no model flags reuses the last combo (or Claude Code's own model names when none was saved); `--preset NAME` applies a saved one; `presets` lists them. When the user asks to pick models, or the argument is `models`:

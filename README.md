@@ -124,6 +124,15 @@ subscription logins in third-party tools or proxies). While on OpenRouter, featu
 (Remote Control, voice, claude.ai connectors) are off.
 Measured: one session answered on the subscription, then on OpenRouter, then on the subscription again, with no restart.
 
+`/wanjang:provider` never needs the model, so it works even when the provider in use cannot answer: a hook
+(`bin/provider-hook`) runs it as you type it and shows the result, with no model call (only `models`, which asks you
+questions, goes through the model). That closes a lock-in: with no OpenRouter credit every request fails, and a
+command that needed the model could not switch back. Two more guards: `openrouter` checks the OpenRouter balance first
+and stays on the subscription below $0.50 (`PROVIDER_MIN_CREDIT`), and when a turn still fails on a billing or
+authentication error while on OpenRouter, `bin/provider-fail` switches back to the subscription and says so in a desktop
+notification. `default`, `subscription` and `anthropic` mean `claude`. The manual way out always works, model or not:
+`! <plugin dir>/bin/provider claude`.
+
 Which OpenRouter model answers for `opus`, `sonnet` and `haiku` is yours to pick: `/wanjang:provider models` lists
 OpenRouter models that take tools, by price band, and asks one question per slot; `--opus`/`--sonnet`/`--haiku` set them
 directly. The choice is saved (no secrets) in `~/.config/wanjang/provider.json` and reused by the next `openrouter`;
@@ -188,7 +197,7 @@ and leaving browser testing to QA.
 | `bin/guard` | PreToolUse hook: the PM and the read-only crew write only into run folders |
 | `bin/close` | SubagentStop hook: sends the PM back once if it tries to report with its run log still open |
 | `bin/usage` | The token report behind `/wanjang:optimize` |
-| `bin/provider`, `bin/openrouter-key` | `/wanjang:provider` and its key helper |
+| `bin/provider`, `bin/openrouter-key`, `bin/provider-hook`, `bin/provider-fail` | `/wanjang:provider`, its key helper, the hook that runs it with no model, and the one that switches back on a billing error |
 | `skills/` | `/wanjang:wanjang`, `/wanjang:optimize` and `/wanjang:provider` |
 | `test/` | `guard.sh`, `close.sh`, `usage.sh` and `provider.sh` |
 

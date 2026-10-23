@@ -13,10 +13,14 @@
 # secret, in ${XDG_CONFIG_HOME:-~/.config}/wanjang/provider.json: `last` and named presets.
 # `openrouter` starts from `last` (or --preset), applies the --opus/--sonnet/--haiku given, and saves
 # the result as `last` (and as --save NAME). `models` lists OpenRouter models to pick from.
+# Before switching, `openrouter` checks the OpenRouter balance and refuses (exit 6) below
+# $PROVIDER_MIN_CREDIT (default 0.50): with no credit every request fails, this command included.
+# `default`, `subscription` and `anthropic` mean `claude`.
 set -euo pipefail
 here=$(cd "$(dirname "$0")" && pwd -P)
 
 mode=${1:-status}; shift || true
+case "$mode" in default|subscription|anthropic) mode=claude ;; esac
 root=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
 file="$root/.claude/settings.local.json"
 opus="" sonnet="" haiku="" preset="" save="" slot="" search=""
@@ -43,11 +47,21 @@ write() {  # [jq options] filter: rewrite the file atomically, so a reload never
   jq "$@" "$file" > "$tmp" && mv "$tmp" "$file" || { rm -f "$tmp"; echo "provider: $file is not valid JSON; left it as it was" >&2; exit 4; }
 }
 
+# The real dialog, keychain and network are used only when HOME is the user's real home: under a
+# fake HOME (a test, a sandbox) the keychain is not the user's, so a typed key would go nowhere.
+# Fail closed: no dialog, no store, no balance call unless the matching PROVIDER_* seam is set.
+if command -v dscl >/dev/null; then real_home=$(dscl . -read "/Users/$USER" NFSHomeDirectory 2>/dev/null | awk '{print $2}') || true
+else real_home=$(getent passwd "$USER" 2>/dev/null | cut -d: -f6) || true; fi
+[ -n "$real_home" ] && [ "$(cd "$HOME" 2>/dev/null && pwd -P)" = "$(cd "$real_home" 2>/dev/null && pwd -P)" ] && home_ok=1 || home_ok=""
+refuse_fake_home() { echo "provider: HOME ($HOME) is not your real home; refusing to open the key dialog or the keychain" >&2; exit 3; }
+
 # For test/provider.sh only: PROVIDER_ASK_CMD replaces the dialog (prints a key, or exits non-zero
 # as a cancel; "none" means no dialog is available) and PROVIDER_STORE_CMD replaces the store
 # (reads the key on stdin), so tests never show a dialog or touch the real keychain.
 ask_cmd=${PROVIDER_ASK_CMD:-}
-if [ -z "$ask_cmd" ]; then
+if [ -z "$ask_cmd" ] && [ -z "$home_ok" ]; then
+  ask_cmd=fake-home
+elif [ -z "$ask_cmd" ]; then
   if command -v osascript >/dev/null && [ -z "${SSH_CONNECTION:-}" ]; then
     ask_cmd='osascript -e "text returned of (display dialog \"OpenRouter API key (stored in your keychain)\" default answer \"\" with hidden answer with title \"wanjang provider\")"'
   elif command -v zenity >/dev/null && [ -n "${DISPLAY:-}${WAYLAND_DISPLAY:-}" ]; then
@@ -59,6 +73,7 @@ fi
 
 store() {  # the key on stdin -> the OS secret store
   if [ -n "${PROVIDER_STORE_CMD:-}" ]; then bash -c "$PROVIDER_STORE_CMD"
+  elif [ -z "$home_ok" ]; then refuse_fake_home
   elif command -v security >/dev/null; then
     # security -i reads its command from stdin, so the key never appears in any process's argv.
     { read -r k; printf 'add-generic-password -U -s openrouter-claude -a "%s" -w "%s"\n' "$USER" "$k"; } |
@@ -76,6 +91,7 @@ manual() {
 }
 
 ask_and_store() {
+  [ "$ask_cmd" = fake-home ] && refuse_fake_home
   [ "$ask_cmd" = none ] && manual
   local k
   k=$(bash -c "$ask_cmd" 2>/dev/null) || { echo 'provider: cancelled; no key stored' >&2; exit 5; }
@@ -83,6 +99,26 @@ ask_and_store() {
   [[ $k =~ ^[A-Za-z0-9._-]+$ ]] || { echo 'provider: that does not look like an API key; nothing stored' >&2; exit 5; }
   printf '%s\n' "$k" | store || { echo 'provider: could not store the key' >&2; exit 6; }
   echo 'provider: key stored' >&2
+}
+
+balance_ok() {  # refuse a switch that would leave every request failing for lack of credit
+  local key c k left
+  [ -n "${PROVIDER_CURL:-}" ] || [ -n "$home_ok" ] || return 0  # no network under a fake HOME
+  key=$("$here/openrouter-key") || return 0
+  # The key goes to curl as a config line on stdin (-K -), never on its command line.
+  # PROVIDER_CURL replaces curl in test/provider.sh only.
+  get() { printf 'header = "Authorization: Bearer %s"\nurl = "https://openrouter.ai/api/v1/%s"\n' "$key" "$1" |
+          ${PROVIDER_CURL:-curl} -fsS --max-time 10 -K - 2>/dev/null; }
+  # What is left is the smaller of the account's credit and this key's own limit (when it has one).
+  c=$(get credits | jq -r '.data | .total_credits - .total_usage' 2>/dev/null) || c=""
+  k=$(get key | jq -r '.data.limit_remaining // empty' 2>/dev/null) || k=""
+  key=""
+  left=$(printf '%s\n%s\n' "$c" "$k" | awk '/^-?[0-9.]+(e[-+]?[0-9]+)?$/ { if (n++ == 0 || $1 < m) m = $1 } END { if (n) print m }')
+  [ -n "$left" ] || { echo 'provider: could not check the OpenRouter balance; switching anyway' >&2; return 0; }
+  if awk -v l="$left" -v m="${PROVIDER_MIN_CREDIT:-0.50}" 'BEGIN { exit !(l < m) }'; then
+    printf 'provider: OpenRouter has $%.2f left (below $%s); staying on the subscription. Add credit at https://openrouter.ai/credits\n' "$left" "${PROVIDER_MIN_CREDIT:-0.50}" >&2
+    exit 6
+  fi
 }
 
 combo() {  # NAME: a saved combo as {opus,sonnet,haiku} ({} when missing)
@@ -122,6 +158,7 @@ case "$mode" in
     base=$(combo "${preset:-last}")
     [ -z "$preset" ] || [ "$base" != '{}' ] || { echo "provider: no preset named $preset (see: provider presets)" >&2; exit 2; }
     "$here/openrouter-key" >/dev/null 2>&1 || ask_and_store
+    balance_ok
     c=$(jq -c --arg o "$opus" --arg s "$sonnet" --arg h "$haiku" \
       '. + ({opus: $o, sonnet: $s, haiku: $h} | with_entries(select(.value != "")))' <<<"$base")
     opus=$(jq -r '.opus // ""' <<<"$c"); sonnet=$(jq -r '.sonnet // ""' <<<"$c"); haiku=$(jq -r '.haiku // ""' <<<"$c")
@@ -146,7 +183,7 @@ case "$mode" in
       | .env.ANTHROPIC_API_KEY = ""
       | reduce ("OPUS","SONNET","HAIKU") as $m (.; if .env["ANTHROPIC_DEFAULT_\($m)_MODEL"] then .env["ANTHROPIC_DEFAULT_\($m)_MODEL"] = "" else . end)' ;;
   status) ;;
-  *) echo "usage: provider openrouter|claude|key|status|models|presets [--user] [--file PATH] [--opus M] [--sonnet M] [--haiku M] [--preset NAME] [--save NAME] [--slot opus|sonnet|haiku] [--search TEXT]" >&2; exit 2 ;;
+  *) echo "usage: provider openrouter|claude(=default)|key|status|models|presets [--user] [--file PATH] [--opus M] [--sonnet M] [--haiku M] [--preset NAME] [--save NAME] [--slot opus|sonnet|haiku] [--search TEXT]" >&2; exit 2 ;;
 esac
 
 now=claude

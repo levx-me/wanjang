@@ -1,5 +1,5 @@
 {
-  "description": "Wanjang: put the routing rule (and any unfinished run) into every session, keep the PM from changing project files, and keep it from reporting with its run log still open",
+  "description": "Wanjang: put the routing rule (and any unfinished run) into every session, keep the PM from changing project files, keep it from reporting with its run log still open, run /wanjang:provider without the model, and switch back to the subscription when OpenRouter refuses a turn",
   "hooks": {
     "SessionStart": [
       {
@@ -33,6 +33,30 @@
             "type": "command",
             "command": "\"${CLAUDE_PLUGIN_ROOT}/bin/close\"",
             "timeout": 5
+          }
+        ]
+      }
+    ],
+    "UserPromptExpansion": [
+      {
+        "matcher": "^wanjang:provider$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/bin/provider-hook\"",
+            "timeout": 120
+          }
+        ]
+      }
+    ],
+    "StopFailure": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/bin/provider-fail\"",
+            "timeout": 10
           }
         ]
       }

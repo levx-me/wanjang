@@ -10,7 +10,23 @@ echo '{"permissions":{"allow":["Bash(ls)"]},"env":{"FOO":"1"}}' > "$F"
 # The dialog and the store are replaced (PROVIDER_ASK_CMD / PROVIDER_STORE_CMD) so no dialog shows and
 # the real keychain is never touched; keychain and secret-tool are looked up under a user that does not exist.
 export USER=wanjang-test-nobody OPENROUTER_API_KEY= HOME=$T/home XDG_CONFIG_HOME=
-mkdir -p "$T/home"
+mkdir -p "$T/home" "$T/shim"
+# Belt and braces: the real dialog and secret stores are shims that leave a mark and fail, so a test
+# that reached them fails instead of showing a dialog. (bin/provider also refuses them under a fake HOME.)
+for c in osascript zenity notify-send; do printf '#!/bin/sh\ntouch "%s/REAL-CALLED"\nexit 1\n' "$T" > "$T/shim/$c"; done
+printf '#!/bin/sh\n[ "$1" = find-generic-password ] && exit 44\ntouch "%s/REAL-CALLED"; exit 1\n' "$T" > "$T/shim/security"
+printf '#!/bin/sh\n[ "$1" = lookup ] && exit 1\ntouch "%s/REAL-CALLED"; exit 1\n' "$T" > "$T/shim/secret-tool"
+# The balance comes from a fake curl that reads its config (and so the key) on stdin; its argv is kept to
+# prove the key is never on a command line. The credit left is in $T/credit.
+cat > "$T/shim/fakecurl" <<SH
+#!/bin/sh
+printf '%s\n' "\$*" >> "$T/curl-argv"
+cfg=\$(cat)
+case "\$cfg" in *v1/credits*) echo "{\\"data\\":{\\"total_credits\\":\$(cat "$T/credit"),\\"total_usage\\":0}}" ;; *) echo '{"data":{"limit_remaining":null}}' ;; esac
+SH
+chmod +x "$T/shim/"*
+export PATH="$T/shim:$PATH" PROVIDER_CURL="$T/shim/fakecurl"
+echo 10 > "$T/credit"
 # The model list comes from a file, never the network.
 cat > "$T/models.json" <<'JSON'
 {"data":[
@@ -83,5 +99,40 @@ OPENROUTER_API_KEY=sk-test bin/provider openrouter --file "$F" --preset team >/d
 OPENROUTER_API_KEY=sk-test bin/provider openrouter --file "$F" --preset nope >/dev/null 2>&1 && bad "unknown preset accepted"
 case "$(bin/provider presets)" in *"team: "*opus=big/coder*) ;; *) bad "presets list" ;; esac
 grep -q sk-test "$cfg" && bad "the key reached the config file"
+# Balance: below the minimum refuses (exit 6) and leaves the file alone; the key never reaches curl's argv.
+bin/provider claude --file "$F" >/dev/null; cp "$F" "$T/before"
+echo 0.1 > "$T/credit"
+OPENROUTER_API_KEY=sk-test bin/provider openrouter --file "$F" >/dev/null 2>&1; rc=$?
+[ $rc = 6 ] && cmp -s "$F" "$T/before" || bad "zero balance: exit $rc or switched"
+echo 10 > "$T/credit"
+grep -q sk-test "$T/curl-argv" && bad "the key was on curl's command line"
+# Aliases.
+OPENROUTER_API_KEY=sk-test bin/provider openrouter --file "$F" >/dev/null
+for a in default subscription anthropic; do
+  OPENROUTER_API_KEY=sk-test bin/provider openrouter --file "$F" >/dev/null
+  bin/provider $a --file "$F" >/dev/null && [ "$(q .env.ANTHROPIC_BASE_URL)" = https://api.anthropic.com ] || bad "alias $a"
+done
+# The hook runs provider with no model: blocks with provider's output; `models` and other commands pass.
+hook() { jq -n --arg n "$1" --arg a "$2" --arg c "$PWD" '{hook_event_name: "UserPromptExpansion", command_name: $n, command_args: $a, cwd: $c}' | bin/provider-hook; }
+OPENROUTER_API_KEY=sk-test bin/provider openrouter --file "$F" >/dev/null
+o=$(hook wanjang:provider "claude --file $F")
+[ "$(jq -r .decision <<<"$o")" = block ] && [ "$(jq -r .suppressOriginalPrompt <<<"$o")" = true ] || bad "hook: not blocked"
+case "$(jq -r .reason <<<"$o")" in "provider: claude ($F)"*) ;; *) bad "hook: reason" ;; esac
+[ "$(q .env.ANTHROPIC_BASE_URL)" = https://api.anthropic.com ] || bad "hook: did not switch"
+case "$(jq -r .reason <<<"$(hook wanjang:provider "status --file $F")")" in "provider: claude"*) ;; *) bad "hook: status" ;; esac
+case "$(jq -r .reason <<<"$(hook wanjang:provider "default --file $F")")" in "provider: claude"*) ;; *) bad "hook: alias" ;; esac
+[ -z "$(hook wanjang:provider "models")" ] || bad "hook: models not passed through"
+[ -z "$(hook wanjang:wanjang "claude --file $F")" ] || bad "hook: another command blocked"
+# StopFailure: billing or auth errors switch back only when on OpenRouter; other errors do nothing.
+P=$T/proj; mkdir -p "$P/.claude"; git -C "$P" init -q
+fail_ev() { jq -n --arg e "$1" --arg c "$P" '{hook_event_name: "StopFailure", error: $e, cwd: $c}' | PROVIDER_NOTIFY_CMD="cat > $T/notified" bin/provider-fail 2>/dev/null; }
+OPENROUTER_API_KEY=sk-test bin/provider openrouter --file "$P/.claude/settings.local.json" >/dev/null
+fail_ev rate_limit
+[ "$(jq -r .env.ANTHROPIC_BASE_URL "$P/.claude/settings.local.json")" = https://openrouter.ai/api ] && [ ! -e "$T/notified" ] || bad "fail: rate_limit switched"
+fail_ev billing_error
+[ "$(jq -r .env.ANTHROPIC_BASE_URL "$P/.claude/settings.local.json")" = https://api.anthropic.com ] && [ -s "$T/notified" ] || bad "fail: billing_error did not switch or notify"
+rm -f "$T/notified"; fail_ev authentication_failed
+[ ! -e "$T/notified" ] || bad "fail: switched or notified while already on the subscription"
+[ ! -e "$T/REAL-CALLED" ] || bad "a real dialog or secret store was called"
 [ $fail = 0 ] && echo "provider: all cases pass"
 exit $fail

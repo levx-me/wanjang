@@ -132,6 +132,14 @@ OpenRouter 모델을 가격대별로 보여 주고 자리마다 하나씩 물어
 넣어서 다른 OpenRouter 모델은 띄울 수 없어요. 고른 모델은 그 세 이름으로 답해요.
 실제로 한 세션이 재시작 없이 구독 → OpenRouter → 구독 순서로 응답하는 걸 확인했어요.
 
+`/wanjang:provider`는 모델 없이 동작해요. 그래서 지금 쓰는 제공자가 답하지 못할 때도 바꿀 수 있어요. 입력하는 순간
+훅(`bin/provider-hook`)이 바로 실행하고 결과를 보여 줘요. 모델 호출이 없어요(질문을 해야 하는 `models`만 모델을 거쳐요).
+이전에는 OpenRouter 크레딧이 없으면 모든 요청이 실패했고, 되돌아가는 명령도 모델을 거쳐서 함께 막혔어요. 이걸 막는 장치가
+두 가지 더 있어요. `openrouter`는 바꾸기 전에 OpenRouter 잔액을 보고, $0.50(`PROVIDER_MIN_CREDIT`)보다 적으면 구독에
+그대로 머물러요. 그래도 OpenRouter에서 결제나 인증 오류로 턴이 실패하면 `bin/provider-fail`이 구독으로 되돌리고 데스크톱
+알림으로 알려 줘요. `default`, `subscription`, `anthropic`은 `claude`와 같아요. 모델이 있든 없든 언제나 통하는 비상구는
+`! <플러그인 폴더>/bin/provider claude`예요.
+
 ## run 폴더와 이어 하기
 
 run마다 모든 것을 `.git/wanjang/<date>-<slug>/`에 둬요(`.git` 안이라 커밋되지 않아요):
@@ -187,7 +195,7 @@ Sonnet, 오래 일한 워커를 이어 쓰는 대신 새로 띄우기, 브라우
 | `bin/guard` | PreToolUse 훅: PM과 읽기 전용 크루는 run 폴더에만 쓸 수 있어요 |
 | `bin/close` | SubagentStop 훅: run 기록이 열린 채로 보고하려 하면 PM을 한 번 돌려보내요 |
 | `bin/usage` | `/wanjang:optimize`의 토큰 보고서 |
-| `bin/provider`, `bin/openrouter-key` | `/wanjang:provider`와 그 키 도우미 |
+| `bin/provider`, `bin/openrouter-key`, `bin/provider-hook`, `bin/provider-fail` | `/wanjang:provider`, 키 도우미, 모델 없이 실행하는 훅, 결제 오류 때 되돌리는 훅 |
 | `skills/` | `/wanjang:wanjang`, `/wanjang:optimize`, `/wanjang:provider` |
 | `test/` | `guard.sh`, `close.sh`, `usage.sh`, `provider.sh` |
 

@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+# StopFailure hook: a turn died on a billing or authentication error while this project (or the
+# user settings) pointed at OpenRouter. Switch back to the subscription so the next prompt works,
+# and say why in a desktop notification: this hook can neither block nor reach the model.
+set -u
+input=$(cat)
+case "$(jq -r '.error // ""' <<<"$input")" in
+  billing_error|authentication_failed) ;;
+  *) [[ $(jq -r '.error_details // ""' <<<"$input") == *402* ]] || exit 0 ;;
+esac
+cwd=$(jq -r '.cwd // empty' <<<"$input")
+root=$(git -C "${cwd:-.}" rev-parse --show-toplevel 2>/dev/null || echo "${cwd:-.}")
+switched=""
+for f in "$root/.claude/settings.local.json" "$HOME/.claude/settings.json"; do
+  [ "$(jq -r '.env.ANTHROPIC_BASE_URL // ""' "$f" 2>/dev/null)" = https://openrouter.ai/api ] || continue
+  "$(dirname "$0")/provider" claude --file "$f" >/dev/null 2>&1 && switched+="$f "
+done
+[ -n "$switched" ] || exit 0
+msg="OpenRouter refused the request (no credit or a bad key). Switched back to the Claude subscription."
+# PROVIDER_NOTIFY_CMD replaces the notification in test/provider.sh only (gets the message on stdin).
+if [ -n "${PROVIDER_NOTIFY_CMD:-}" ]; then printf '%s\n' "$msg" | bash -c "$PROVIDER_NOTIFY_CMD"
+elif command -v osascript >/dev/null; then osascript -e "display notification \"$msg\" with title \"wanjang provider\"" >/dev/null 2>&1
+elif command -v notify-send >/dev/null; then notify-send "wanjang provider" "$msg"
+fi
+echo "provider: $msg ($switched)" >&2
+exit 0
