@@ -105,7 +105,7 @@ field: know-how for a field comes from playbooks.
 | `/wanjang:wanjang <work>` | Hand the work to the PM instead of doing it in this session |
 | `/wanjang:wanjang resume [run]` | Pick up a run that stopped (a crash, a lost connection, a restart) |
 | `/wanjang:optimize` | See where this session's tokens go and fix what applies, with agents still running |
-| `/wanjang:provider openrouter\|claude\|key\|status` | Move this session between the claude.ai subscription and OpenRouter, no restart |
+| `/wanjang:provider openrouter\|models\|presets\|claude\|key\|status` | Move this session between the claude.ai subscription and OpenRouter, no restart |
 
 `/wanjang:optimize` runs `bin/usage`, which reads the session's transcripts on disk and prints a short report: the
 main context, the tool results that took the most, files read again and again, agents active in the last ten
@@ -123,6 +123,14 @@ SSH) it prints the command to store the key yourself; the subscription's login t
 subscription logins in third-party tools or proxies). While on OpenRouter, features that need the claude.ai login
 (Remote Control, voice, claude.ai connectors) are off.
 Measured: one session answered on the subscription, then on OpenRouter, then on the subscription again, with no restart.
+
+Which OpenRouter model answers for `opus`, `sonnet` and `haiku` is yours to pick: `/wanjang:provider models` lists
+OpenRouter models that take tools, by price band, and asks one question per slot; `--opus`/`--sonnet`/`--haiku` set them
+directly. The choice is saved (no secrets) in `~/.config/wanjang/provider.json` and reused by the next `openrouter`;
+`--save NAME` keeps a named preset, `--preset NAME` applies it, `presets` lists them. `claude` blanks the overrides in the
+settings file but keeps the saved choices. The `/model` picker keeps showing Opus, Sonnet and Haiku: Claude Code's
+gateway model discovery (`CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY`) lists only IDs that contain `claude` or `anthropic`
+and runs only at startup, so it cannot surface other OpenRouter models; the picked models answer under those three names.
 
 ## Run folders and resuming
 

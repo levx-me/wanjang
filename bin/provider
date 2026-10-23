@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# provider openrouter|claude|key|status [--user] [--file PATH] [--opus M] [--sonnet M] [--haiku M]
+# provider openrouter|claude|key|status|models|presets [--user] [--file PATH]
+#          [--opus M] [--sonnet M] [--haiku M] [--preset NAME] [--save NAME] [--slot S] [--search TEXT]
 # Switches Claude Code between the claude.ai login and OpenRouter by rewriting the `env` and
 # `apiKeyHelper` of one settings file; a running session reloads that file when it changes.
 # Default file: <repo root or cwd>/.claude/settings.local.json (this project only).
@@ -8,13 +9,18 @@
 # `key` asks for the OpenRouter key in an OS password dialog and stores it in the keychain
 # (macOS) or secret-tool (Linux); the key goes from the dialog to the store on a pipe, never
 # through argv, a file or this script's output. `openrouter` does the same when no key is found.
+# Model choices (which OpenRouter model answers for opus / sonnet / haiku) are kept, without any
+# secret, in ${XDG_CONFIG_HOME:-~/.config}/wanjang/provider.json: `last` and named presets.
+# `openrouter` starts from `last` (or --preset), applies the --opus/--sonnet/--haiku given, and saves
+# the result as `last` (and as --save NAME). `models` lists OpenRouter models to pick from.
 set -euo pipefail
 here=$(cd "$(dirname "$0")" && pwd -P)
 
 mode=${1:-status}; shift || true
 root=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
 file="$root/.claude/settings.local.json"
-opus="" sonnet="" haiku=""
+opus="" sonnet="" haiku="" preset="" save="" slot="" search=""
+cfg="${XDG_CONFIG_HOME:-$HOME/.config}/wanjang/provider.json"
 while [ $# -gt 0 ]; do
   case "$1" in
     --user) file="$HOME/.claude/settings.json" ;;
@@ -22,12 +28,16 @@ while [ $# -gt 0 ]; do
     --opus) opus=$2; shift ;;
     --sonnet) sonnet=$2; shift ;;
     --haiku) haiku=$2; shift ;;
+    --preset) preset=$2; shift ;;
+    --save) save=$2; shift ;;
+    --slot) slot=$2; shift ;;
+    --search) search=$2; shift ;;
     *) echo "provider: unknown option $1" >&2; exit 2 ;;
   esac
   shift
 done
 
-if [ "$mode" != status ] && [ "$mode" != key ]; then
+if [ "$mode" = openrouter ] || [ "$mode" = claude ]; then
   mkdir -p "$(dirname "$file")"
   [ -s "$file" ] || echo '{}' > "$file"
 fi
@@ -79,10 +89,49 @@ ask_and_store() {
   echo 'provider: key stored' >&2
 }
 
+combo() {  # NAME: a saved combo as {opus,sonnet,haiku} ({} when missing)
+  jq -c --arg n "$1" 'if $n == "last" then .last // {} else .presets[$n] // {} end' "$cfg" 2>/dev/null || echo '{}'
+}
+
+models() {  # list OpenRouter models that take tools, by slot; no key is sent
+  local src
+  if [ -n "${PROVIDER_MODELS_JSON:-}" ]; then src=$(cat "$PROVIDER_MODELS_JSON")  # test/provider.sh only
+  else src=$(curl -fsS --max-time 20 'https://openrouter.ai/api/v1/models') || { echo 'provider: could not reach openrouter.ai' >&2; exit 7; }
+  fi
+  # ponytail: slots are price bands ($/M input), a rough proxy for strength; --search to look past them.
+  printf '%s' "$src" | jq -r --arg slot "$slot" --arg q "$search" '
+    def band: {opus: [2, 30, -1], sonnet: [0.4, 5, -1], haiku: [0.01, 0.6, 1]};
+    [.data[] | select(((.supported_parameters // []) | index("tools")) and (.id | endswith(":batch") | not))
+      | . + {in: ((.pricing.prompt // "0") | tonumber * 1e6), out: ((.pricing.completion // "0") | tonumber * 1e6)}
+      | select(.in > 0)] as $all
+    | (if $slot == "" then ["opus","sonnet","haiku"] else [$slot] end)[] as $s
+    | band[$s] as $b
+    | "# \($s)",
+      ($all
+        | if $q != "" then map(select((.id + " " + .name) | ascii_downcase | contains($q | ascii_downcase)))
+          else map(select(.in >= $b[0] and .in <= $b[1] and .context_length >= 100000)) end
+        | sort_by(.in * $b[2]) | .[:15][]
+        | "\(.id)\tin $\(.in * 100 | round / 100)/M\tout $\(.out * 100 | round / 100)/M\tctx \(.context_length / 1000 | floor)k")'
+}
+
 case "$mode" in
   key) ask_and_store; exit 0 ;;
+  models) models; exit 0 ;;
+  presets)
+    jq -r '(.presets // {} | to_entries[] | "\(.key): \(.value | to_entries | map("\(.key)=\(.value)") | join(" "))"),
+           (if .last then "last: \(.last | to_entries | map("\(.key)=\(.value)") | join(" "))" else empty end)' "$cfg" 2>/dev/null \
+      || echo 'provider: no saved models yet'
+    exit 0 ;;
   openrouter)
     "$here/openrouter-key" >/dev/null 2>&1 || ask_and_store
+    base=$(combo "${preset:-last}")
+    [ -z "$preset" ] || [ "$base" != '{}' ] || { echo "provider: no preset named $preset (see: provider presets)" >&2; exit 2; }
+    c=$(jq -c --arg o "$opus" --arg s "$sonnet" --arg h "$haiku" \
+      '. + ({opus: $o, sonnet: $s, haiku: $h} | with_entries(select(.value != "")))' <<<"$base")
+    opus=$(jq -r '.opus // ""' <<<"$c"); sonnet=$(jq -r '.sonnet // ""' <<<"$c"); haiku=$(jq -r '.haiku // ""' <<<"$c")
+    mkdir -p "$(dirname "$cfg")"; [ -s "$cfg" ] || echo '{}' > "$cfg"
+    t=$(mktemp "$cfg.XXXX")
+    jq --argjson c "$c" --arg n "$save" '.last = $c | if $n != "" then .presets[$n] = $c else . end' "$cfg" > "$t" && mv "$t" "$cfg" || rm -f "$t"
     write --arg o "$opus" --arg s "$sonnet" --arg h "$haiku" --arg k "$here/openrouter-key" '
       .apiKeyHelper = $k
       | .env.ANTHROPIC_BASE_URL = "https://openrouter.ai/api"
@@ -101,9 +150,13 @@ case "$mode" in
       | .env.ANTHROPIC_API_KEY = ""
       | reduce ("OPUS","SONNET","HAIKU") as $m (.; if .env["ANTHROPIC_DEFAULT_\($m)_MODEL"] then .env["ANTHROPIC_DEFAULT_\($m)_MODEL"] = "" else . end)' ;;
   status) ;;
-  *) echo "usage: provider openrouter|claude|key|status [--user] [--file PATH] [--opus M] [--sonnet M] [--haiku M]" >&2; exit 2 ;;
+  *) echo "usage: provider openrouter|claude|key|status|models|presets [--user] [--file PATH] [--opus M] [--sonnet M] [--haiku M] [--preset NAME] [--save NAME] [--slot opus|sonnet|haiku] [--search TEXT]" >&2; exit 2 ;;
 esac
 
 now=claude
 [ "$(jq -r '.env.ANTHROPIC_BASE_URL // ""' "$file" 2>/dev/null)" = "https://openrouter.ai/api" ] && now=openrouter
-echo "provider: $now ($file)"
+if [ $now = openrouter ]; then
+  m=$(jq -r '[("opus","sonnet","haiku") as $s | .env["ANTHROPIC_DEFAULT_\($s | ascii_upcase)_MODEL"] // "" | select(. != "")] | join(", ")' "$file" 2>/dev/null)
+  echo "provider: $now${m:+, models $m} ($file)"
+else echo "provider: $now ($file)"
+fi

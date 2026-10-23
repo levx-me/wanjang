@@ -105,7 +105,7 @@ flowchart LR
 | `/wanjang:wanjang <work>` | 이 세션에서 하지 않고 PM에게 일을 넘겨요 |
 | `/wanjang:wanjang resume [run]` | 멈춘 run을 이어 해요(충돌, 연결 끊김, 재시작) |
 | `/wanjang:optimize` | 에이전트를 멈추지 않은 채로, 이 세션의 토큰이 어디에 쓰이는지 보고 해당하는 것만 고쳐요 |
-| `/wanjang:provider openrouter\|claude\|key\|status` | 재시작 없이 이 세션을 claude.ai 구독과 OpenRouter 사이에서 옮겨요 |
+| `/wanjang:provider openrouter\|models\|presets\|claude\|key\|status` | 재시작 없이 이 세션을 claude.ai 구독과 OpenRouter 사이에서 옮겨요 |
 
 `/wanjang:optimize`는 `bin/usage`를 실행해요. 디스크에 있는 세션 기록을 읽고 짧은 보고서를 보여 줘요. 메인
 컨텍스트 크기, 가장 많이 차지한 도구 결과, 여러 번 다시 읽은 파일, 최근 10분 동안 일한 에이전트와 그 사용량,
@@ -122,6 +122,14 @@ flowchart LR
 창을 띄울 수 없으면(SSH 접속 등) 키를 직접 저장하는 명령을 알려 줘요. 구독 로그인 토큰은 Anthropic에만 가고 프록시로 넘기지 않아요(Anthropic은 구독 로그인을 제3자 도구나
 프록시에서 쓰는 걸 허용하지 않아요). OpenRouter로 가 있는 동안에는 claude.ai 로그인이 필요한 기능(원격 제어, 음성 입력,
 claude.ai 커넥터)이 꺼져요.
+
+`opus`, `sonnet`, `haiku` 자리에 어떤 OpenRouter 모델을 쓸지는 직접 골라요. `/wanjang:provider models`는 도구를 쓸 수 있는
+OpenRouter 모델을 가격대별로 보여 주고 자리마다 하나씩 물어봐요. `--opus`, `--sonnet`, `--haiku`로 바로 정할 수도 있어요.
+고른 조합은 `~/.config/wanjang/provider.json`에 저장되고(비밀 값은 없어요), 다음 `openrouter` 때 그대로 써요.
+`--save 이름`으로 조합에 이름을 붙이고, `--preset 이름`으로 불러오고, `presets`로 목록을 봐요. `claude`로 돌아가면 설정 파일의
+지정은 비우지만 저장한 조합은 남겨 둬요. `/model` 목록에는 계속 Opus, Sonnet, Haiku만 보여요. Claude Code의 게이트웨이 모델
+찾기(`CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY`)는 ID에 `claude`나 `anthropic`이 들어간 모델만, 그것도 시작할 때만 목록에
+넣어서 다른 OpenRouter 모델은 띄울 수 없어요. 고른 모델은 그 세 이름으로 답해요.
 실제로 한 세션이 재시작 없이 구독 → OpenRouter → 구독 순서로 응답하는 걸 확인했어요.
 
 ## run 폴더와 이어 하기
