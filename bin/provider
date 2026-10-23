@@ -57,7 +57,7 @@ store() {  # the key on stdin -> the OS secret store
     # security -i reads its command from stdin, so the key never appears in any process's argv.
     { read -r k; printf 'add-generic-password -U -s openrouter-claude -a "%s" -w "%s"\n' "$USER" "$k"; } |
       security -i >/dev/null 2>&1 && security find-generic-password -s openrouter-claude -a "$USER" >/dev/null 2>&1
-  else secret-tool store --label=OpenRouter service openrouter-claude
+  else read -r k; printf '%s' "$k" | secret-tool store --label=OpenRouter service openrouter-claude  # no trailing newline
   fi
 }
 
