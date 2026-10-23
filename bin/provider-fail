@@ -6,7 +6,7 @@ set -u
 input=$(cat)
 case "$(jq -r '.error // ""' <<<"$input")" in
   billing_error|authentication_failed) ;;
-  *) [[ $(jq -r '.error_details // ""' <<<"$input") == *402* ]] || exit 0 ;;
+  *) exit 0 ;;
 esac
 cwd=$(jq -r '.cwd // empty' <<<"$input")
 root=$(git -C "${cwd:-.}" rev-parse --show-toplevel 2>/dev/null || echo "${cwd:-.}")

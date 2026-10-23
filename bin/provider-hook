@@ -9,5 +9,6 @@ read -ra args <<<"$(jq -r '.command_args // ""' <<<"$input")"  # split into word
 case "${args[0]:-}" in models) exit 0 ;; esac
 cwd=$(jq -r '.cwd // empty' <<<"$input")
 out=$(cd "${cwd:-.}" && "$(dirname "$0")/provider" ${args[@]+"${args[@]}"} 2>&1 </dev/null); rc=$?
+for a in ${args[@]+"${args[@]}"}; do [ "$a" = --user ] && out="Note: --user changed ~/.claude/settings.json, so every open session switched."$'\n'"$out"; done
 [ $rc = 0 ] && out+=$'\n'"Check with /status: the \"Anthropic base URL\" line shows where requests go."
 jq -n --arg r "$out" '{decision: "block", reason: $r, suppressOriginalPrompt: true}'

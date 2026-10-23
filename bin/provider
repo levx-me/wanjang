@@ -157,7 +157,8 @@ case "$mode" in
   openrouter)
     base=$(combo "${preset:-last}")
     [ -z "$preset" ] || [ "$base" != '{}' ] || { echo "provider: no preset named $preset (see: provider presets)" >&2; exit 2; }
-    "$here/openrouter-key" >/dev/null 2>&1 || ask_and_store
+    # Under a fake HOME only the env key counts: never reach the real keychain or secret store.
+    if [ -n "$home_ok" ]; then "$here/openrouter-key" >/dev/null 2>&1; else [ -n "${OPENROUTER_API_KEY:-}" ]; fi || ask_and_store
     balance_ok
     c=$(jq -c --arg o "$opus" --arg s "$sonnet" --arg h "$haiku" \
       '. + ({opus: $o, sonnet: $s, haiku: $h} | with_entries(select(.value != "")))' <<<"$base")
