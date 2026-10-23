@@ -30,19 +30,15 @@ while [ $# -gt 0 ]; do
     --haiku) haiku=$2; shift ;;
     --preset) preset=$2; shift ;;
     --save) save=$2; shift ;;
-    --slot) slot=$2; shift ;;
+    --slot) slot=$2; shift; case "$slot" in opus|sonnet|haiku) ;; *) echo "provider: --slot is opus, sonnet or haiku" >&2; exit 2 ;; esac ;;
     --search) search=$2; shift ;;
     *) echo "provider: unknown option $1" >&2; exit 2 ;;
   esac
   shift
 done
 
-if [ "$mode" = openrouter ] || [ "$mode" = claude ]; then
-  mkdir -p "$(dirname "$file")"
-  [ -s "$file" ] || echo '{}' > "$file"
-fi
-
 write() {  # [jq options] filter: rewrite the file atomically, so a reload never sees half a file
+  mkdir -p "$(dirname "$file")"; [ -s "$file" ] || echo '{}' > "$file"  # created only when something is written
   local tmp; tmp=$(mktemp "$file.XXXX")
   jq "$@" "$file" > "$tmp" && mv "$tmp" "$file" || { rm -f "$tmp"; echo "provider: $file is not valid JSON; left it as it was" >&2; exit 4; }
 }
@@ -123,9 +119,9 @@ case "$mode" in
       || echo 'provider: no saved models yet'
     exit 0 ;;
   openrouter)
-    "$here/openrouter-key" >/dev/null 2>&1 || ask_and_store
     base=$(combo "${preset:-last}")
     [ -z "$preset" ] || [ "$base" != '{}' ] || { echo "provider: no preset named $preset (see: provider presets)" >&2; exit 2; }
+    "$here/openrouter-key" >/dev/null 2>&1 || ask_and_store
     c=$(jq -c --arg o "$opus" --arg s "$sonnet" --arg h "$haiku" \
       '. + ({opus: $o, sonnet: $s, haiku: $h} | with_entries(select(.value != "")))' <<<"$base")
     opus=$(jq -r '.opus // ""' <<<"$c"); sonnet=$(jq -r '.sonnet // ""' <<<"$c"); haiku=$(jq -r '.haiku // ""' <<<"$c")
