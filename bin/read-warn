@@ -1,0 +1,52 @@
+#!/usr/bin/env bash
+# PreToolUse hook (Read, Bash): warn the MAIN session when it reads a whole big file.
+# Everything the main session reads is re-read every later turn; a subagent's context is thrown
+# away, so subagent calls (input has agent_id) are never touched. Warn only: it adds context for the
+# model and sets no permissionDecision, so other PreToolUse hooks behave as before.
+# ponytail: simple word split of the command; anything unusual (pipes, quotes with spaces, redirects) stays silent.
+set -u
+input=$(cat)
+IFS=$'\x1f' read -r aid tool cwd file off lim < <(printf '%s' "$input" | jq -r '[(.agent_id // ""), (.tool_name // ""), (.cwd // ""), (.tool_input.file_path // ""), (.tool_input.offset // ""), (.tool_input.limit // "")] | map(tostring) | join("\u001f")') || exit 0
+[ -z "$aid" ] || exit 0
+MAX=200
+
+warn() { jq -n --arg m "wanjang: $1 is $2 lines; in the main session read only the range you need (grep -n, then offset/limit) or hand whole-file reading to a subagent." '{hookSpecificOutput: {hookEventName: "PreToolUse", additionalContext: $m}}'; exit 0; }
+
+# Print the line count of a regular text file over MAX lines (not counted fully past 4 MB), else nothing.
+big() {
+  local f=$1 n
+  case $f in "~"/*) f=$HOME/${f#"~"/} ;; /*) ;; *) f=$cwd/$f ;; esac
+  [ -f "$f" ] || return 1
+  case $(printf '%s' "$f" | tr 'A-Z' 'a-z') in *.png|*.jpg|*.jpeg|*.gif|*.webp|*.pdf|*.ipynb|*.svg) return 1 ;; esac
+  [ "$(wc -c < "$f")" -le 4194304 ] || { n=$MAX; [ "$(head -c 4194304 "$f" | wc -l)" -gt $MAX ] && { echo "$MAX+"; return 0; }; return 1; }
+  n=$(wc -l < "$f" | tr -d ' ')
+  [ "$n" -gt $MAX ] || return 1
+  echo "$n"
+}
+
+if [ "$tool" = Read ]; then
+  [ -n "$file" ] && [ -z "$off" ] && [ -z "$lim" ] || exit 0
+  n=$(big "$file") && warn "$file" "$n"
+  exit 0
+fi
+[ "$tool" = Bash ] || exit 0
+
+cmd=$(printf '%s' "$input" | jq -r '.tool_input.command // empty')
+case $cmd in *[\|\<\>\;\&\$\`\(\)\{\}\\\*\?]*|*$'\n'*) exit 0 ;; esac  # pipes, redirects, heredocs, chains, globs: unsure
+cmd=${cmd//\'/}; cmd=${cmd//\"/}
+read -ra w <<< "$cmd"
+[ "${#w[@]}" -ge 2 ] || exit 0
+prog=${w[0]}; last=${w[${#w[@]}-1]}; n=
+case $prog in
+  cat) [ "${#w[@]}" -eq 2 ] && n=$(big "$last") ;;
+  head|tail)  # head -n 500 f | head -500 f | tail -n 500 f ; no -c, no -f, no +N
+    case "${w[1]}" in
+      -n) [ "${#w[@]}" -eq 4 ] && [[ ${w[2]} =~ ^[0-9]+$ ]] && [ "${w[2]}" -gt $MAX ] && n=$(big "$last") ;;
+      -[0-9]*) [ "${#w[@]}" -eq 3 ] && [[ ${w[1]#-} =~ ^[0-9]+$ ]] && [ "${w[1]#-}" -gt $MAX ] && n=$(big "$last") ;;
+    esac ;;
+  sed)  # sed -n A,Bp f
+    [ "${#w[@]}" -eq 4 ] && [ "${w[1]}" = -n ] && [[ ${w[2]} =~ ^([0-9]+),([0-9]+)p$ ]] \
+      && [ $(( BASH_REMATCH[2] - BASH_REMATCH[1] )) -gt $MAX ] && n=$(big "$last") ;;
+esac
+[ -n "$n" ] && warn "$last" "$n"
+exit 0
