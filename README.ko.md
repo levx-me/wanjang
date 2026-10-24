@@ -5,7 +5,7 @@
 **연장 한 번 안 드는 리더가 이끄는 Claude Code 에이전트 크루예요.**
 
 [![Claude Code plugin](https://img.shields.io/badge/Claude_Code-plugin-d97757)](https://code.claude.com/docs/en/plugins)
-[![version](https://img.shields.io/badge/version-0.6.4-blue)](.claude-plugin/plugin.json)
+[![version](https://img.shields.io/badge/version-0.6.3-blue)](.claude-plugin/plugin.json)
 [![license](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
 [English](README.md) | 한국어
