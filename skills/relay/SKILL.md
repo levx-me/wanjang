@@ -1,6 +1,7 @@
 ---
 name: relay
 description: Send work to another local Claude session (the one that owns another repo) and track it. /relay <session> <request>, /relay <a,b> <request>, /relay status.
+argument-hint: "<session[,session…]> <request> | status"
 disable-model-invocation: true
 ---
 
