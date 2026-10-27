@@ -9,6 +9,11 @@
             "type": "command",
             "command": "\"${CLAUDE_PLUGIN_ROOT}/bin/route\"",
             "timeout": 5
+          },
+          {
+            "type": "command",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/bin/main-rules\"",
+            "timeout": 5
           }
         ]
       }

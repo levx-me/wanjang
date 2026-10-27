@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+# SessionStart hook: injects *.md from ~/.claude/main-rules and <cwd / git root>/.claude/main-rules
+# (rules only the main session needs). Own hook because additionalContext is capped at 10,000 chars per hook.
+cwd=$(jq -r '.cwd // empty' 2>/dev/null)
+root=$(git -C "${cwd:-.}" rev-parse --show-toplevel 2>/dev/null)
+text="" skipped="" seen=""
+for d in "${HOME:+$HOME/.claude/main-rules}" "${cwd:+$cwd/.claude/main-rules}" "${root:+$root/.claude/main-rules}"; do
+  [ -n "$d" ] && [ -d "$d" ] || continue
+  case "$seen" in *"|$d|"*) continue ;; esac; seen+="|$d|"
+  for f in "$d"/*.md; do
+    [ -f "$f" ] && [ -r "$f" ] || continue
+    chunk=$'Main-session rule (from '"$f"$'):\n'"$(cat "$f" 2>/dev/null)"$'\n\n'
+    if [ -z "$skipped" ] && [ $(( ${#text} + ${#chunk} )) -le 9500 ]; then text+=$chunk; else skipped+=" $f"; fi
+  done
+done
+[ -n "$text$skipped" ] || exit 0
+[ -n "$skipped" ] && text+="[wanjang: skipped, over the limit:$skipped. main-rules must stay under ~9.5K chars.]"
+jq -n --arg t "$text" '{hookSpecificOutput: {hookEventName: "SessionStart", additionalContext: $t}}' 2>/dev/null
+exit 0

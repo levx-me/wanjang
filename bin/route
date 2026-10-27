@@ -13,20 +13,4 @@ if dir=$(git -C "${cwd:-.}" rev-parse --path-format=absolute --git-common-dir 2>
     text+=$(printf '%s\n' "$open" | sed 's/^/- /')
   fi
 fi
-# Main-session rules: *.md in ~/.claude/main-rules and <cwd or git root>/.claude/main-rules (subagents never get this output).
-root=$(git -C "${cwd:-.}" rev-parse --show-toplevel 2>/dev/null)
-rules="" ; seen=""
-for d in "$HOME/.claude/main-rules" "${cwd:+$cwd/.claude/main-rules}" "${root:+$root/.claude/main-rules}"; do
-  [ -n "$d" ] && [ -d "$d" ] || continue
-  case "$seen" in *"|$d|"*) continue ;; esac; seen+="|$d|"
-  for f in "$d"/*.md; do
-    [ -f "$f" ] && rules+=$'\n\nMain-session rule (from '"$f"$'):\n'"$(cat "$f")"
-  done
-done
-if [ -n "$rules" ]; then
-  if [ "${#rules}" -gt 40960 ]; then
-    rules="${rules:0:40960}"$'\n\n[wanjang: main-rules exceed 40 KB and were cut; trim ~/.claude/main-rules]'
-  fi
-  text+="$rules"
-fi
 jq -n --arg t "$text" '{hookSpecificOutput: {hookEventName: "SessionStart", additionalContext: $t}}'

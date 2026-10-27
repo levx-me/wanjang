@@ -144,7 +144,7 @@ OpenRouter 모델을 가격대별로 보여 주고 자리마다 하나씩 물어
 
 서브에이전트는 시작할 때마다 `~/.claude/CLAUDE.md`와 `~/.claude/rules/*.md`를 모두 읽어요. 한 환경에서 재 보니 워커 시작마다 약 1.8만 자였고, 워커가 턴을 돌 때마다 다시 비용이 들어요. 답변 언어, 보고 형식, 위저드로 결정 묻기 같은 규칙은 대부분 메인 세션에만 필요해요.
 
-- **`main-rules/`**: 이런 파일을 `~/.claude/main-rules/` 또는 `<프로젝트>/.claude/main-rules/`에 두세요. wanjang의 SessionStart 훅(`bin/route`, startup, resume, clear, compact 모두)이 그 안의 `*.md`를 이름순으로, 각각 `Main-session rule (from <경로>):` 한 줄을 붙여 주입해요. 합계는 40 KB까지예요. 서브에이전트는 SessionStart 출력을 받지 않아서 이 규칙을 읽지 않아요.
+- **`main-rules/`**: 이런 파일을 `~/.claude/main-rules/` 또는 `<프로젝트>/.claude/main-rules/`에 두세요. 별도의 SessionStart 훅(`bin/main-rules`, startup, resume, clear, compact 모두)이 그 안의 `*.md`를 이름순으로, 각각 `Main-session rule (from <경로>):` 한 줄을 붙여 주입해요. 합계는 약 9.5K자까지예요. Claude Code가 훅 하나의 `additionalContext`를 10,000자로 제한하고(넘으면 파일 경로와 짧은 미리보기만 받아요) 라우팅 훅이 이미 약 5K자를 쓰기 때문이에요. 안 들어가는 파일은 건너뛰고 마지막 줄에 이름을 적어요. 실측: 서브에이전트 기록에는 SubagentStart 컨텍스트만 있고 SessionStart는 없어서, 서브에이전트는 이 파일을 읽지 않아요.
 - **`/wanjang:slim`**: 서브에이전트가 읽는 파일의 크기를 보여 주고, 규칙 파일을 "메인 전용"과 "워커도 필요"로 나눈 뒤, 옮길 파일을 물어보고, 승인한 것만 `mv`로 옮겨요(되돌리는 방법도 알려 줘요). 끝나면 `/restart` 하세요.
 - `main-rules/`는 Claude Code 기능이 아니라, 표준 SessionStart 훅 위에 얹은 wanjang의 약속이에요. wanjang 없이 쓰려면 그 파일들의 내용을 `{"hookSpecificOutput":{"hookEventName":"SessionStart","additionalContext":"..."}}`로 출력하는 SessionStart 훅을 직접 작성하면 돼요.
 
