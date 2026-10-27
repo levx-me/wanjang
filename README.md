@@ -5,7 +5,7 @@
 **A crew of Claude Code agents, run by one that never picks up a tool.**
 
 [![Claude Code plugin](https://img.shields.io/badge/Claude_Code-plugin-d97757)](https://code.claude.com/docs/en/plugins)
-[![version](https://img.shields.io/badge/version-0.6.11-blue)](.claude-plugin/plugin.json)
+[![version](https://img.shields.io/badge/version-0.6.12-blue)](.claude-plugin/plugin.json)
 [![license](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
 English | [한국어](README.ko.md)
@@ -140,6 +140,14 @@ directly. The choice is saved (no secrets) in `~/.config/wanjang/provider.json` 
 settings file but keeps the saved choices. The `/model` picker keeps showing Opus, Sonnet and Haiku: Claude Code's
 gateway model discovery (`CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY`) lists only IDs that contain `claude` or `anthropic`
 and runs only at startup, so it cannot surface other OpenRouter models; the picked models answer under those three names.
+
+## Main-session rules and `/wanjang:slim`
+
+Every subagent loads your `~/.claude/CLAUDE.md` and `~/.claude/rules/*.md`: about 18K characters per worker start in one measured setup, paid again on every worker turn. Many of those rules (reply language, report format, asking decisions with a wizard) only matter to the main session.
+
+- **`main-rules/`**: put such files in `~/.claude/main-rules/` or `<project>/.claude/main-rules/`. Wanjang's SessionStart hook (`bin/route`, all sources: startup, resume, clear, compact) injects every `*.md` there, sorted by name, each under a `Main-session rule (from <path>):` line, capped at 40 KB. Subagents never receive SessionStart output, so they skip them.
+- **`/wanjang:slim`**: lists what every subagent loads, classifies your rules files as main only or workers need it, asks which to move, and moves the approved ones with `mv` (it prints how to undo). Run `/restart` afterwards.
+- `main-rules/` is a wanjang convention on top of the standard SessionStart hook, not a Claude Code feature. Without wanjang, write your own SessionStart hook that prints `{"hookSpecificOutput":{"hookEventName":"SessionStart","additionalContext":"..."}}` with those files' text.
 
 ## Run folders and resuming
 

@@ -5,7 +5,7 @@
 **연장 한 번 안 드는 리더가 이끄는 Claude Code 에이전트 크루예요.**
 
 [![Claude Code plugin](https://img.shields.io/badge/Claude_Code-plugin-d97757)](https://code.claude.com/docs/en/plugins)
-[![version](https://img.shields.io/badge/version-0.6.11-blue)](.claude-plugin/plugin.json)
+[![version](https://img.shields.io/badge/version-0.6.12-blue)](.claude-plugin/plugin.json)
 [![license](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
 [English](README.md) | 한국어
@@ -139,6 +139,14 @@ OpenRouter 모델을 가격대별로 보여 주고 자리마다 하나씩 물어
 그대로 머물러요. 그래도 OpenRouter에서 결제나 인증 오류로 턴이 실패하면 `bin/provider-fail`이 구독으로 되돌리고 데스크톱
 알림으로 알려 줘요. `default`, `subscription`, `anthropic`은 `claude`와 같아요. 모델이 있든 없든 언제나 통하는 비상구는
 `! <플러그인 폴더>/bin/provider claude`예요.
+
+## 메인 세션 전용 규칙과 `/wanjang:slim`
+
+서브에이전트는 시작할 때마다 `~/.claude/CLAUDE.md`와 `~/.claude/rules/*.md`를 모두 읽어요. 한 환경에서 재 보니 워커 시작마다 약 1.8만 자였고, 워커가 턴을 돌 때마다 다시 비용이 들어요. 답변 언어, 보고 형식, 위저드로 결정 묻기 같은 규칙은 대부분 메인 세션에만 필요해요.
+
+- **`main-rules/`**: 이런 파일을 `~/.claude/main-rules/` 또는 `<프로젝트>/.claude/main-rules/`에 두세요. wanjang의 SessionStart 훅(`bin/route`, startup, resume, clear, compact 모두)이 그 안의 `*.md`를 이름순으로, 각각 `Main-session rule (from <경로>):` 한 줄을 붙여 주입해요. 합계는 40 KB까지예요. 서브에이전트는 SessionStart 출력을 받지 않아서 이 규칙을 읽지 않아요.
+- **`/wanjang:slim`**: 서브에이전트가 읽는 파일의 크기를 보여 주고, 규칙 파일을 "메인 전용"과 "워커도 필요"로 나눈 뒤, 옮길 파일을 물어보고, 승인한 것만 `mv`로 옮겨요(되돌리는 방법도 알려 줘요). 끝나면 `/restart` 하세요.
+- `main-rules/`는 Claude Code 기능이 아니라, 표준 SessionStart 훅 위에 얹은 wanjang의 약속이에요. wanjang 없이 쓰려면 그 파일들의 내용을 `{"hookSpecificOutput":{"hookEventName":"SessionStart","additionalContext":"..."}}`로 출력하는 SessionStart 훅을 직접 작성하면 돼요.
 
 ## run 폴더와 이어 하기
 
