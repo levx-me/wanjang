@@ -1,13 +1,22 @@
 #!/usr/bin/env bash
-# PostToolUse hook on Agent: when a finished subagent's brief lists `Deliverables: <path>, <path>`
-# and one is missing or empty, tell the parent at once (additionalContext; never blocks).
-# SubagentStop can only talk to the subagent, so the parent is reached here. Background launches
-# (status async_launched) are skipped: nothing has run yet.
+# Two hooks, one check. PostToolUse on Agent (foreground agents) and SubagentStop (any worker, background too):
+# when a finished subagent's brief lists `Deliverables: <path>, <path>`
+# and one is missing or empty: PostToolUse tells the parent (additionalContext); SubagentStop sends the
+# worker back once (block, never twice: stop_hook_active). Background launches are skipped on PostToolUse.
 set -u
 input=$(cat)
-[ "$(printf '%s' "$input" | jq -r '.tool_response.status // "completed"' 2>/dev/null)" = completed ] || exit 0
-prompt=$(printf '%s' "$input" | jq -r '.tool_input.prompt // empty' 2>/dev/null)
+event=$(printf '%s' "$input" | jq -r '.hook_event_name // empty' 2>/dev/null)
 cwd=$(printf '%s' "$input" | jq -r '.cwd // empty' 2>/dev/null)
+if [ "$event" = SubagentStop ]; then  # the worker itself: sent back once to fix it
+  [ "$(printf '%s' "$input" | jq -r '.stop_hook_active // false')" = true ] && exit 0
+  tp=$(printf '%s' "$input" | jq -r '.agent_transcript_path // empty' 2>/dev/null)
+  tp=${tp/#\~/$HOME}
+  [ -f "$tp" ] || exit 0
+  prompt=$(jq -rs '[.[] | select(.type=="user")][0].message.content | if type=="array" then map(.text? // "") | join("\n") else . end // empty' "$tp" 2>/dev/null)
+else  # the parent, after a foreground agent; background launches have produced nothing yet
+  [ "$(printf '%s' "$input" | jq -r '.tool_response.status // "completed"' 2>/dev/null)" = completed ] || exit 0
+  prompt=$(printf '%s' "$input" | jq -r '.tool_input.prompt // empty' 2>/dev/null)
+fi
 [ -n "$prompt" ] || exit 0
 [ -n "$cwd" ] && cd "$cwd" 2>/dev/null
 line=$(printf '%s\n' "$prompt" | grep -m1 -E '^[[:space:]]*Deliverables:')
@@ -29,5 +38,9 @@ for p in "${items[@]}"; do
   else bad="$bad $p (missing),"; fi
 done
 [ -n "$bad" ] || exit 0
+if [ "$event" = SubagentStop ]; then
+  jq -n --arg b "${bad%,}" '{decision: "block", reason: ("Deliverables missing or empty:" + $b + ". Create them, or say in your final reply why not.")}'
+  exit 0
+fi
 jq -n --arg m "Deliverables check: the subagent reported, but its brief promised files that are not there:${bad%,}. Look before spending a checker run." \
   '{hookSpecificOutput: {hookEventName: "PostToolUse", additionalContext: $m}}'
