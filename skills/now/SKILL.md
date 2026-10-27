@@ -1,6 +1,6 @@
 ---
-name: status
-description: Say what the running agents are doing now, for how long, what is done and what looks stuck. /wanjang:status [--session id]
+name: now
+description: Say what the running agents are doing now, for how long, what is done and what looks stuck. /wanjang:now [--session id]
 argument-hint: "[--session <id|path>]"
 ---
 Answer "how is it going?" from a compact snapshot, not from transcripts.
