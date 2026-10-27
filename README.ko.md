@@ -22,6 +22,10 @@
   브리프, 보고서, 기록은 파일에 남고 누구의 컨텍스트에도 쌓이지 않아요.
 - **일마다 맞는 모델을 써요.** 조회와 단순 수정은 Haiku, 보통의 구현과 확인은 Sonnet, UI와 정말 어려운 부분은
   Opus예요. 실패한 일은 한 단계 위 모델로 다시 해요.
+- **매 턴이 가벼워요.** 메인 세션이 큰 파일을 통째로 읽으려 하면 먼저 경고해요(`bin/read-warn`). 문서는 통째로
+  읽는 대신 `docindex`로 섹션 단위로 찾아요(실제 문서로 해 본 테스트에서, grep으로 찾아 읽는 방식이 놓친 섹션을
+  찾았어요). 메인 전용 규칙은 워커에게 가지 않게 해요(`/wanjang:slim`으로 한 환경의 워커 지침 분량이 1.43만 자에서
+  0.83만 자로 줄었어요). 워커는 쓰지 않는 도구를 들고 다니지 않고, fork는 짧은 비코드 작업에만 써요.
 - **확인 없이 나가는 건 없어요.** QA는 사용자처럼 제품을 써 보고, checker는 빌드하고 테스트하고 요구사항을
   하나씩 짚어요. 인증, 결제, 권한이 걸리면 보안 검토도 해요.
 - **중간에 끊겨도 한 단계만 잃어요.** 워커는 진행하면서 커밋하고, PM은 run 기록을 남겨요. 다음 세션이 알아서
@@ -68,11 +72,26 @@ flowchart LR
 2. **브리프.** 워커마다 브리프 파일을 받아요. 읽을 playbook, 계약, 모든 워커가 함께 지킬 결정, 맡은 파일,
    돌려줄 내용이 들어 있어요.
 3. **구현.** 서로 다른 파일을 맡은 워커는 동시에 일하고, 확인을 통과할 때마다 커밋하고, 한 줄 상태와 전체
-   보고서 경로를 돌려줘요.
+   보고서 경로를 돌려줘요. 브리프에는 `Deliverables: <경로>, <경로>` 줄이 들어 있어요. 그 파일 없이 멈춘 워커는
+   한 번 돌려보내고(`bin/deliverables`, SubagentStop), 포그라운드 에이전트라면 부모에게도 알려요.
 4. **확인.** QA는 테스트가 다루지 못하는 부분을 직접 써 보고, checker는 빌드와 테스트를 돌리며 요구사항을
    하나씩 확인해요.
 5. **수정.** 찾은 문제는 그 부분을 맡은 워커에게 돌아가요. 최대 두 번이고, 그래도 안 되면 더 강한 모델이 맡아요.
 6. **보고.** 메인 세션에 요약 하나를 보내고, 자세한 내용은 run 폴더 경로로 남겨요.
+
+### 문서에서 찾기
+
+`docindex`는 `.md`, `.txt`, `.html` 파일에서 필요한 섹션만 찾아 줘서, 아무도 파일을 통째로 읽지 않아도 돼요.
+
+```sh
+docindex search "<query>" <dir>   # 상위 섹션을 path:start-end  heading 과 발췌로 보여 줘요
+docindex outline <file>           # 제목과 줄 범위, 크기
+docindex index <dir> | stats | purge [path]
+```
+
+로컬 SQLite FTS5 색인이에요(porter 형태소 처리에 trigram을 더해서 한국어 단어의 일부만 쳐도 찾아요). 검색할 때
+필요하면 색인하고 바뀐 파일은 다시 색인해요. 어떤 것도 컴퓨터 밖으로 나가지 않아요. 플러그인의 `bin/`에 들어 있어서
+Claude 세션에서는 PATH에 있어요. `/wanjang:docs <query> [dir]`가 이걸 실행하고, 찾은 줄만으로 답해요.
 
 ### 리서치 run
 
@@ -104,6 +123,8 @@ flowchart LR
 |---|---|
 | `/wanjang:wanjang <work>` | 이 세션에서 하지 않고 PM에게 일을 넘겨요 |
 | `/wanjang:wanjang resume [run]` | 멈춘 run을 이어 해요(충돌, 연결 끊김, 재시작) |
+| `/wanjang:docs <query> [dir]` | .md/.txt/.html 문서에서 `docindex`로 섹션을 찾고, 찾은 줄만으로 답해요 |
+| `/wanjang:slim` | 메인 세션에만 필요한 규칙을 모든 서브에이전트가 읽는 곳에서 빼내요(아래 참고) |
 | `/wanjang:optimize` | 에이전트를 멈추지 않은 채로, 이 세션의 토큰이 어디에 쓰이는지 보고 해당하는 것만 고쳐요 |
 | `/wanjang:provider openrouter\|models\|presets\|claude\|key\|status` | 재시작 없이 이 세션을 claude.ai 구독과 OpenRouter 사이에서 옮겨요 |
 
@@ -202,18 +223,17 @@ Sonnet, 오래 일한 워커를 이어 쓰는 대신 새로 띄우기, 브라우
 | `bin/route` | 그 훅. 저장소에 끝나지 않은 run이 있으면 알려 줘요 |
 | `bin/guard` | PreToolUse 훅: PM과 읽기 전용 크루는 run 폴더에만 쓸 수 있어요 |
 | `bin/read-warn` | PreToolUse 훅: 메인 세션이 200줄 넘는 파일을 통째로 읽으면 경고해요(서브에이전트는 제외, 막지 않아요). `docindex search`/`outline`(`bin/docindex`, .md/.txt/.html용 로컬 FTS5 문서 색인)과 `/wanjang:docs`도 알려줘요 |
-| `bin/deliverables` | PostToolUse 훅(`Agent`): 끝난 서브에이전트의 브리프(또는 프롬프트)에 `Deliverables: <경로>, <경로>` 줄이 있는데 파일이 없거나 비어 있으면 부모에게 바로 알려요(막지 않아요) |
+| `bin/deliverables` | 끝난 서브에이전트의 브리프(또는 프롬프트)에 `Deliverables: <경로>, <경로>` 줄이 있는데 파일이 없거나 비어 있으면, PostToolUse(`Agent`)는 부모에게 바로 알리고 SubagentStop은 워커를 한 번 돌려보내요 |
+| `bin/main-rules` | SessionStart 훅: `main-rules/*.md`를 메인 세션에만 넣어요 |
 | `bin/close` | SubagentStop 훅: run 기록이 열린 채로 보고하려 하면 PM을 한 번 돌려보내요 |
 | `bin/usage` | `/wanjang:optimize`의 토큰 보고서 |
 | `bin/provider`, `bin/openrouter-key`, `bin/provider-hook`, `bin/provider-fail` | `/wanjang:provider`, 키 도우미, 모델 없이 실행하는 훅, 결제 오류 때 되돌리는 훅 |
-| `skills/` | `/wanjang:wanjang`, `/wanjang:optimize`, `/wanjang:docs`, `/wanjang:provider` |
-| `test/` | `guard.sh`, `read-warn.sh`, `deliverables.sh`, `close.sh`, `usage.sh`, `provider.sh` |
+| `bin/docindex` | `/wanjang:docs`가 쓰는 로컬 문서 색인 |
+| `skills/` | `/wanjang:wanjang`, `/wanjang:optimize`, `/wanjang:docs`, `/wanjang:slim`, `/wanjang:provider` |
+| `test/` | `guard.sh`, `read-warn.sh`, `deliverables.sh`, `docindex.sh`, `main-rules.sh`, `route.sh`, `close.sh`, `usage.sh`, `provider.sh` |
 
 ```sh
-test/guard.sh   # guard: all cases pass
-test/close.sh   # close: all cases pass
-test/usage.sh   # usage: all cases pass
-test/provider.sh  # provider: all cases pass
+for t in test/*.sh; do "$t"; done   # 테스트마다 통과 요약을 출력해요
 ```
 
 `bash`, `jq`, `git`, `python3`가 필요해요.

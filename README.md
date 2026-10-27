@@ -23,6 +23,11 @@ English | [한국어](README.ko.md)
   Briefs, reports and logs live in files, not in anyone's context.
 - **Each task gets the model it needs.** Haiku for lookups and mechanical edits, Sonnet for ordinary building and
   checking, Opus for UI and the genuinely hard parts. A task that fails moves one tier up.
+- **Every turn stays light.** The main session is warned before it reads a big file whole (`bin/read-warn`); docs
+  are searched by section with `docindex` instead of read whole (in a test on real docs it found the section the
+  grep-and-read approach missed); main-only rules stay out of the workers (`/wanjang:slim` cut one setup's worker
+  instruction load from 14.3K to 8.3K characters); workers do not carry tools they never use; forks only for short
+  non-code jobs.
 - **Nothing ships unchecked.** QA uses the product like a user; the checker builds, tests and walks the spec,
   with a security review for auth, payments and permissions.
 - **A crash costs a step, not the run.** Workers commit as they go, the PM keeps a run log, and the next
@@ -69,10 +74,26 @@ flowchart LR
 2. **Brief.** Each worker gets a brief file: the playbooks to read, the contract, the decisions every worker must
    share, the files it owns, and what to return.
 3. **Build.** Workers run in parallel where they own different files, commit each step once its checks pass, and
-   return a one-line status with the path of their full report.
+   return a one-line status with the path of their full report. A brief carries a `Deliverables: <path>, <path>`
+   line; a worker that stops without those files is sent back once (`bin/deliverables`, SubagentStop), and for a
+   foreground agent the parent is warned too.
 4. **Verify.** QA tries what no test covers; the checker runs the build and tests and checks every requirement.
 5. **Fix.** Findings go back to the worker that owns the part, at most two rounds; then a stronger model takes over.
 6. **Report.** One summary to the main session, with the run folder's path for the details.
+
+### Finding things in documents
+
+`docindex` finds the section of a `.md`, `.txt` or `.html` file you need, so nobody reads the whole file:
+
+```sh
+docindex search "<query>" <dir>   # top sections as path:start-end  heading, with a snippet
+docindex outline <file>           # headings with line ranges and sizes
+docindex index <dir> | stats | purge [path]
+```
+
+It is a local SQLite FTS5 index (porter stemming, plus trigram so partial Korean words match). Search indexes on
+demand and re-indexes changed files; nothing leaves the machine. It ships in the plugin's `bin/`, so it is on PATH in
+Claude sessions. `/wanjang:docs <query> [dir]` runs it and answers from only the lines it finds.
 
 ### Research runs
 
@@ -104,6 +125,8 @@ field: know-how for a field comes from playbooks.
 |---|---|
 | `/wanjang:wanjang <work>` | Hand the work to the PM instead of doing it in this session |
 | `/wanjang:wanjang resume [run]` | Pick up a run that stopped (a crash, a lost connection, a restart) |
+| `/wanjang:docs <query> [dir]` | Find a section in .md/.txt/.html docs with `docindex` and answer from only those lines |
+| `/wanjang:slim` | Move rules only the main session needs out of what every subagent loads (see below) |
 | `/wanjang:optimize` | See where this session's tokens go and fix what applies, with agents still running |
 | `/wanjang:provider openrouter\|models\|presets\|claude\|key\|status` | Move this session between the claude.ai subscription and OpenRouter, no restart |
 
@@ -204,18 +227,17 @@ and leaving browser testing to QA.
 | `bin/route` | That hook; it also names unfinished runs in the repository |
 | `bin/guard` | PreToolUse hook: the PM and the read-only crew write only into run folders |
 | `bin/read-warn` | PreToolUse hook: warns the main session (never a subagent, never blocks) when it reads a whole file over 200 lines, and points to `docindex search`/`outline` (`bin/docindex`, a local FTS5 doc index for .md/.txt/.html) and `/wanjang:docs` |
-| `bin/deliverables` | PostToolUse hook on `Agent`: if a finished subagent's brief (or prompt) has a `Deliverables: <path>, <path>` line and a file is missing or empty, tells the parent at once (never blocks) |
+| `bin/deliverables` | If a finished subagent's brief (or prompt) has a `Deliverables: <path>, <path>` line and a file is missing or empty: PostToolUse on `Agent` tells the parent at once; SubagentStop sends the worker back once |
+| `bin/main-rules` | SessionStart hook: injects `main-rules/*.md` into the main session only |
 | `bin/close` | SubagentStop hook: sends the PM back once if it tries to report with its run log still open |
 | `bin/usage` | The token report behind `/wanjang:optimize` |
 | `bin/provider`, `bin/openrouter-key`, `bin/provider-hook`, `bin/provider-fail` | `/wanjang:provider`, its key helper, the hook that runs it with no model, and the one that switches back on a billing error |
-| `skills/` | `/wanjang:wanjang`, `/wanjang:optimize`, `/wanjang:docs` and `/wanjang:provider` |
-| `test/` | `guard.sh`, `read-warn.sh`, `deliverables.sh`, `close.sh`, `usage.sh` and `provider.sh` |
+| `bin/docindex` | The local doc index behind `/wanjang:docs` |
+| `skills/` | `/wanjang:wanjang`, `/wanjang:optimize`, `/wanjang:docs`, `/wanjang:slim` and `/wanjang:provider` |
+| `test/` | `guard.sh`, `read-warn.sh`, `deliverables.sh`, `docindex.sh`, `main-rules.sh`, `route.sh`, `close.sh`, `usage.sh` and `provider.sh` |
 
 ```sh
-test/guard.sh   # guard: all cases pass
-test/close.sh   # close: all cases pass
-test/usage.sh   # usage: all cases pass
-test/provider.sh  # provider: all cases pass
+for t in test/*.sh; do "$t"; done   # each prints its own pass summary
 ```
 
 Requires `bash`, `jq`, `git` and `python3`.
