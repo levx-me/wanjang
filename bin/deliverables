@@ -12,7 +12,7 @@ if [ "$event" = SubagentStop ]; then  # the worker itself: sent back once to fix
   tp=$(printf '%s' "$input" | jq -r '.agent_transcript_path // empty' 2>/dev/null)
   tp=${tp/#\~/$HOME}
   [ -f "$tp" ] || exit 0
-  prompt=$(jq -rs '[.[] | select(.type=="user")][0].message.content | if type=="array" then map(.text? // "") | join("\n") else . end // empty' "$tp" 2>/dev/null)
+  prompt=$(head -n 50 "$tp" | jq -rn 'first(inputs | select(.type=="user")) | .message.content | if type=="array" then map(.text? // "") | join("\n") else . end // empty' 2>/dev/null)  # the brief is near the top; never read a long transcript whole
 else  # the parent, after a foreground agent; background launches have produced nothing yet
   [ "$(printf '%s' "$input" | jq -r '.tool_response.status // "completed"' 2>/dev/null)" = completed ] || exit 0
   prompt=$(printf '%s' "$input" | jq -r '.tool_input.prompt // empty' 2>/dev/null)
