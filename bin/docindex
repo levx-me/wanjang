@@ -1,0 +1,385 @@
+#!/usr/bin/env python3
+"""docindex: find the relevant section of Markdown/text docs, then Read only that line range.
+
+Own implementation of the idea (heading-aware chunks, SQLite FTS5, BM25 with headings
+weighted 5x, porter stemming, trigram for substrings). Stdlib only; nothing leaves the machine.
+"""
+import argparse, html, json, os, re, sqlite3, sys
+
+EXTS = (".md", ".markdown", ".txt", ".html", ".htm")
+SKIP_DIRS = {".git", "node_modules"}
+MAX_BYTES = 5 * 1024 * 1024
+TXT_TARGET, MD_SPLIT_OVER, MD_TARGET = 1500, 4000, 3000
+HEAD_W = 5.0
+HAS_TRI = [False]
+DB_PATH = lambda: os.path.join(os.path.expanduser("~"), ".cache", "docindex", "index.db")
+
+HTML_HEAD_RE = re.compile(r"\x01([1-6])\x02(.*)")
+HEAD_RE = re.compile(r"^ {0,3}(#{1,6})\s+(.*?)\s*#*\s*$")
+FENCE_RE = re.compile(r"^ {0,3}(`{3,}|~{3,})")
+
+
+def err(*a):
+    print("docindex:", *a, file=sys.stderr)
+
+
+class NoFTS(Exception):
+    pass
+
+
+def connect():
+    p = DB_PATH()
+    os.makedirs(os.path.dirname(p), exist_ok=True)
+    db = sqlite3.connect(p, timeout=10)
+    try:
+        db.execute("CREATE VIRTUAL TABLE temp.probe USING fts5(a)")
+        db.execute("DROP TABLE temp.probe")
+    except sqlite3.OperationalError:
+        raise NoFTS("this Python's SQLite (%s) has no FTS5; use a Python built with FTS5 (e.g. Homebrew python3)" % sqlite3.sqlite_version)
+    db.executescript("""
+    CREATE TABLE IF NOT EXISTS files(path TEXT PRIMARY KEY, mtime_ns INTEGER, size INTEGER);
+    CREATE TABLE IF NOT EXISTS chunks(id INTEGER PRIMARY KEY, path TEXT, start INTEGER, end INTEGER, trail TEXT, bytes INTEGER);
+    CREATE INDEX IF NOT EXISTS chunks_path ON chunks(path);
+    CREATE VIRTUAL TABLE IF NOT EXISTS fts USING fts5(heading, body, tokenize='porter unicode61');
+    """)
+    try:  # trigram needs SQLite >= 3.34; without it only Korean partial words are lost
+        db.execute("CREATE VIRTUAL TABLE IF NOT EXISTS tri USING fts5(heading, body, tokenize='trigram')")
+        HAS_TRI[0] = True
+    except sqlite3.OperationalError:
+        HAS_TRI[0] = False
+        err("warning: SQLite has no trigram tokenizer; partial-word (Korean) matching disabled")
+    return db
+
+
+# ---------- chunking ----------
+
+def fence_states(lines):
+    """in_fence[i] is True when line i is inside (or is a delimiter of) a fenced code block."""
+    out, mark = [], None
+    for ln in lines:
+        m = FENCE_RE.match(ln)
+        if mark is None:
+            if m:
+                mark = (m.group(1)[0], len(m.group(1)))
+                out.append(True)
+            else:
+                out.append(False)
+        else:
+            out.append(True)
+            if m and m.group(1)[0] == mark[0] and len(m.group(1)) >= mark[1] and not ln.strip()[len(m.group(1)):].strip():
+                mark = None
+    return out
+
+
+def group(lines, infence, s, e, target):
+    """Split lines[s:e] at blank lines outside fences into ranges of ~target bytes. Yields (s, e) 0-based, e exclusive."""
+    start, size = s, 0
+    for i in range(s, e):
+        size += len(lines[i].encode("utf-8", "replace")) + 1
+        if size >= target and not lines[i].strip() and not infence[i]:
+            yield start, i + 1
+            start, size = i + 1, 0
+    if start < e:
+        yield start, e
+
+
+def nl_only(m):
+    return "\n" * m.group(0).count("\n")
+
+
+def html_to_lines(text):
+    """Drop script/style/comments/tags but keep every newline, so line numbers match the file.
+    Headings are tagged \\x01N\\x02 at their start."""
+    text = re.sub(r"(?is)<(script|style)\b.*?</\1\s*>|<!--.*?-->", nl_only, text)
+    text = re.sub(r"(?i)<h([1-6])\b[^>]*>", "\x01\\1\x02", text)
+    text = re.sub(r"(?s)<[^>]*>", nl_only, text)
+    return html.unescape(text).replace("\xa0", " ").split("\n")
+
+
+def chunk(text, kind):
+    """kind: md | txt | html. Return [(start_line, end_line, trail, body)] with 1-based inclusive line numbers."""
+    if kind == "html":
+        lines = html_to_lines(text)
+    else:
+        lines = text.split("\n")
+    if lines and lines[-1] == "":
+        lines.pop()
+    infence = [False] * len(lines) if kind == "html" else fence_states(lines)
+    sections = []  # (s, e, trail) 0-based, e exclusive
+    if kind != "txt":
+        stack, s, trail = [], 0, ""
+        for i, ln in enumerate(lines):
+            if kind == "html":
+                m = HTML_HEAD_RE.search(ln)
+                hl, ht = (int(m.group(1)), m.group(2)) if m else (0, "")
+            else:
+                m = None if infence[i] else HEAD_RE.match(ln)
+                hl, ht = (len(m.group(1)), m.group(2)) if m else (0, "")
+            if m:
+                if i > s:
+                    sections.append((s, i, trail))
+                lvl = hl
+                ht = re.sub(r"\s+", " ", ht.replace("\x01", "").replace("\x02", "")).strip()
+                stack = [h for h in stack if h[0] < lvl] + [(lvl, ht)]
+                trail = " > ".join(h[1] for h in stack)
+                s = i
+        sections.append((s, len(lines), trail))
+    else:
+        sections.append((0, len(lines), ""))
+    out = []
+    for s, e, trail in sections:
+        if kind == "txt" or (kind == "html" and not trail):
+            parts = group(lines, infence, s, e, TXT_TARGET)
+        elif sum(len(l) + 1 for l in lines[s:e]) > MD_SPLIT_OVER:
+            parts = group(lines, infence, s, e, MD_TARGET)
+        else:
+            parts = [(s, e)]
+        for a, b in parts:
+            while b > a and not lines[b - 1].strip():
+                b -= 1  # trailing blank lines are not part of the chunk
+            body = "\n".join(lines[a:b])
+            if kind == "html":
+                body = re.sub(r"\x01[1-6]\x02", "", body)
+            if body.strip():
+                out.append((a + 1, b, trail, body))
+    return out
+
+
+# ---------- indexing ----------
+
+def read_text(path):
+    with open(path, "rb") as f:
+        raw = f.read()
+    if b"\0" in raw[:8192]:
+        return None
+    return raw.decode("utf-8", "replace")
+
+
+def drop(db, path):
+    ids = [r[0] for r in db.execute("SELECT id FROM chunks WHERE path=?", (path,))]
+    for t in ("fts", "tri") if HAS_TRI[0] else ("fts",):
+        db.executemany("DELETE FROM %s WHERE rowid=?" % t, [(i,) for i in ids])
+    db.execute("DELETE FROM chunks WHERE path=?", (path,))
+    db.execute("DELETE FROM files WHERE path=?", (path,))
+
+
+def index_file(db, path, st):
+    text = read_text(path)
+    drop(db, path)
+    if text is not None:
+        ext = os.path.splitext(path)[1].lower()
+        kind = "txt" if ext == ".txt" else "html" if ext in (".html", ".htm") else "md"
+        title = os.path.basename(path)
+        for s, e, trail, body in chunk(text, kind):
+            cur = db.execute("INSERT INTO chunks(path,start,end,trail,bytes) VALUES(?,?,?,?,?)",
+                             (path, s, e, trail, len(body.encode("utf-8", "replace"))))
+            head = trail or title
+            for t in ("fts", "tri") if HAS_TRI[0] else ("fts",):
+                db.execute("INSERT INTO %s(rowid,heading,body) VALUES(?,?,?)" % t, (cur.lastrowid, head, body))
+    db.execute("INSERT INTO files VALUES(?,?,?)", (path, st.st_mtime_ns, st.st_size))
+
+
+def under(path, root):
+    return path == root or path.startswith(root.rstrip("/") + "/")
+
+
+def scan(root):
+    """Yield (abs_path, stat) for indexable files under root (a file or directory)."""
+    if os.path.isfile(root):
+        yield root, os.stat(root)
+        return
+    for d, dirs, files in os.walk(root):
+        dirs[:] = [x for x in dirs if x not in SKIP_DIRS]
+        for f in files:
+            if f.lower().endswith(EXTS):
+                p = os.path.join(d, f)
+                try:
+                    st = os.stat(p)
+                except OSError:
+                    continue
+                if st.st_size <= MAX_BYTES:
+                    yield p, st
+
+
+def refresh(db, roots):
+    """(Re)index changed files under roots, drop deleted ones. Returns (indexed, dropped)."""
+    n_new = n_del = 0
+    for root in roots:
+        seen = set()
+        known = {p: (m, s) for p, m, s in db.execute("SELECT path,mtime_ns,size FROM files")
+                 if under(p, root)}
+        for p, st in scan(root):
+            seen.add(p)
+            if known.get(p) != (st.st_mtime_ns, st.st_size):
+                try:
+                    index_file(db, p, st)
+                    n_new += 1
+                except OSError as e:
+                    err("skip %s: %s" % (p, e))
+        for p in set(known) - seen:
+            drop(db, p)
+            n_del += 1
+    db.commit()
+    return n_new, n_del
+
+
+# ---------- query ----------
+
+def words(q):
+    return re.findall(r"\w+", q, re.UNICODE)
+
+
+def quote(ws):
+    return " OR ".join('"%s"' % w.replace('"', '""') for w in ws)
+
+
+def search(db, q, roots, n):
+    ws = words(q)
+    if not ws:
+        return []
+    scope = " OR ".join(["c.path=? OR substr(c.path,1,?)=?"] * len(roots))
+    sp = []
+    for r in roots:
+        pre = r.rstrip("/") + "/"
+        sp += [r, len(pre), pre]
+    sql = ("SELECT c.id,c.path,c.start,c.end,c.trail,snippet(%(t)s,1,'[',']',' … ',32),bm25(%(t)s,%(w)s,1.0) "
+           "FROM %(t)s JOIN chunks c ON c.id=%(t)s.rowid WHERE %(t)s MATCH ? AND (" + scope + ") "
+           "ORDER BY 7 LIMIT ?")
+    runs = [("fts", quote(ws))]
+    tri = [w for w in ws if len(w) >= 3]
+    if HAS_TRI[0] and tri:
+        runs.append(("tri", quote(tri)))
+    scores, info = {}, {}
+    for t, mq in runs:
+        try:
+            rows = db.execute(sql % {"t": t, "w": HEAD_W}, [mq] + sp + [n * 3]).fetchall()
+        except sqlite3.OperationalError as e:
+            err("query skipped (%s): %s" % (t, e))
+            continue
+        for rank, r in enumerate(rows):  # reciprocal rank fusion of the two indexes
+            scores[r[0]] = scores.get(r[0], 0) + 1.0 / (60 + rank)
+            info.setdefault(r[0], r)
+    if not scores:  # 1-2 char words (e.g. Korean "수수") are too short for trigram: plain substring scan
+        short = [w for w in ws if len(w) < 3]
+        if short:
+            cond = " AND ".join(["instr(lower(f.body),lower(?))>0"] * len(short))
+            for r in db.execute("SELECT c.id,c.path,c.start,c.end,c.trail,substr(f.body,max(1,instr(lower(f.body),lower(?))-60),200),0 "
+                                "FROM fts f JOIN chunks c ON c.id=f.rowid WHERE " + cond + " AND (" + scope + ") LIMIT ?",
+                                [short[0]] + short + sp + [n]):
+                scores[r[0]], info[r[0]] = 1, r
+    top = sorted(scores, key=lambda i: -scores[i])[:n]
+    return [dict(path=info[i][1], start=info[i][2], end=info[i][3], trail=info[i][4],
+                 snippet=re.sub(r"\s+", " ", info[i][5]).strip()) for i in top]
+
+
+# ---------- commands ----------
+
+def abs_(p):
+    return os.path.realpath(os.path.expanduser(p))
+
+
+def out(args, data, text):
+    print(json.dumps(data, ensure_ascii=False) if args.json else text)
+
+
+def cmd_search(db, a):
+    roots = [abs_(p) for p in a.paths or ["."]]
+    for r in roots:
+        if not os.path.exists(r):
+            err("no such path: " + r)
+            return 2
+    ni, nd = refresh(db, roots)
+    if ni or nd:
+        err("indexed %d changed file(s), dropped %d" % (ni, nd))
+    res = search(db, a.query, roots, a.n)
+    if not res:
+        out(a, [], "")
+        err("no results")
+        return 1
+    out(a, res, "\n".join("%s:%d-%d  %s\n    %s" % (r["path"], r["start"], r["end"], r["trail"] or "(top)", r["snippet"]) for r in res))
+    return 0
+
+
+def cmd_outline(db, a):
+    p = abs_(a.file)
+    if not os.path.isfile(p):
+        err("not a file: " + p)
+        return 2
+    refresh(db, [p])
+    rows = db.execute("SELECT start,end,bytes,trail FROM chunks WHERE path=? ORDER BY start", (p,)).fetchall()
+    if not rows:
+        err("no chunks (binary, empty or unsupported file)")
+        return 1
+    out(a, [dict(start=s, end=e, bytes=b, trail=t) for s, e, b, t in rows],
+        p + "\n" + "\n".join("%5d-%-5d %7d B  %s" % (s, e, b, t or "(top)") for s, e, b, t in rows))
+    return 0
+
+
+def cmd_index(db, a):
+    ni, nd = refresh(db, [abs_(a.path)])
+    out(a, dict(indexed=ni, dropped=nd), "indexed %d changed file(s), dropped %d" % (ni, nd))
+    return 0
+
+
+def cmd_stats(db, a):
+    f, c, b = db.execute("SELECT (SELECT count(*) FROM files),(SELECT count(*) FROM chunks),(SELECT coalesce(sum(bytes),0) FROM chunks)").fetchone()
+    d = dict(db=DB_PATH(), files=f, chunks=c, bytes=b, sqlite=sqlite3.sqlite_version, trigram=HAS_TRI[0])
+    out(a, d, "\n".join("%s: %s" % kv for kv in d.items()))
+    return 0
+
+
+def cmd_purge(db, a):
+    root = abs_(a.path) if a.path else None
+    paths = [r[0] for r in db.execute("SELECT path FROM files") if root is None or under(r[0], root)]
+    for p in paths:
+        drop(db, p)
+    db.commit()
+    out(a, dict(purged=len(paths)), "purged %d file(s)" % len(paths))
+    return 0
+
+
+def main():
+    ap = argparse.ArgumentParser(
+        prog="docindex", formatter_class=argparse.RawDescriptionHelpFormatter,
+        description="Index Markdown/text docs and find the section you need, then Read only that line range.",
+        epilog="""examples:
+  docindex search "tick size rounding" docs/        top chunks as path:start-end  heading
+  docindex search "수수료 정산" ~/notes -n 5 --json   Korean works, partial words too
+  docindex outline docs/report.md                   headings with line ranges and sizes
+  docindex index docs/    |  docindex stats  |  docindex purge [PATH]
+
+exit codes: 0 ok, 1 no results, 2 bad args, 3 SQLite FTS5 unavailable
+db: ~/.cache/docindex/index.db (rows keyed by absolute path)""")
+    sub = ap.add_subparsers(dest="cmd", required=True)
+    p = sub.add_parser("search", help="search (re-indexes changed files first)")
+    p.add_argument("query")
+    p.add_argument("paths", nargs="*", metavar="PATH")
+    p.add_argument("-n", type=int, default=8, help="max results (default 8)")
+    p = sub.add_parser("outline", help="headings with line ranges and chunk sizes")
+    p.add_argument("file")
+    p = sub.add_parser("index", help="index PATH explicitly")
+    p.add_argument("path")
+    sub.add_parser("stats", help="index size")
+    p = sub.add_parser("purge", help="forget PATH (default: everything)")
+    p.add_argument("path", nargs="?")
+    for sp in sub.choices.values():
+        sp.add_argument("--json", action="store_true", help="JSON on stdout")
+    a = ap.parse_args()
+    if a.cmd == "search" and a.n < 1:
+        ap.error("-n must be >= 1")
+    try:
+        db = connect()
+    except NoFTS as e:
+        err(e)
+        return 3
+    except sqlite3.Error as e:
+        err("database error: %s" % e)
+        return 3
+    return globals()["cmd_" + a.cmd](db, a)
+
+
+if __name__ == "__main__":
+    try:
+        sys.exit(main())
+    except BrokenPipeError:
+        sys.exit(0)
