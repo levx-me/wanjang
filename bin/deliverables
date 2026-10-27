@@ -1,0 +1,33 @@
+#!/usr/bin/env bash
+# PostToolUse hook on Agent: when a finished subagent's brief lists `Deliverables: <path>, <path>`
+# and one is missing or empty, tell the parent at once (additionalContext; never blocks).
+# SubagentStop can only talk to the subagent, so the parent is reached here. Background launches
+# (status async_launched) are skipped: nothing has run yet.
+set -u
+input=$(cat)
+[ "$(printf '%s' "$input" | jq -r '.tool_response.status // "completed"' 2>/dev/null)" = completed ] || exit 0
+prompt=$(printf '%s' "$input" | jq -r '.tool_input.prompt // empty' 2>/dev/null)
+cwd=$(printf '%s' "$input" | jq -r '.cwd // empty' 2>/dev/null)
+[ -n "$prompt" ] || exit 0
+[ -n "$cwd" ] && cd "$cwd" 2>/dev/null
+line=$(printf '%s\n' "$prompt" | grep -m1 -E '^[[:space:]]*Deliverables:')
+if [ -z "$line" ]; then  # the prompt points at a brief file: look there
+  for f in $(printf '%s\n' "$prompt" | grep -oE '[^[:space:]`"(]+\.md' | head -n 5); do
+    f=${f/#\~/$HOME}
+    [ -f "$f" ] && line=$(grep -m1 -E '^[[:space:]]*Deliverables:' "$f") && [ -n "$line" ] && break
+  done
+fi
+[ -n "$line" ] || exit 0
+bad=
+IFS=',' read -ra items <<<"${line#*Deliverables:}"
+for p in "${items[@]}"; do
+  p=$(printf '%s' "$p" | sed -E 's/^[[:space:]`"]+//; s/[[:space:]`".]+$//')
+  [ -n "$p" ] || continue
+  p=${p/#\~/$HOME}
+  if [ -d "$p" ]; then [ -n "$(ls -A "$p" 2>/dev/null)" ] || bad="$bad $p (empty dir),"
+  elif [ -f "$p" ]; then [ -s "$p" ] || bad="$bad $p (empty),"
+  else bad="$bad $p (missing),"; fi
+done
+[ -n "$bad" ] || exit 0
+jq -n --arg m "Deliverables check: the subagent reported, but its brief promised files that are not there:${bad%,}. Look before spending a checker run." \
+  '{hookSpecificOutput: {hookEventName: "PostToolUse", additionalContext: $m}}'

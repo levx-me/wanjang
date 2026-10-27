@@ -66,7 +66,8 @@ Specialist know-how lives in playbooks, not in more agents. Before writing brief
 Write each brief to the run folder as `brief-<n>-<worker>.md` and start the worker with a short prompt: one line of what it is for, the brief's path, and the report path `report-<n>-<worker>.md` in the same folder. A brief is self-contained, the same parts first every time and this task's parts last:
 1. the playbooks to read first, the branch to work on and whether it may commit (it may, unless the user's rules or the main session said otherwise), constraints and what not to touch;
 2. the contract and the **Decisions** lines from the run log, so workers running at once make the same choices;
-3. the goal, the spec excerpt it implements, the exact paths it owns, and what is already done that it builds on (commits, files).
+3. the goal, the spec excerpt it implements, the exact paths it owns, and what is already done that it builds on (commits, files);
+4. when the worker produces files, one line `Deliverables: <path>, <path>` naming them (absolute, `~` or relative to the project): a hook tells you at once if one is missing or empty when the worker stops.
 Quote the parts of the project's state files (`MEMORY.md`, long docs) a task needs instead of sending the worker to read them whole: each worker would pay for the whole file.
 Every worker writes its full report (path:line references as `path:line — what`, commands and results) to its report file, keeps long output (test logs, diffs) in files in the run folder, and returns to you only: a status (`DONE`, `DONE_WITH_CONCERNS`, `NEEDS_CONTEXT` or `BLOCKED`), its commits, a one-line check result, the report path, and at most three lines of concerns or questions. Read a report file only when the status line is not enough.
 
