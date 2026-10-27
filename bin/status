@@ -1,0 +1,236 @@
+#!/usr/bin/env python3
+"""status [--session ID|PATH] [--cwd DIR] [--json]: a compact snapshot of what this Claude Code
+session's agents are doing now, read from transcripts on disk (only the last 200 KB of each).
+
+  agents  subagents written to in the last 2 hours, nested under their parent: type, task, age,
+          running or finished, last tool call, a tool call still waiting for its result, last text
+  stuck   running, silent for over 10 minutes and not waiting on a tool result
+  runs    Wanjang run folders touched in the last 2 hours: status line and last 5 log lines
+  tasks   the main session's open tasks, if on disk
+
+Session: --session, else $CLAUDE_CODE_SESSION_ID, else the newest transcript for the cwd.
+Exit codes: 0 snapshot printed, 2 bad arguments or no transcript."""
+import argparse, glob, json, os, subprocess, sys, time
+from datetime import datetime
+
+TAIL, WINDOW, STUCK = 200_000, 7200, 600
+ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
+ap.add_argument("--session", default=os.environ.get("CLAUDE_CODE_SESSION_ID", ""))
+ap.add_argument("--cwd", default=os.getcwd())
+ap.add_argument("--json", action="store_true")
+a = ap.parse_args()
+home = os.environ.get("CLAUDE_CONFIG_DIR") or os.path.expanduser("~/.claude")
+now = time.time()
+
+# --- find the session transcript
+how, main = "", ""
+if a.session and os.path.isfile(a.session):
+    main, how = a.session, "path given"
+elif a.session:
+    f = glob.glob(f"{home}/projects/*/{a.session}.jsonl")
+    if f:
+        main, how = max(f, key=os.path.getmtime), "session id"
+if not main and not a.session:
+    slug = a.cwd.replace("/", "-").replace(".", "-")
+    f = glob.glob(f"{home}/projects/{slug}/*.jsonl")
+    if f:
+        main, how = max(f, key=os.path.getmtime), "newest transcript for this cwd (no session id)"
+if not main:
+    print(f"status: no transcript for session {a.session or a.cwd}", file=sys.stderr)
+    sys.exit(2)
+sid = os.path.basename(main)[:-6]
+
+
+def ts(s):
+    try:
+        return datetime.fromisoformat(s.replace("Z", "+00:00")).timestamp()
+    except Exception:
+        return None
+
+
+def tail_rows(path):
+    with open(path, "rb") as f:
+        size = f.seek(0, 2)
+        f.seek(max(0, size - TAIL))
+        data = f.read()
+    lines = data.split(b"\n")
+    if size > TAIL:
+        lines = lines[1:]  # first line is cut
+    for l in lines:
+        try:
+            yield json.loads(l)
+        except ValueError:
+            pass
+
+
+def first_ts(path):
+    with open(path, "rb") as f:
+        for _ in range(5):
+            try:
+                t = ts(json.loads(f.readline(65536)).get("timestamp", ""))
+            except ValueError:
+                continue
+            if t:
+                return t
+    return None
+
+
+def short(s, n):
+    s = " ".join(str(s).split())
+    return s if len(s) <= n else s[: n - 1] + "…"
+
+
+def brief(inp):
+    for k in ("command", "file_path", "path", "pattern", "description", "url", "query", "prompt"):
+        if isinstance(inp, dict) and inp.get(k):
+            return short(inp[k], 70)
+    return ""
+
+
+def digest(path):
+    """last tool call, calls still waiting, last text, last record time, last record is a final reply"""
+    uses, done, last_tool, text, last, final = {}, set(), None, "", None, False
+    for r in tail_rows(path):
+        t = ts(r.get("timestamp", "")) if r.get("timestamp") else None
+        m = r.get("message")
+        if not isinstance(m, dict) or r.get("type") not in ("assistant", "user"):
+            continue
+        if t:
+            last = t
+        c = m.get("content")
+        if not isinstance(c, list):
+            continue
+        if r["type"] == "assistant":
+            final = True
+            for b in c:
+                if b.get("type") == "tool_use":
+                    final = False
+                    uses[b["id"]] = (b["name"], brief(b.get("input")), t)
+                    last_tool = b["id"]
+                elif b.get("type") == "text" and b.get("text", "").strip():
+                    text = b["text"].strip().splitlines()[-1]
+        else:
+            final = False
+            for b in c:
+                if b.get("type") == "tool_result":
+                    done.add(b.get("tool_use_id"))
+    waiting = [(n, d, t) for i, (n, d, t) in uses.items() if i not in done]
+    lt = uses.get(last_tool)
+    return dict(last_tool=lt, waiting=waiting, text=short(text, 120), last=last, final=final)
+
+
+# --- agents
+agents = []
+for mp in glob.glob(f"{os.path.splitext(main)[0]}/subagents/agent-*.meta.json"):
+    jp = mp[: -len(".meta.json")] + ".jsonl"
+    try:
+        mt = os.path.getmtime(jp)
+        if now - mt > WINDOW:
+            continue
+        meta = json.load(open(mp))
+        d = digest(jp)
+    except (OSError, ValueError):
+        continue
+    aid = os.path.basename(jp)[6:-6]
+    last = d["last"] or mt
+    running = not (meta.get("finished") or d["final"])
+    w = d["waiting"][0] if d["waiting"] and running else None
+    ag = dict(id=aid, type=meta.get("agentType", "?"), desc=meta.get("description", ""),
+              depth=meta.get("spawnDepth", 1), parent=meta.get("parentAgentId"),
+              started=first_ts(jp) or mt, last_write=mt, running=running,
+              last_tool=d["last_tool"] and f"{d['last_tool'][0]} {d['last_tool'][1]}".strip(),
+              waiting=w and dict(tool=w[0], what=w[1], secs=int(now - (w[2] or last))),
+              text=d["text"], stuck=False)
+    ag["stuck"] = running and not w and now - mt > STUCK
+    agents.append(ag)
+agents.sort(key=lambda g: g["started"])
+byid = {g["id"]: g for g in agents}
+for g in agents:  # no recorded parent: nearest earlier agent one level up
+    if not g["parent"] and g["depth"] > 1:
+        c = [p for p in agents if p["depth"] == g["depth"] - 1 and p["started"] <= g["started"]]
+        g["parent"] = c[-1]["id"] if c else None
+
+
+def order(pid=None):
+    for g in agents:
+        if (g["parent"] if g["parent"] in byid else None) == pid:
+            yield g
+            yield from order(g["id"])
+
+
+tree = list(order())
+
+# --- wanjang runs
+cwd = a.cwd
+for r in tail_rows(main):
+    if r.get("cwd"):
+        cwd = r["cwd"]
+dirs = [os.path.expanduser("~/.claude/wanjang/runs")]
+try:
+    g = subprocess.run(["git", "-C", cwd, "rev-parse", "--path-format=absolute", "--git-common-dir"],
+                       capture_output=True, text=True, timeout=5).stdout.strip()
+    if g:
+        dirs.append(g + "/wanjang")
+except Exception:
+    pass
+runs = []
+for d in dirs:
+    for lp in glob.glob(f"{d}/*/log.md"):
+        try:
+            mt = os.path.getmtime(lp)
+            if now - mt > WINDOW:
+                continue
+            with open(lp, errors="replace") as f:
+                first = f.readline().strip()
+            lines = [l for l in open(lp, errors="replace").read().splitlines()[-40:] if l.strip()][-5:]
+        except OSError:
+            continue
+        runs.append(dict(run=os.path.basename(os.path.dirname(lp)), status=first, updated=mt,
+                         tail=[short(l, 110) for l in lines]))
+runs.sort(key=lambda r: -r["updated"])
+
+# --- tasks
+tasks = []
+for tp in glob.glob(f"{home}/tasks/session-{sid[:8]}/*.json"):
+    try:
+        t = json.load(open(tp))
+        if t.get("status") != "completed":
+            tasks.append(dict(id=t.get("id"), status=t.get("status"), subject=short(t.get("subject", ""), 80)))
+    except (OSError, ValueError):
+        pass
+tasks.sort(key=lambda t: (str(t["id"]).zfill(6)))
+
+if a.json:
+    out = dict(session=sid, transcript=main, found_by=how, agents=tree, runs=runs, tasks=tasks)
+    print(json.dumps(out, indent=1))
+    sys.exit(0)
+
+
+def ago(t):
+    s = int(now - t)
+    return f"{s}s" if s < 90 else f"{s // 60}m" if s < 5400 else f"{s // 3600}h{s % 3600 // 60:02d}m"
+
+
+L = [f"session {sid[:8]} ({how})"]
+n_run = sum(g["running"] for g in tree)
+L.append(f"agents: {n_run} running, {len(tree) - n_run} finished in the last 2h")
+for g in tree:
+    ind = "  " * (1 + (g["depth"] - 1 if g["parent"] in byid else 0))
+    st = "RUNNING" if g["running"] else "done"
+    L.append(f"{ind}[{st}] {g['type']} - {short(g['desc'], 60)} (started {ago(g['started'])} ago, last write {ago(g['last_write'])} ago)")
+    if g["waiting"]:
+        w = g["waiting"]
+        L.append(f"{ind}    running `{short(w['what'] or w['tool'], 50)}` ({w['tool']}) for {ago(now - w['secs'])}")
+    elif g["last_tool"]:
+        L.append(f"{ind}    last tool: {short(g['last_tool'], 80)}")
+    if g["text"]:
+        L.append(f"{ind}    says: {g['text']}")
+    if g["stuck"]:
+        L.append(f"{ind}    MAY BE STUCK: silent {ago(g['last_write'])}, no tool call pending")
+for r in runs[:3]:
+    L.append(f"run {r['run']} (updated {ago(r['updated'])} ago): {r['status']}")
+    L += [f"    {l}" for l in r["tail"]]
+if tasks:
+    L.append(f"tasks open: {len(tasks)}")
+    L += [f"  #{t['id']} [{t['status']}] {t['subject']}" for t in tasks[:8]]
+print("\n".join(L[:60]))

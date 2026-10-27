@@ -5,7 +5,7 @@
 **A crew of Claude Code agents, run by one that never picks up a tool.**
 
 [![Claude Code plugin](https://img.shields.io/badge/Claude_Code-plugin-d97757)](https://code.claude.com/docs/en/plugins)
-[![version](https://img.shields.io/badge/version-0.6.18-blue)](.claude-plugin/plugin.json)
+[![version](https://img.shields.io/badge/version-0.6.19-blue)](.claude-plugin/plugin.json)
 [![license](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
 English | [한국어](README.ko.md)
@@ -126,6 +126,7 @@ field: know-how for a field comes from playbooks.
 | `/wanjang:wanjang <work>` | Hand the work to the PM instead of doing it in this session |
 | `/wanjang:wanjang resume [run]` | Pick up a run that stopped (a crash, a lost connection, a restart) |
 | `/wanjang:docs <query> [dir]` | Find a section in .md/.txt/.html docs with `docindex` and answer from only those lines |
+| `/wanjang:status` | What each running agent is doing now, for how long, what is done and what looks stuck (`bin/status`, read-only) |
 | `/wanjang:slim` | Move rules only the main session needs out of what every subagent loads (see below) |
 | `/wanjang:relay <session> <request>` · `status` | Hand work to the Claude session that owns another repo on this machine (Claude Code's ListAgents/SendMessage) and track its report |
 | `/wanjang:optimize` | See where this session's tokens go and fix what applies, with agents still running |
@@ -231,11 +232,12 @@ and leaving browser testing to QA.
 | `bin/deliverables` | If a finished subagent's brief (or prompt) has a `Deliverables: <path>, <path>` line and a file is missing or empty: PostToolUse on `Agent` tells the parent at once; SubagentStop sends the worker back once |
 | `bin/main-rules` | SessionStart hook: injects `main-rules/*.md` into the main session only |
 | `bin/close` | SubagentStop hook: sends the PM back once if it tries to report with its run log still open |
+| `bin/status` | The snapshot behind `/wanjang:status`: agents (nested, waiting tool call, stuck), run logs, open tasks |
 | `bin/usage` | The token report behind `/wanjang:optimize` |
 | `bin/provider`, `bin/openrouter-key`, `bin/provider-hook`, `bin/provider-fail` | `/wanjang:provider`, its key helper, the hook that runs it with no model, and the one that switches back on a billing error |
 | `bin/docindex` | The local doc index behind `/wanjang:docs` |
-| `skills/` | `/wanjang:wanjang`, `/wanjang:optimize`, `/wanjang:docs`, `/wanjang:slim`, `/wanjang:relay` and `/wanjang:provider` |
-| `test/` | `guard.sh`, `read-warn.sh`, `deliverables.sh`, `docindex.sh`, `main-rules.sh`, `route.sh`, `close.sh`, `usage.sh` and `provider.sh` |
+| `skills/` | `/wanjang:wanjang`, `/wanjang:optimize`, `/wanjang:status`, `/wanjang:docs`, `/wanjang:slim`, `/wanjang:relay` and `/wanjang:provider` |
+| `test/` | `guard.sh`, `read-warn.sh`, `deliverables.sh`, `docindex.sh`, `main-rules.sh`, `route.sh`, `close.sh`, `usage.sh`, `status.sh` and `provider.sh` |
 
 ```sh
 for t in test/*.sh; do "$t"; done   # each prints its own pass summary
