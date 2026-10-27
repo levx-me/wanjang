@@ -5,7 +5,7 @@
 **연장 한 번 안 드는 리더가 이끄는 Claude Code 에이전트 크루예요.**
 
 [![Claude Code plugin](https://img.shields.io/badge/Claude_Code-plugin-d97757)](https://code.claude.com/docs/en/plugins)
-[![version](https://img.shields.io/badge/version-0.6.8-blue)](.claude-plugin/plugin.json)
+[![version](https://img.shields.io/badge/version-0.6.9-blue)](.claude-plugin/plugin.json)
 [![license](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
 [English](README.md) | 한국어
@@ -193,11 +193,11 @@ Sonnet, 오래 일한 워커를 이어 쓰는 대신 새로 띄우기, 브라우
 | `ROUTING.md` | 세션 시작 훅이 모든 세션에 넣는 라우팅 규칙 |
 | `bin/route` | 그 훅. 저장소에 끝나지 않은 run이 있으면 알려 줘요 |
 | `bin/guard` | PreToolUse 훅: PM과 읽기 전용 크루는 run 폴더에만 쓸 수 있어요 |
-| `bin/read-warn` | PreToolUse 훅: 메인 세션이 200줄 넘는 파일을 통째로 읽으면 경고해요(서브에이전트는 제외, 막지 않아요) |
+| `bin/read-warn` | PreToolUse 훅: 메인 세션이 200줄 넘는 파일을 통째로 읽으면 경고해요(서브에이전트는 제외, 막지 않아요). `docindex search`/`outline`(`~/.claude/bin/docindex`, .md/.txt/.html용 로컬 FTS5 문서 색인)과 `/wanjang:docs`도 알려줘요 |
 | `bin/close` | SubagentStop 훅: run 기록이 열린 채로 보고하려 하면 PM을 한 번 돌려보내요 |
 | `bin/usage` | `/wanjang:optimize`의 토큰 보고서 |
 | `bin/provider`, `bin/openrouter-key`, `bin/provider-hook`, `bin/provider-fail` | `/wanjang:provider`, 키 도우미, 모델 없이 실행하는 훅, 결제 오류 때 되돌리는 훅 |
-| `skills/` | `/wanjang:wanjang`, `/wanjang:optimize`, `/wanjang:provider` |
+| `skills/` | `/wanjang:wanjang`, `/wanjang:optimize`, `/wanjang:docs`, `/wanjang:provider` |
 | `test/` | `guard.sh`, `read-warn.sh`, `close.sh`, `usage.sh`, `provider.sh` |
 
 ```sh

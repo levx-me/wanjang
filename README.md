@@ -5,7 +5,7 @@
 **A crew of Claude Code agents, run by one that never picks up a tool.**
 
 [![Claude Code plugin](https://img.shields.io/badge/Claude_Code-plugin-d97757)](https://code.claude.com/docs/en/plugins)
-[![version](https://img.shields.io/badge/version-0.6.8-blue)](.claude-plugin/plugin.json)
+[![version](https://img.shields.io/badge/version-0.6.9-blue)](.claude-plugin/plugin.json)
 [![license](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
 English | [한국어](README.ko.md)
@@ -195,11 +195,11 @@ and leaving browser testing to QA.
 | `ROUTING.md` | The routing rule a session-start hook adds to every session |
 | `bin/route` | That hook; it also names unfinished runs in the repository |
 | `bin/guard` | PreToolUse hook: the PM and the read-only crew write only into run folders |
-| `bin/read-warn` | PreToolUse hook: warns the main session (never a subagent, never blocks) when it reads a whole file over 200 lines |
+| `bin/read-warn` | PreToolUse hook: warns the main session (never a subagent, never blocks) when it reads a whole file over 200 lines, and points to `docindex search`/`outline` (`~/.claude/bin/docindex`, a local FTS5 doc index for .md/.txt/.html) and `/wanjang:docs` |
 | `bin/close` | SubagentStop hook: sends the PM back once if it tries to report with its run log still open |
 | `bin/usage` | The token report behind `/wanjang:optimize` |
 | `bin/provider`, `bin/openrouter-key`, `bin/provider-hook`, `bin/provider-fail` | `/wanjang:provider`, its key helper, the hook that runs it with no model, and the one that switches back on a billing error |
-| `skills/` | `/wanjang:wanjang`, `/wanjang:optimize` and `/wanjang:provider` |
+| `skills/` | `/wanjang:wanjang`, `/wanjang:optimize`, `/wanjang:docs` and `/wanjang:provider` |
 | `test/` | `guard.sh`, `read-warn.sh`, `close.sh`, `usage.sh` and `provider.sh` |
 
 ```sh
