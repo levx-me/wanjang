@@ -26,7 +26,7 @@ English | [한국어](README.ko.md)
 - **Every turn stays light.** The main session is warned before it reads a big file whole (`bin/read-warn`); docs
   are searched by section with `docindex` instead of read whole (in a test on real docs it found the section the
   grep-and-read approach missed); main-only rules stay out of the workers (`/wanjang:slim` cut one setup's worker
-  instruction load from 14.3K to 8.3K characters); workers do not carry tools they never use; forks only for short
+  instruction load from 14.3K to 8.3K characters); workers go without the Workflow tool they never use; forks only for short
   non-code jobs.
 - **Nothing ships unchecked.** QA uses the product like a user; the checker builds, tests and walks the spec,
   with a security review for auth, payments and permissions.
