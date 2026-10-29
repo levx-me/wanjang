@@ -5,7 +5,7 @@
 **A crew of Claude Code agents, run by one that never picks up a tool.**
 
 [![Claude Code plugin](https://img.shields.io/badge/Claude_Code-plugin-d97757)](https://code.claude.com/docs/en/plugins)
-[![version](https://img.shields.io/badge/version-0.6.20-blue)](.claude-plugin/plugin.json)
+[![version](https://img.shields.io/badge/version-0.6.21-blue)](.claude-plugin/plugin.json)
 [![license](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
 English | [한국어](README.ko.md)
@@ -62,7 +62,7 @@ flowchart LR
   W -->|vague request| P[planner]
   W -->|brief files| B[builder]
   W -->|brief files| D[designer]
-  B & D -->|status line + report file| W
+  B & D -->|status line + reply| W
   W --> Q[qa]
   W --> C[checker]
   Q & C -->|blockers| W
@@ -74,7 +74,7 @@ flowchart LR
 2. **Brief.** Each worker gets a brief file: the playbooks to read, the contract, the decisions every worker must
    share, the files it owns, and what to return.
 3. **Build.** Workers run in parallel where they own different files, commit each step once its checks pass, and
-   return a one-line status with the path of their full report. A brief carries a `Deliverables: <path>, <path>`
+   return their report as reply text (the PM saves it to the run folder when needed). A brief carries a `Deliverables: <path>, <path>`
    line; a worker that stops without those files is sent back once (`bin/deliverables`, SubagentStop), and for a
    foreground agent the parent is warned too.
 4. **Verify.** QA tries what no test covers; the checker runs the build and tests and checks every requirement.
@@ -182,7 +182,7 @@ Each run keeps everything in `.git/wanjang/<date>-<slug>/` (inside `.git`, so it
 |---|---|
 | `log.md` | `Status`, goal, contract, decisions, tasks and their status, files touched, next |
 | `brief-<n>-<worker>.md` | What the worker was asked to do |
-| `report-<n>-<worker>.md` | What it did: `path:line — what`, commands and results |
+| `return-<n>-<worker>.md` | A worker's returned report, saved by the PM: `path:line — what`, commands and results |
 | `review.diff`, logs | Long output, kept out of everyone's context |
 
 A new session in that repository resumes any run still in progress (touched in the last week) on its own, with a

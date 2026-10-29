@@ -21,4 +21,4 @@ You write the spec; you never build. Read the request, the code and docs that be
 
 Keep it as short as the work allows; a small change gets a short spec. Return the spec as your answer.
 
-When your brief names a report file, write the spec there and return only: a status (`DONE`, `DONE_WITH_CONCERNS`, `NEEDS_CONTEXT` or `BLOCKED`), the report path, the number of acceptance criteria, and the open questions (each in one line). Without a report file, return the spec directly.
+Return the spec as your final reply text, never as a file named like a report (Claude Code refuses subagent writes to REPORT*, SUMMARY*, FINDINGS* or ANALYSIS* `.md`): the spec, the number of acceptance criteria, and the open questions (each in one line). A spec file is a deliverable only when the brief lists it on its `Deliverables:` line.

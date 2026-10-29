@@ -17,7 +17,7 @@ You test the product from the outside, as its user. The checker reads the code a
 - Save a screenshot of each main screen or state you checked (into the run folder when your brief gives one, else a temp dir) and list the paths: the user sees the result through them.
 - Check what a user reads: error messages say what happened and what to do, nothing shows raw errors or stack traces, and the README's instructions work as written.
 
-When your brief names a report file, write your full report there (everything listed under Return, path:line references as `path:line — what`) and keep long output (test logs, diffs, screenshots) in files beside it; then return only: a status (`DONE`, `DONE_WITH_CONCERNS`, `NEEDS_CONTEXT` or `BLOCKED`), your commits, a one-line check result, the report path, and at most three lines of concerns or questions. Without a report file, return the same content directly, about 300 words at most.
+Return your report as your final reply text, never as a file: Claude Code refuses subagent writes to files named like REPORT*, SUMMARY*, FINDINGS* or ANALYSIS* `.md`. Shape: conclusion first, then `path:line — what` evidence, the commands you ran with their results, and a status (`DONE`, `DONE_WITH_CONCERNS`, `NEEDS_CONTEXT` or `BLOCKED`), at most the length the brief states (else about 300 words). Real deliverables (code, docs, notes, data) are files named on the brief's `Deliverables:` line; a report is never one. Long output (test logs, diffs, screenshots) goes to the project's scratch or logs path, not a file named like a report: cite its path in the reply.
 
 ## Report
 Return, in this order:

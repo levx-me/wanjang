@@ -2,7 +2,7 @@
 # PreToolUse hook (Bash, Write, Edit) for the Wanjang crew.
 # - The PM manages and never builds: it may write only into a run folder, and a Bash
 #   call of its that would change files is refused with a pointer to its builder.
-# - The read-only crew (planner, scout, checker, qa) write only their reports and scratch
+# - The read-only crew (planner, scout, checker, qa) write only scratch files and notes
 #   files: into a run folder or a temp directory, never into the project.
 # Writes into a temp directory (scratch notes, logs) stay allowed.
 # ponytail: pattern match on the command line, so a determined write can slip past;
@@ -27,7 +27,7 @@ case "$(printf '%s' "$input" | jq -r '.tool_name // empty')" in Write|Edit)
     *) if [ "$role" = wanjang ]; then
          deny "The PM writes only into its run folder (<git common dir>/wanjang/<run>/). Send this change to wanjang:builder or to the worker who owns that part."
        else
-         deny "You are read-only on the project: write your report into the run folder your brief names (or a temp dir for scratch files), never into the repository."
+         deny "You are read-only on the project: write notes into the run folder your brief names (or a temp dir for scratch files), and return your report as text, never into the repository."
        fi ;;
   esac
   exit 0 ;;

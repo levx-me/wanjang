@@ -5,7 +5,7 @@
 **연장 한 번 안 드는 리더가 이끄는 Claude Code 에이전트 크루예요.**
 
 [![Claude Code plugin](https://img.shields.io/badge/Claude_Code-plugin-d97757)](https://code.claude.com/docs/en/plugins)
-[![version](https://img.shields.io/badge/version-0.6.20-blue)](.claude-plugin/plugin.json)
+[![version](https://img.shields.io/badge/version-0.6.21-blue)](.claude-plugin/plugin.json)
 [![license](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
 [English](README.md) | 한국어
@@ -60,7 +60,7 @@ flowchart LR
   W -->|vague request| P[planner]
   W -->|brief files| B[builder]
   W -->|brief files| D[designer]
-  B & D -->|status line + report file| W
+  B & D -->|status line + reply| W
   W --> Q[qa]
   W --> C[checker]
   Q & C -->|blockers| W
@@ -179,7 +179,7 @@ run마다 모든 것을 `.git/wanjang/<date>-<slug>/`에 둬요(`.git` 안이라
 |---|---|
 | `log.md` | `Status`, 목표, 계약, 결정, 작업과 상태, 고친 파일, 다음 할 일 |
 | `brief-<n>-<worker>.md` | 워커에게 맡긴 일 |
-| `report-<n>-<worker>.md` | 워커가 한 일: `path:line — what`, 실행한 명령과 결과 |
+| `return-<n>-<worker>.md` | 워커가 돌려준 보고(PM이 저장):  `path:line — what`, 실행한 명령과 결과 |
 | `review.diff`, 로그 | 긴 출력. 누구의 컨텍스트에도 넣지 않아요 |
 
 그 저장소에서 새 세션을 열면 아직 진행 중인 run(최근 일주일 안에 건드린 것)을 한 줄 안내와 함께 알아서 이어
