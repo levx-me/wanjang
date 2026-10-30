@@ -228,7 +228,7 @@ and leaving browser testing to QA.
 | `ROUTING.md` | The routing rule a session-start hook adds to every session |
 | `bin/route` | That hook; it also names unfinished runs in the repository |
 | `bin/guard` | PreToolUse hook: the PM and the read-only crew write only into run folders |
-| `bin/read-warn` | PreToolUse hook: warns the main session (never a subagent, never blocks) when it reads a whole file over 200 lines, and points to `docindex search`/`outline` (`bin/docindex`, a local FTS5 doc index for .md/.txt/.html) and `/wanjang:docs` |
+| `bin/read-warn` | PreToolUse hook: warns (main session and subagents, never blocks) when `Read`, `cat`, `less` or a huge `sed` range takes a whole file over 200 lines, and points to `docindex search`/`outline` (`bin/docindex`, a local FTS5 doc index for .md/.txt/.html) and `/wanjang:docs` |
 | `bin/deliverables` | If a finished subagent's brief (or prompt) has a `Deliverables: <path>, <path>` line and a file is missing or empty: PostToolUse on `Agent` tells the parent at once; SubagentStop sends the worker back once |
 | `bin/main-rules` | SessionStart hook: injects `main-rules/*.md` into the main session only |
 | `bin/close` | SubagentStop hook: sends the PM back once if it tries to report with its run log still open |

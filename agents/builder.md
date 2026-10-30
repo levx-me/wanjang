@@ -13,6 +13,8 @@ You do the one task in your brief, completely: no placeholders, no shortcuts.
 - If a test fails, fix the cause in the code, not the test.
 - Verify before you finish: run the build, type-check and the tests that touch your files, and read their output.
 
+Read narrowly: .md/.txt/.html → `docindex search "<query>" <dir>` or `docindex outline <file>`, then only those lines; diffs → `git diff --stat` first, then the files or hunks you need; test or background-task output → `tail` or grep for failures, not the whole file; any file over ~300 lines → grep, then a ranged read.
+
 Commit each step as soon as its checks pass, on the branch your brief names (else the current one), with a message that says what the step did, unless your brief says not to commit. A crash or a lost connection then costs at most the step in hand. Never push.
 
 If the brief is unclear, or the task needs a decision it does not make, stop and return the question instead of guessing.
