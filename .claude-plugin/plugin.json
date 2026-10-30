@@ -1,6 +1,6 @@
 {
   "name": "wanjang",
-  "version": "0.6.21",
+  "version": "0.6.22",
   "description": "A PM and its crew for Claude Code: the PM plans and delegates, a planner, builder, designer, scout, QA tester and checker do the work, each on the model the task needs, with playbooks for specialist know-how",
   "author": { "name": "levx" },
   "license": "MIT"
