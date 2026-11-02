@@ -22,7 +22,7 @@ English | [한국어](README.ko.md)
 - **Your main session stays small.** Multi-step work goes to the PM; what comes back is one short summary.
   Briefs, reports and logs live in files, not in anyone's context.
 - **Each task gets the model it needs.** Haiku for lookups and mechanical edits, Sonnet for ordinary building and
-  checking, Opus for UI and the genuinely hard parts. A task that fails moves one tier up.
+  checking, Opus for UI and the genuinely hard parts; reasoning effort set the same way (low, medium, high). A task that fails moves one tier up.
 - **Every turn stays light.** The main session is warned before it reads a big file whole (`bin/read-warn`); docs
   are searched by section with `docindex` instead of read whole (in a test on real docs it found the section the
   grep-and-read approach missed); main-only rules stay out of the workers (`/wanjang:slim` cut one setup's worker
@@ -106,15 +106,15 @@ conclusion and recomputes every derived number, and the checker verifies the key
 
 ## The crew
 
-| Agent | Model | Edits the project | Does |
-|---|---|:-:|---|
-| `wanjang:pm` | Sonnet; Opus when something must be found out first | ✗ | Plans, briefs, routes fixes, keeps the run log, reports once |
-| `wanjang:planner` | Opus | ✗ | Turns a vague request into a spec: goal, flow, scope, testable criteria, open questions |
-| `wanjang:scout` | Haiku | ✗ | Finds files, reads logs, queries data, runs tests and sums them up; writes research notes |
-| `wanjang:builder` | Haiku / Sonnet / Opus, per task | ✓ | Server, data, tests, docs, fixes |
-| `wanjang:designer` | Opus | ✓ | Every user-facing screen, with its states and accessibility |
-| `wanjang:qa` | Sonnet | ✗ | Uses the running product and reports bugs with steps to reproduce |
-| `wanjang:checker` | Sonnet; Opus for a security review | ✗ | Builds, tests and checks every requirement against the spec; checks research sources |
+| Agent | Model | Effort | Edits the project | Does |
+|---|---|---|:-:|---|
+| `wanjang:pm` | Sonnet; Opus when something must be found out first | medium | ✗ | Plans, briefs, routes fixes, keeps the run log, reports once |
+| `wanjang:planner` | Opus | high | ✗ | Turns a vague request into a spec: goal, flow, scope, testable criteria, open questions |
+| `wanjang:scout` | Haiku | low | ✗ | Finds files, reads logs, queries data, runs tests and sums them up; writes research notes |
+| `wanjang:builder` | Haiku / Sonnet / Opus, per task | medium, per task | ✓ | Server, data, tests, docs, fixes |
+| `wanjang:designer` | Opus | high | ✓ | Every user-facing screen, with its states and accessibility |
+| `wanjang:qa` | Sonnet | medium | ✗ | Uses the running product and reports bugs with steps to reproduce |
+| `wanjang:checker` | Sonnet; Opus for a security review | high | ✗ | Builds, tests and checks every requirement against the spec; checks research sources |
 
 The read-only crew write only into the run folder (reports, notes, long output). Roles are split by permission and cost, not by
 field: know-how for a field comes from playbooks.
