@@ -18,7 +18,7 @@
 
 ### 제품·마케팅 run
 
-PM은 제품·마케팅 일도 맡아요. 고객 발견, 포지셔닝, 카피, 랜딩 페이지, 출시 계획, 가격, SEO 기초예요.
+PM은 제품·마케팅 일도 맡아요. 고객 조사, 포지셔닝, 카피, 랜딩 페이지, 출시 계획, 가격, SEO 기초예요.
 프로젝트마다 `docs/product-context.md` 하나(대상 고객, 대안, 차별점, 고객의 말, 말투)를 두고, 이런 일은 모두 이
 파일을 먼저 읽어요. `positioning` playbook이 이 파일을 만들고, 모르는 것은 가정으로 표시해서 사용자에게
 남겨요. scout는 공개 웹에서 고객과 경쟁사를 조사하고, planner는 계획을 세우고, builder는 카피를 쓰고,
@@ -215,7 +215,7 @@ run마다 모든 것을 `.git/wanjang/<date>-<slug>/`에 둬요(`.git` 안이라
 - [postgres-migration](postgres-migration.md) — changing a live Postgres schema without downtime: lock levels, CONCURRENTLY, NOT VALID + VALIDATE
 ```
 
-들어 있는 24개를 플러그인의 `playbooks/INDEX.md`와 같은 묶음으로 보면 이래요.
+이 playbook들을 플러그인의 `playbooks/INDEX.md`와 같은 묶음으로 보면 이래요.
 
 | 묶음 | playbook |
 |---|---|

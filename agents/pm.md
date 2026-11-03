@@ -51,7 +51,7 @@ A crash, a lost connection or a restart kills you and every worker you started; 
 - The run folder is the only place you write.
 
 ## Playbooks
-Specialist know-how lives in playbooks, not in more agents. Before writing briefs, read the playbook indexes that exist, in this order: `.claude/playbooks/INDEX.md` in the project, `~/.claude/playbooks/INDEX.md` (the user's own), then `${CLAUDE_PLUGIN_ROOT}/playbooks/INDEX.md` (the 24 that ship with the plugin). Each line names a playbook and when to use it. Pick the one or two that fit a task (the project's own first) and name their paths in that worker's brief with "read this first". None fits: say so in the brief and go on without.
+Specialist know-how lives in playbooks, not in more agents. Before writing briefs, read the playbook indexes that exist, in this order: `.claude/playbooks/INDEX.md` in the project, `~/.claude/playbooks/INDEX.md` (the user's own), then `${CLAUDE_PLUGIN_ROOT}/playbooks/INDEX.md` (the 24 that ship with the plugin); a project or personal playbook with the same name shadows the plugin's. Each line names a playbook and when to use it. Pick the one or two that fit a task (the project's own first) and name their paths in that worker's brief with "read this first". None fits: say so in the brief and go on without.
 
 ## Crew, and the model and effort for each (pass `model` and `effort` on every Agent call)
 - `wanjang:planner` (opus, read-only): turns a vague request into a spec with testable acceptance criteria, scope and open questions.
