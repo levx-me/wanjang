@@ -26,10 +26,10 @@ The repository is MIT. Exceptions and sources are below.
 | security-review | Trail of Bits skills (CC-BY-SA-4.0, paraphrased); OWASP Cheat Sheet Series and ASVS (CC-BY-SA, paraphrased); awesome-copilot security-and-owasp (MIT); agency-agents security-ai-generated-code-auditor (MIT, paraphrased). File is CC BY-SA 4.0 |
 | solidity-foundry | agency-agents engineering-solidity-smart-contract-engineer (MIT, paraphrased); Foundry Book |
 | test-writing | mattpocock/skills tdd (MIT); anthropics/skills webapp-testing (Apache-2.0); Playwright docs (link only); Google Testing Blog (link only) |
-| product-discovery | see file header |
-| positioning | see file header |
-| marketing-copy | see file header |
-| page-cro | see file header |
-| launch-plan | see file header |
-| pricing-packaging | see file header |
-| seo-basics | see file header |
+| product-discovery | wondelai/skills mom-test, jobs-to-be-done (MIT); phuryn/pm-skills opportunity-solution-tree, interview-script, summarize-interview (MIT); anthropics/knowledge-work-plugins synthesize-research (Apache-2.0); deanpeters/Product-Manager-Skills voice-of-customer-miner (CC BY-NC-SA 4.0, method only, no text reused) |
+| positioning | coreyhaines31/marketingskills product-marketing, customer-research (MIT); anthropics/knowledge-work-plugins marketing competitive-brief (Apache-2.0); brand-voice guideline-generation (MIT, Tribe AI); deanpeters/Product-Manager-Skills positioning-statement (CC BY-NC-SA 4.0, method only) |
+| marketing-copy | coreyhaines31/marketingskills copywriting, copy-editing (MIT); anthropics/knowledge-work-plugins marketing content-creation, brand-review (Apache-2.0); brand-voice enforcement (MIT, Tribe AI) |
+| page-cro | coreyhaines31/marketingskills cro, signup (MIT); wondelai/skills conversion-optimization, cro-methodology (MIT) |
+| launch-plan | coreyhaines31/marketingskills launch, emails (MIT); anthropics/knowledge-work-plugins marketing campaign-plan, email-sequence (Apache-2.0) |
+| pricing-packaging | coreyhaines31/marketingskills pricing (MIT); wondelai/skills monetizing-innovation (MIT); phuryn/pm-skills pricing-strategy, monetization-strategy (MIT) |
+| seo-basics | coreyhaines31/marketingskills seo-audit, ai-seo (MIT); structure only from anthropics/knowledge-work-plugins marketing seo-audit (Apache-2.0, not used otherwise) |
