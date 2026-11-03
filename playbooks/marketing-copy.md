@@ -9,7 +9,6 @@
 - **Builder** writes the copy. Use **opus** for copy that ships; sonnet is fine for internal drafts. Follows "Drafting protocol". Writes to the path the brief names.
 - **Checker** (fresh context, never the builder) scores the draft with the seven sweeps and the legal flags below and returns a list of findings with location and severity.
 - **QA reader test**: a separate agent reads the copy as the target customer described in `docs/product-context.md`, knowing nothing else. It reports, in the reader's words: what the page seems to offer, what confused it, what it did not believe, what it would do next. No rewriting.
-- Nothing is sent, published, posted or paid for by the crew (see "Only the user can do").
 
 ## Required inputs
 Read `docs/product-context.md` first. If it is missing, the builder does not research the web to fill it: stop and report, or write a minimal stub labelled Assumption and say so at the top of the return. A copy task needs all six. The PM supplies inputs 2-5 in the brief; if any is absent the builder lists it as a gap in its return and proceeds on a labelled Assumption, never silently:
@@ -22,24 +21,24 @@ Read `docs/product-context.md` first. If it is missing, the builder does not res
 
 Unknown numbers, customers and quotes are Assumptions. Write `[NEED: ...]` where proof is missing. Never invent a statistic, testimonial or customer.
 
-## Diagnose the job
-- **Blank or generic brief**: build the argument from the context file. Freedom on angle, none on facts.
-- **A draft with a real voice**: keep its argument and vocabulary; fix buried leads, vague lines and AI tells.
-- **A point edit** ("fix this headline"): change only that, plus the minimum around it, return changed lines with a one-line reason. Skip the sweeps.
-State the diagnosis in one line before writing.
+## Scope of the job
+Before writing, name the starting point in one line and let it limit your edits:
+- Nothing usable yet: build the argument from the context file; angles are yours to choose, facts are not.
+- An existing draft with its own voice: keep its argument and words; repair only buried leads, vague lines and AI tells.
+- A single line to fix: touch that line and the least around it, return it with a one-line reason, skip the sweeps.
 
 ## Drafting protocol
 A **key line** is a headline, subhead, CTA, or any proof line or claim. The builder self-checks against the gate and the sweeps below; that is not the review, which belongs to the checker.
 1. **Decompose the message** into units: headline, subhead, CTA, each section head and body, proof lines.
 2. **Lock the claim before wording.** Write one plain sentence per unit: who it is for, what they get, why believe it (proof label). If the sentence cannot be filled, the unit is a gap, not a writing problem.
-3. For each unit draft two or three candidates, keep the best, fix its worst flaw, lock it. Lines already working in an existing draft start locked.
+3. Per unit, write a few candidates, pick one, repair its weakest point, then freeze it. Lines already working in an existing draft start locked.
 4. Assemble, read once top to bottom for flow, one idea per section.
 5. Ration emphasis: one or two punchy moments per page; most lines plain and declarative.
 6. Leave-it-alone test: revert any change you cannot give a reason for.
 
 ### The three-question gate (every key line)
 1. Can the reader picture it (a scene, object, number)?
-2. Could it be proven false? "Cuts weekly reporting from 4 hours to 15 minutes" can; "best-in-class" cannot.
+2. Could it be proven false? "Invoices reach clients within 2 minutes of approval" can; "best-in-class" cannot.
 3. Swap test: replace your product name with a competitor's. Does the line still read true? Then it fails.
 Three yes: keep. Two: sharpen the weak one. Fewer: rewrite from the facts or mark `[NEED: ...]`.
 
@@ -53,7 +52,7 @@ Run in order, then loop back once through the earlier ones. If the context file 
 6. **Emotion**: the pain or the wanted outcome is felt in the reader's own words from the context file, honestly, never manufactured fear or fake scarcity.
 7. **Zero risk and friction**: near the CTA the likely hesitations are answered (price, effort, "what if it fails", what happens next); one clear next step; no hidden cost.
 
-## AI tells (checker fails the line; the fix is rewriting from the facts, not swapping synonyms)
+## AI tells (fix by rewriting from the facts, not swapping synonyms)
 - Contrast reveals: "not X, but Y" built only for drama.
 - Lists of negations ("no setup, no forms, no waiting"); allow at most one real absence per page, near the CTA ("No card required"), never two stacked.
 - A finished claim followed by trailing clauses that restate it.
@@ -62,8 +61,7 @@ Run in order, then loop back once through the earlier ones. If the context file 
 - Em dashes in headlines, subjects, ads, posts.
 - Filler adjectives (seamless, robust, powerful, innovative) with no fact behind them.
 - More than one fragment or one list of three per section; every sentence the same length.
-- Exclamation marks; tidy wise-sounding closing lines.
-Read it aloud; a human ear catches the rhythm.
+- Exclamation marks; tidy closing aphorisms.
 
 ## Legal and claim flags (checker marks; the user or counsel decides)
 Mark each as a finding with severity High/Medium/Low and the evidence needed to keep it:
@@ -74,7 +72,7 @@ Mark each as a finding with severity High/Medium/Low and the evidence needed to 
 - Health, finance, security and privacy claims: may need disclaimers or regulatory review; flag all of them.
 - Guarantees and free offers: terms must be stated and honoured.
 - Text or images that look copied from another source.
-A declined claim is reported with the closest supportable alternative and the evidence that would unlock the original.
+A declined claim is reported with the nearest supportable wording and the evidence that would restore the original.
 
 ## Channel templates (brief; limits are guides, check the platform)
 - **Landing hero**: headline (the outcome for the reader, under about 10 words), subhead (how or for whom, one or two sentences), one CTA naming what they get ("Get my report", not "Submit"), proof line beside it. Match the headline to the traffic source.
@@ -83,7 +81,7 @@ A declined claim is reported with the closest supportable alternative and the ev
 - **Post**: first line is the hook (a fact, scene or number the reader cares about); a few short points; one ask. Tone follows the platform without leaving the brand voice.
 
 ## Email sequence
-One job per email (e.g. welcome, first value, objection, proof, ask), one CTA each. Cadence is an input from the PM (days between sends, total length); if absent, propose one as an Assumption. Needs sender name and reply address from the user. The unsubscribe link, postal address and footer are the user's to supply and are never invented. Output: a table of email number, send day, job, subject, preview text, body, CTA, proof label; plus the gaps list.
+One job per email (e.g. welcome, first value, objection, proof, ask), one CTA each. Cadence is an input from the PM (days between sends, total length); if absent, propose one as an Assumption. Needs sender name and reply address from the user. The unsubscribe link, postal address and footer are the user's to supply and are never invented. Output: a table of email number, send day, job, subject, preview text, body, CTA, proof label.
 
 ## Output format
 Page copy by unit, then a short annotation per key line (the claim it carries, its proof label), 2-3 alternatives for headline and CTA with the trade-off, and a gaps list (`[NEED: ...]`, Assumptions). For a point edit return only the changed lines with a reason.
