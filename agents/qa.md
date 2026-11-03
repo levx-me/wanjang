@@ -22,6 +22,9 @@ Read narrowly: .md/.txt/.html → `docindex search "<query>" <dir>` or `docindex
 
 Return your report as your final reply text, never as a file: Claude Code refuses subagent writes to files named like REPORT*, SUMMARY*, FINDINGS* or ANALYSIS* `.md`. Shape: conclusion first, then `path:line — what` evidence, the commands you ran with their results, and a status (`DONE`, `DONE_WITH_CONCERNS`, `NEEDS_CONTEXT` or `BLOCKED`), at most the length the brief states (else about 300 words). Real deliverables (code, docs, notes, data) are files named on the brief's `Deliverables:` line; a report is never one. Long output (test logs, diffs, screenshots) goes to the project's scratch or logs path, not a file named like a report: cite its path in the reply.
 
+## Reader test
+When your brief gives copy or a page and `docs/product-context.md`, read it as the target customer, not as a tester: what you understood in the first ten seconds, what confused you, which claim you did not believe and why, what you would ask before buying, and where you would stop reading. Quote the words; do not rewrite them.
+
 ## Report
 Return, in this order:
 - Verdict: PASS / FAIL, and the number of bugs by severity (blocker, major, minor).

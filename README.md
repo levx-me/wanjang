@@ -17,6 +17,16 @@ English | [한국어](README.ko.md)
 > man". Here the armband goes to the PM. It plans, hands out work, checks it and reports. It never builds
 > anything itself; a hook makes sure of that.
 
+### Product and marketing runs
+
+The PM also takes product and marketing work: discovery, positioning, copy, landing pages, launch plans, pricing, SEO
+basics. Each project keeps one `docs/product-context.md` (audience, alternatives, differentiation, customer language,
+voice) that every such task reads first; the `positioning` playbook creates it and leaves what it cannot know as
+labelled assumptions for you. Scouts research customers and competitors on the public web, the planner plans, a
+builder writes the copy, the designer builds the page, the checker verifies claims against the playbook's rubric,
+and QA does a reader test as the target customer. Sending, publishing, posting, ad spend, interviews and live
+prices are never done by the crew: they come back as steps for you.
+
 ## Why
 
 - **Your main session stays small.** Multi-step work goes to the PM; what comes back is one short summary.
@@ -118,7 +128,7 @@ conclusion and recomputes every derived number, and the checker verifies the key
 | `wanjang:pm` | Sonnet; Opus when something must be found out first | medium | ✗ | Plans, briefs, routes fixes, keeps the run log, reports once |
 | `wanjang:planner` | Opus | high; xhigh as advisor | ✗ | Turns a vague request into a spec: goal, flow, scope, testable criteria, open questions; rules on a blocked run's questions as its advisor |
 | `wanjang:scout` | Haiku | low | ✗ | Finds files, reads logs, queries data, runs tests and sums them up; writes research notes |
-| `wanjang:builder` | Haiku / Sonnet / Opus, per task | medium, per task | ✓ | Server, data, tests, docs, fixes |
+| `wanjang:builder` | Haiku / Sonnet / Opus, per task | medium, per task | ✓ | Server, data, tests, docs, fixes, copy |
 | `wanjang:designer` | Opus | high | ✓ | Every user-facing screen, with its states and accessibility |
 | `wanjang:qa` | Sonnet | medium | ✗ | Uses the running product and reports bugs with steps to reproduce |
 | `wanjang:checker` | Sonnet; Opus for a security review | high | ✗ | Builds, tests and checks every requirement against the spec; checks research sources |
@@ -202,11 +212,36 @@ Specialist know-how lives in Markdown playbooks, not in more agents. The PM read
 work and names the one or two that fit in a worker's brief; nothing is loaded until it is picked.
 
 1. `.claude/playbooks/INDEX.md` in the project (read first)
-2. `~/.claude/playbooks/INDEX.md` for every project
+2. `~/.claude/playbooks/INDEX.md` for every project (yours to add to; a playbook of the same name shadows the plugin's)
+3. `playbooks/INDEX.md` in the plugin: the 24 that ship with wanjang
 
 ```markdown
 - [postgres-migration](postgres-migration.md) — changing a live Postgres schema without downtime: lock levels, CONCURRENTLY, NOT VALID + VALIDATE
 ```
+
+The 24 shipped playbooks, grouped as in the plugin's `playbooks/INDEX.md`:
+
+| Group | Playbooks |
+|---|---|
+| Data | postgres-migration, postgres-schema-query |
+| Backend and delivery | api-design, deploy-config, cli-design, rust-cli |
+| Smart contracts | solidity-foundry, contract-audit |
+| Frontend | optimistic-ui, accessibility, nextjs-react-performance |
+| Quality | debugging, test-writing, code-review, security-review, readme |
+| Tooling | claude-code-plugin |
+| Product and marketing | product-discovery, positioning, marketing-copy, page-cro, launch-plan, pricing-packaging, seo-basics |
+
+The product and marketing playbooks are short procedures in our own words; none copies its sources. Each ends with a
+"Go deeper" line naming an upstream plugin. Nothing is installed for you: when a run would gain from one, the PM lists
+the install under "Only you can do", the main session asks you, and on yes installs only that plugin
+(`claude plugin marketplace add <repo>`, then `claude plugin install <plugin>@<marketplace>`). Upstream sources:
+[coreyhaines31/marketingskills](https://github.com/coreyhaines31/marketingskills),
+[anthropics/knowledge-work-plugins](https://github.com/anthropics/knowledge-work-plugins),
+[wondelai/skills](https://github.com/wondelai/skills), [phuryn/pm-skills](https://github.com/phuryn/pm-skills) and
+[deanpeters/product-manager-skills](https://github.com/deanpeters/product-manager-skills).
+
+Licences: the repository is MIT; `cli-design` and `security-review` are CC BY-SA 4.0. Every playbook's sources and
+licence are in [playbooks/NOTICE.md](playbooks/NOTICE.md).
 
 ## Benchmarks
 
@@ -244,7 +279,7 @@ and leaving browser testing to QA.
 | `bin/provider`, `bin/openrouter-key`, `bin/provider-hook`, `bin/provider-fail` | `/wanjang:provider`, its key helper, the hook that runs it with no model, and the one that switches back on a billing error |
 | `bin/docindex` | The local doc index behind `/wanjang:docs` |
 | `skills/` | `/wanjang:wanjang`, `/wanjang:optimize`, `/wanjang:now`, `/wanjang:docs`, `/wanjang:slim`, `/wanjang:relay` and `/wanjang:provider` |
-| `test/` | `guard.sh`, `read-warn.sh`, `deliverables.sh`, `docindex.sh`, `main-rules.sh`, `route.sh`, `close.sh`, `usage.sh`, `status.sh` and `provider.sh` |
+| `test/` | `guard.sh`, `read-warn.sh`, `deliverables.sh`, `docindex.sh`, `main-rules.sh`, `route.sh`, `close.sh`, `usage.sh`, `status.sh`, `provider.sh` and `playbooks.sh` |
 
 ```sh
 for t in test/*.sh; do "$t"; done   # each prints its own pass summary
@@ -254,4 +289,4 @@ Requires `bash`, `jq`, `git` and `python3`.
 
 ## License
 
-[MIT](LICENSE)
+[MIT](LICENSE); two playbooks are CC BY-SA 4.0, see [playbooks/NOTICE.md](playbooks/NOTICE.md).

@@ -16,6 +16,16 @@
 > 하죠. *완장 차더니 사람이 달라졌다.* 여기서는 PM이 완장을 차요. PM은 계획하고, 일을 나눠 주고, 확인하고,
 > 보고해요. 직접 만드는 일은 절대 하지 않아요. 훅이 그걸 막아요.
 
+### 제품·마케팅 run
+
+PM은 제품·마케팅 일도 맡아요. 고객 발견, 포지셔닝, 카피, 랜딩 페이지, 출시 계획, 가격, SEO 기초예요.
+프로젝트마다 `docs/product-context.md` 하나(대상 고객, 대안, 차별점, 고객의 말, 말투)를 두고, 이런 일은 모두 이
+파일을 먼저 읽어요. `positioning` playbook이 이 파일을 만들고, 모르는 것은 가정으로 표시해서 사용자에게
+남겨요. scout는 공개 웹에서 고객과 경쟁사를 조사하고, planner는 계획을 세우고, builder는 카피를 쓰고,
+designer는 페이지를 만들어요. checker는 주장을 playbook 기준표로 확인하고, QA는 대상 고객이 되어 읽어 보는
+독자 테스트를 해요. 발송, 게시, 광고비 집행, 인터뷰, 실제 가격 변경은 크루가 절대 하지 않고 사용자가 할 일로
+돌려줘요.
+
 ## 왜 쓰나요
 
 - **메인 세션이 가벼워요.** 여러 단계가 필요한 일은 PM에게 가고, 돌아오는 건 짧은 요약 하나예요.
@@ -115,7 +125,7 @@ Claude 세션에서는 PATH에 있어요. `/wanjang:docs <query> [dir]`가 이�
 | `wanjang:pm` | Sonnet. 먼저 알아내야 할 게 있으면 Opus | medium | ✗ | 계획, 브리프, 수정 배분, run 기록, 한 번에 보고 |
 | `wanjang:planner` | Opus | high, 자문일 때 xhigh | ✗ | 모호한 요청을 spec으로 만들어요: 목표, 흐름, 범위, 테스트할 수 있는 기준, 열린 질문. 막힌 run에서는 자문으로 판단해요 |
 | `wanjang:scout` | Haiku | low | ✗ | 파일 찾기, 로그 읽기, 데이터 조회, 테스트 실행과 요약. 리서치 노트 작성 |
-| `wanjang:builder` | 일에 따라 Haiku / Sonnet / Opus | medium, 일에 따라 | ✓ | 서버, 데이터, 테스트, 문서, 수정 |
+| `wanjang:builder` | 일에 따라 Haiku / Sonnet / Opus | medium, 일에 따라 | ✓ | 서버, 데이터, 테스트, 문서, 수정, 카피 |
 | `wanjang:designer` | Opus | high | ✓ | 사용자가 보는 모든 화면과 그 상태, 접근성 |
 | `wanjang:qa` | Sonnet | medium | ✗ | 실행 중인 제품을 써 보고 재현 순서와 함께 버그를 알려요 |
 | `wanjang:checker` | Sonnet. 보안 검토는 Opus | high | ✗ | 빌드하고 테스트하고 spec의 요구사항을 하나씩 확인해요. 리서치 출처도 확인해요 |
@@ -198,11 +208,36 @@ run마다 모든 것을 `.git/wanjang/<date>-<slug>/`에 둬요(`.git` 안이라
 한두 개를 워커 브리프에 적어요. 고르기 전에는 아무것도 불러오지 않아요.
 
 1. 프로젝트의 `.claude/playbooks/INDEX.md` (먼저 읽어요)
-2. 모든 프로젝트에 쓰는 `~/.claude/playbooks/INDEX.md`
+2. 모든 프로젝트에 쓰는 `~/.claude/playbooks/INDEX.md` (직접 추가하는 곳이에요. 이름이 같으면 플러그인 것보다 먼저 쓰여요)
+3. 플러그인의 `playbooks/INDEX.md`: wanjang에 들어 있는 24개
 
 ```markdown
 - [postgres-migration](postgres-migration.md) — changing a live Postgres schema without downtime: lock levels, CONCURRENTLY, NOT VALID + VALIDATE
 ```
+
+들어 있는 24개를 플러그인의 `playbooks/INDEX.md`와 같은 묶음으로 보면 이래요.
+
+| 묶음 | playbook |
+|---|---|
+| 데이터 | postgres-migration, postgres-schema-query |
+| 백엔드와 배포 | api-design, deploy-config, cli-design, rust-cli |
+| 스마트 컨트랙트 | solidity-foundry, contract-audit |
+| 프론트엔드 | optimistic-ui, accessibility, nextjs-react-performance |
+| 품질 | debugging, test-writing, code-review, security-review, readme |
+| 도구 | claude-code-plugin |
+| 제품·마케팅 | product-discovery, positioning, marketing-copy, page-cro, launch-plan, pricing-packaging, seo-basics |
+
+제품·마케팅 playbook은 우리 말로 쓴 짧은 절차이고, 출처의 글을 옮겨 오지 않았어요. 각 playbook 끝의
+"Go deeper" 줄이 쓸 만한 외부 플러그인을 알려 줘요. 대신 설치해 주지는 않아요. run이 외부 플러그인으로 더 좋아질
+것 같으면 PM이 "사용자만 할 수 있는 일"에 설치 명령을 적고, 메인 세션이 물어본 뒤 "예"면 그 플러그인만
+설치해요(`claude plugin marketplace add <repo>`, 이어서 `claude plugin install <plugin>@<marketplace>`).
+출처는 [coreyhaines31/marketingskills](https://github.com/coreyhaines31/marketingskills),
+[anthropics/knowledge-work-plugins](https://github.com/anthropics/knowledge-work-plugins),
+[wondelai/skills](https://github.com/wondelai/skills), [phuryn/pm-skills](https://github.com/phuryn/pm-skills),
+[deanpeters/product-manager-skills](https://github.com/deanpeters/product-manager-skills)예요.
+
+라이선스: 저장소는 MIT이고 `cli-design`과 `security-review`는 CC BY-SA 4.0이에요. 모든 playbook의 출처와
+라이선스는 [playbooks/NOTICE.md](playbooks/NOTICE.md)에 있어요.
 
 ## 벤치마크
 
@@ -239,7 +274,7 @@ Sonnet, 오래 일한 워커를 이어 쓰는 대신 새로 띄우기, 브라우
 | `bin/provider`, `bin/openrouter-key`, `bin/provider-hook`, `bin/provider-fail` | `/wanjang:provider`, 키 도우미, 모델 없이 실행하는 훅, 결제 오류 때 되돌리는 훅 |
 | `bin/docindex` | `/wanjang:docs`가 쓰는 로컬 문서 색인 |
 | `skills/` | `/wanjang:wanjang`, `/wanjang:optimize`, `/wanjang:now`, `/wanjang:docs`, `/wanjang:slim`, `/wanjang:relay`, `/wanjang:provider` |
-| `test/` | `guard.sh`, `read-warn.sh`, `deliverables.sh`, `docindex.sh`, `main-rules.sh`, `route.sh`, `close.sh`, `usage.sh`, `status.sh`, `provider.sh` |
+| `test/` | `guard.sh`, `read-warn.sh`, `deliverables.sh`, `docindex.sh`, `main-rules.sh`, `route.sh`, `close.sh`, `usage.sh`, `status.sh`, `provider.sh`, `playbooks.sh` |
 
 ```sh
 for t in test/*.sh; do "$t"; done   # 테스트마다 통과 요약을 출력해요
@@ -249,4 +284,4 @@ for t in test/*.sh; do "$t"; done   # 테스트마다 통과 요약을 출력해
 
 ## 라이선스
 
-[MIT](LICENSE)
+[MIT](LICENSE). 두 playbook은 CC BY-SA 4.0이에요([playbooks/NOTICE.md](playbooks/NOTICE.md)).
