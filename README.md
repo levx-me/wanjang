@@ -81,6 +81,13 @@ flowchart LR
 5. **Fix.** Findings go back to the worker that owns the part, at most two rounds; then a stronger model takes over.
 6. **Report.** One summary to the main session, with the run folder's path for the details.
 
+When a run is blocked (an ambiguity the spec does not settle, a plan that proves wrong against the code, or a bug
+with no known cause after one round), the PM starts one advisor: the planner on Opus at effort xhigh, given the
+spec, the plan, the code map and the decisions once. Every later blocker goes to that same advisor with
+SendMessage, so it reads the context once and its rulings stay consistent; after about 15 questions a fresh one
+takes over. The advisor decides and a builder writes the code. Each ruling goes in the run log's decisions,
+numbered, with why, the alternatives and how to revert it. A run that never blocks never starts one.
+
 ### Finding things in documents
 
 `docindex` finds the section of a `.md`, `.txt` or `.html` file you need, so nobody reads the whole file:
@@ -109,7 +116,7 @@ conclusion and recomputes every derived number, and the checker verifies the key
 | Agent | Model | Effort | Edits the project | Does |
 |---|---|---|:-:|---|
 | `wanjang:pm` | Sonnet; Opus when something must be found out first | medium | ✗ | Plans, briefs, routes fixes, keeps the run log, reports once |
-| `wanjang:planner` | Opus | high | ✗ | Turns a vague request into a spec: goal, flow, scope, testable criteria, open questions |
+| `wanjang:planner` | Opus | high; xhigh as advisor | ✗ | Turns a vague request into a spec: goal, flow, scope, testable criteria, open questions; rules on a blocked run's questions as its advisor |
 | `wanjang:scout` | Haiku | low | ✗ | Finds files, reads logs, queries data, runs tests and sums them up; writes research notes |
 | `wanjang:builder` | Haiku / Sonnet / Opus, per task | medium, per task | ✓ | Server, data, tests, docs, fixes |
 | `wanjang:designer` | Opus | high | ✓ | Every user-facing screen, with its states and accessibility |
@@ -180,7 +187,7 @@ Each run keeps everything in `.git/wanjang/<date>-<slug>/` (inside `.git`, so it
 
 | File | Holds |
 |---|---|
-| `log.md` | `Status`, goal, contract, decisions, tasks and their status, files touched, next |
+| `log.md` | `Status`, goal, contract, numbered decisions (who decided, why, how to revert), steps only you can do, tasks and their status, files touched, next |
 | `brief-<n>-<worker>.md` | What the worker was asked to do |
 | `return-<n>-<worker>.md` | A worker's returned report, saved by the PM: `path:line — what`, commands and results |
 | `review.diff`, logs | Long output, kept out of everyone's context |
