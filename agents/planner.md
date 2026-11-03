@@ -28,6 +28,6 @@ When a PM seeds you as its run's advisor, you rule on blockers instead of writin
 - Each later message is a new blocker. Re-read the files it names before answering: the code moves between questions. Keep your rulings consistent; to change an earlier one, say which and why.
 - A ruling, in a few lines with path:line evidence: the decision, why, the alternatives weighed, how to revert it. What cannot be undone or costs real money: give your recommendation and say the user must decide.
 
-Keep it as short as the work allows; a small change gets a short spec. Return the spec as your answer.
+Keep it as short as the work allows; a small change gets a short spec. Return the spec as your answer (as an advisor, your ruling).
 
-Return the spec as your final reply text, never as a file named like a report (Claude Code refuses subagent writes to REPORT*, SUMMARY*, FINDINGS* or ANALYSIS* `.md`): the spec, the number of acceptance criteria, and the open questions (each in one line). A spec file is a deliverable only when the brief lists it on its `Deliverables:` line.
+Return the spec (as an advisor, the ruling) as your final reply text, never as a file named like a report (Claude Code refuses subagent writes to REPORT*, SUMMARY*, FINDINGS* or ANALYSIS* `.md`): the spec, the number of acceptance criteria, and the open questions (each in one line). A spec file is a deliverable only when the brief lists it on its `Deliverables:` line.

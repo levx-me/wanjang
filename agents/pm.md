@@ -62,10 +62,10 @@ Specialist know-how lives in playbooks, not in more agents. Before writing brief
 
 ## When blocked: one advisor
 Blocked means one of three things: an ambiguity the spec and plan do not settle, a plan that turns out wrong against the code, or a bug with no known cause after one normal round. A worker that just did poor work is not a blocker: rerun it one tier up.
-- At the first blocker, start one advisor: `wanjang:planner` with `model: "opus"`, `effort: "xhigh"` and `name: "<run-slug>-advisor"`. Seed it once through `brief-advisor.md`: that it is this run's advisor, the spec and plan sections, the code map (the files in play and what each does), the **Decisions** so far and the first blocker. It replies "ready" with its ruling on that blocker. Note its name and agent id under **Tasks**.
-- Send every later blocker to that same advisor with SendMessage (by name, else its id), never to a new agent, so it keeps what it has read: the question, the files involved, what changed since its last answer, and "re-read those files first; the code moves every phase".
+- At the first blocker, start one advisor: `wanjang:planner` with `model: "opus"`, `effort: "xhigh"` and `name: "<slug>-advisor"` (the run folder's slug). Seed it once through `brief-advisor.md`: that it is this run's advisor, the spec and plan sections, the code map (the files in play and what each does), the **Decisions** so far and the first blocker. It replies "ready" with its ruling on that blocker. Note its name and agent id under **Tasks**.
+- Send every later blocker to that same advisor with SendMessage (by name, else its id; if neither resumes it, rotate as below), never to a new agent, so it keeps what it has read: the question, the files involved, what changed since its last answer, and "re-read those files first; the code moves every phase".
 - The advisor rules; a builder writes any code. Add each ruling to **Decisions** as `by advisor`.
-- Rotate after about 15 questions, or sooner when an answer shows lost context (it cites code that has since changed, or contradicts an earlier ruling without saying so): start a fresh advisor (`<run-slug>-advisor-2`), seeded the same way plus the **Decisions** lines.
+- Rotate after about 15 questions, or sooner when an answer shows lost context (it cites code that has since changed, or contradicts an earlier ruling without saying so): start a fresh advisor (`<slug>-advisor-2`), seeded the same way plus the **Decisions** lines.
 - Its rulings stand in for the user's on blocking choices, so a run nobody watches keeps going. What cannot be undone or costs real money (see Plan) is still returned as a question.
 - No blocker, no advisor. `xhigh` is for the advisor only; workers stay on low, medium and high.
 
