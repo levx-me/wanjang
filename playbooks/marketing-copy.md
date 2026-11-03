@@ -12,7 +12,7 @@
 - Nothing is sent, published, posted or paid for by the crew (see "Only the user can do").
 
 ## Required inputs
-Read `docs/product-context.md` first. If it is missing, the first step is to create it (`positioning.md`) or list the gaps to the user. A copy task needs all six; any one missing is listed as a gap, never guessed:
+Read `docs/product-context.md` first. If it is missing, the builder does not research the web to fill it: stop and report, or write a minimal stub labelled Assumption and say so at the top of the return. A copy task needs all six. The PM supplies inputs 2-5 in the brief; if any is absent the builder lists it as a gap in its return and proceeds on a labelled Assumption, never silently:
 1. product-context file (audience, differentiation, objections, customer language, voice)
 2. goal (what the business wants from this piece)
 3. channel (page, email, ad, post) and its limits
@@ -29,6 +29,7 @@ Unknown numbers, customers and quotes are Assumptions. Write `[NEED: ...]` where
 State the diagnosis in one line before writing.
 
 ## Drafting protocol
+A **key line** is a headline, subhead, CTA, or any proof line or claim. The builder self-checks against the gate and the sweeps below; that is not the review, which belongs to the checker.
 1. **Decompose the message** into units: headline, subhead, CTA, each section head and body, proof lines.
 2. **Lock the claim before wording.** Write one plain sentence per unit: who it is for, what they get, why believe it (proof label). If the sentence cannot be filled, the unit is a gap, not a writing problem.
 3. For each unit draft two or three candidates, keep the best, fix its worst flaw, lock it. Lines already working in an existing draft start locked.
@@ -43,7 +44,7 @@ State the diagnosis in one line before writing.
 Three yes: keep. Two: sharpen the weak one. Fewer: rewrite from the facts or mark `[NEED: ...]`.
 
 ## Seven review sweeps (the checker's rubric)
-Run in order, then loop back once through the earlier ones. Each is a checkable item; report the failing line, not a score.
+Run in order, then loop back once through the earlier ones. If the context file says "none yet" for voice or customer language, sweeps 2 and 6 are not checkable: report them as a gap, do not pass them. Each is a checkable item; report the failing line, not a score.
 1. **Clarity**: a stranger can say what is offered in one sentence; no insider jargon; one idea per section; no sentence over about 25 words without reason.
 2. **Voice**: matches the voice section of the context file (we are / we are not, formality, terms to use and avoid); no drift from casual to corporate; "we" never alternates with "the company".
 3. **So what**: every feature line ends in a consequence for the reader ("which means...").
@@ -54,7 +55,7 @@ Run in order, then loop back once through the earlier ones. Each is a checkable 
 
 ## AI tells (checker fails the line; the fix is rewriting from the facts, not swapping synonyms)
 - Contrast reveals: "not X, but Y" built only for drama.
-- Lists of negations ("no setup, no forms, no waiting"); one real absence near the CTA is fine.
+- Lists of negations ("no setup, no forms, no waiting"); allow at most one real absence per page, near the CTA ("No card required"), never two stacked.
 - A finished claim followed by trailing clauses that restate it.
 - A question the copy answers itself, or a colon that unveils a punchline.
 - Stock openers and closers ("in today's fast-paced world", "whether you are X or Y", "take it to the next level", "unlock").
@@ -81,15 +82,21 @@ A declined claim is reported with the closest supportable alternative and the ev
 - **Ad**: one promise, one proof or specific, one CTA; respect each platform's character limits and ad policies; claims pass the legal flags.
 - **Post**: first line is the hook (a fact, scene or number the reader cares about); a few short points; one ask. Tone follows the platform without leaving the brand voice.
 
+## Email sequence
+One job per email (e.g. welcome, first value, objection, proof, ask), one CTA each. Cadence is an input from the PM (days between sends, total length); if absent, propose one as an Assumption. Needs sender name and reply address from the user. The unsubscribe link, postal address and footer are the user's to supply and are never invented. Output: a table of email number, send day, job, subject, preview text, body, CTA, proof label; plus the gaps list.
+
 ## Output format
 Page copy by unit, then a short annotation per key line (the claim it carries, its proof label), 2-3 alternatives for headline and CTA with the trade-off, and a gaps list (`[NEED: ...]`, Assumptions). For a point edit return only the changed lines with a reason.
 
 ## Quality bar
+Builder owns:
 - Context file read; the six inputs recorded or listed as gaps.
 - Every key line passes the three-question gate.
-- Checker ran all seven sweeps with line-level findings; no open High finding.
 - Zero AI-tell hits; zero invented facts; every claim labelled F/I/A.
-- Legal flags listed, even if empty.
+- No `[NEED]` placeholder in shippable copy: a hero with no proof available ships without a proof line, or the piece is reported unshippable with the gap named. `[NEED]` is for drafts only.
+
+Caller (PM) owns, by running the checker and QA:
+- Checker ran all seven sweeps with line-level findings; no open High finding; legal flags listed, even if empty.
 - QA reader test report attached; any "I did not understand" or "I did not believe" item is fixed or accepted by the user.
 
 ## Only the user can do

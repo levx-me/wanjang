@@ -5,8 +5,8 @@
 **Use when:** building, reviewing or fixing a page whose job is one action (home, landing, pricing, signup, product). Words are written with `marketing-copy.md`; read it for the copy itself. For who the page is for and what it promises, `positioning.md` comes first and `docs/product-context.md` is read before anything here.
 
 ## Crew procedure
-- **Designer** builds or revises the page to the factors below, in impact order. Layout, hierarchy, mobile, load.
-- **Builder** (opus when the copy ships) writes the copy via `marketing-copy.md`.
+- **Designer** builds or revises the page to the factors below, in impact order. Owns layout, hierarchy, mobile, load. Inputs besides the context file: brand (colours, type, logo), any existing layout, and the tech stack.
+- **Builder** (opus when the copy ships) owns the headline and all copy, written via `marketing-copy.md`; the designer places it and does not rewrite it.
 - **Checker** (fresh context) reviews the finished page against "Factor checklist" and "Page types", returns findings in the output format.
 - **QA reader test**: an agent opens the page cold as the target customer from the context file and reports, in the reader's words: what it thinks the page offers after five seconds, where it hesitated, what it did not believe, what it would click. Run at desktop and phone widths when a browser is available.
 - Inputs recorded first: page type, the one action, traffic source, current numbers if any (conversion rate, drop-off), what was already tried. Missing numbers are Assumptions.
