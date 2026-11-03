@@ -29,8 +29,8 @@ People hire a product to make progress in a situation; demographics do not predi
 2. **Sweep** review sites, app stores, Reddit and practitioner forums, community boards, issue trackers and public support threads, comparison and "alternative to X" threads. Use plain web search and fetch; keep date and URL for each item.
 3. **Bias per source** (write it next to the source): review sites skew angry or incentivized; app stores skew to update anger; vendor communities skew loyal; Reddit skews vocal and technical; "alternative to" threads skew to people already leaving.
 4. **Capture verbatims**: short, exact, with URL and date. Quote marks mean copied text. Paraphrase goes without quote marks and is an Inference.
-5. **Theme by need, not feature**: "export is broken" becomes "cannot get my data where my team works". Name each theme in 4-8 words, solution-free.
-6. **Honest frequency** per theme: *recurring* (several independent sources/threads), *concentrated* (one thread or one author), or *isolated but vivid*. Give counts and the window. One articulate ranter is not a theme.
+5. **Group by underlying need**: a pile of "search is slow" and "results are wrong" complaints becomes "I cannot find the thing I know I saved". Name each group in 4-8 words with no solution in it.
+6. **Report spread, not just count**: for each group give how many separate sources and authors, and over what dates. Label it *broad* (many unrelated sources), *clustered* (one thread, one community or one author) or *single*. A single loud post never makes a group; flag it as a lead.
 7. **Switching triggers**: what pushed people off a product, what pulled them to another (feeds the four forces).
 
 Thin public footprint (new or niche market): say so and lean on interviews. Close with 3 opportunity hypotheses (as problems) and 3 assumptions to test. Public voice is a hypothesis source, never a verdict.
@@ -83,7 +83,6 @@ Avoid: "Would you use...", "Do you think...", "How much would you pay for...", a
 - Each quote appears at its source (spot-check three by fetching the URL); none is paraphrased inside quote marks.
 - Job statement names no product; has functional, emotional, social sides and all four forces, or says which are unknown.
 - Each VoC source has a stated bias; each theme states frequency as recurring, concentrated or isolated, with counts.
-- Themes are needs, not feature names.
 - Tree has one outcome, 3-7 opportunities, scores shown with their basis, 3+ solutions per focus opportunity, 1-2 experiments each with a threshold.
 - Conflicts section exists (or says none found, and why that is plausible).
 - Interview scripts contain no leading question, pitch or hypothetical; each has an ask.
