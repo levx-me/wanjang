@@ -82,7 +82,7 @@ Avoid: "Would you use...", "Do you think...", "How much would you pay for...", a
 - Every claim is labelled Fact/Inference/Assumption; every Fact has a URL, transcript reference or dated number.
 - Each quote appears at its source (spot-check three by fetching the URL); none is paraphrased inside quote marks.
 - Job statement names no product; has functional, emotional, social sides and all four forces, or says which are unknown.
-- Each VoC source has a stated bias; each theme states frequency as recurring, concentrated or isolated, with counts.
+- Each VoC source has a stated bias; each group states spread (broad, clustered, single) with counts, and is named as a need.
 - Tree has one outcome, 3-7 opportunities, scores shown with their basis, 3+ solutions per focus opportunity, 1-2 experiments each with a threshold.
 - Conflicts section exists (or says none found, and why that is plausible).
 - Interview scripts contain no leading question, pitch or hypothetical; each has an ask.
