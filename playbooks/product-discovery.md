@@ -23,7 +23,6 @@ People hire a product to make progress in a situation; demographics do not predi
 - Cover three sides, each with evidence or marked Assumption: **functional** (what must get done), **emotional** (how they want to feel), **social** (how they want to be seen).
 - Map the **four forces** of a switch: **push** (what is wrong now), **pull** (what the new thing promises), **anxiety** (fear it will not work, cost of learning), **habit** (comfort with the current way). Change happens when push + pull beat anxiety + habit. Most products only add pull; look hardest at anxiety and habit.
 - List the real alternatives for the job, including workarounds (spreadsheet, a person, a shrug). Not using anything is often the main rival.
-- Separate the **first hire** (sign-up, purchase) from the **repeat hire** (using it again next week). A product bought and never used failed the second.
 
 ## Voice-of-customer mining (scouts, public web only)
 1. **Search plan first** (3 lines in the note): whose voice, which sources, how you separate what people said from your reading of it.
@@ -33,8 +32,8 @@ People hire a product to make progress in a situation; demographics do not predi
 5. **Theme by need, not feature**: "export is broken" becomes "cannot get my data where my team works". Name each theme in 4-8 words, solution-free.
 6. **Honest frequency** per theme: *recurring* (several independent sources/threads), *concentrated* (one thread or one author), or *isolated but vivid*. Give counts and the window. One articulate ranter is not a theme.
 7. **Switching triggers**: what pushed people off a product, what pulled them to another (feeds the four forces).
-8. Thin footprint (new or niche market)? Say so, stop mining, and lean on interviews.
-Public voice is a hypothesis generator with a known skew. Close with 3 opportunity hypotheses phrased as problems, and 3 assumptions to test in real interviews.
+
+Thin public footprint (new or niche market): say so and lean on interviews. Close with 3 opportunity hypotheses (as problems) and 3 assumptions to test. Public voice is a hypothesis source, never a verdict.
 
 ## Interviews: the agent writes, a human runs
 The agent never talks to customers. It drafts the script, then scores what comes back.
@@ -58,7 +57,6 @@ Avoid: "Would you use...", "Do you think...", "How much would you pay for...", a
 
 **Rubric for transcripts the user pastes (score out of 7, 1 point each)**: talked about their life; concrete past facts; a commitment obtained; they spoke most of the time; something learned that could change the plan; beliefs updated; facts separable from opinions. For each failed row quote the line and give the better question. Then summarize: date, role, current solution, what they like, problems (job, outcome wanted, importance, satisfaction), surprises, action items. Facts and interpretation in separate columns. Tag every quote with participant type, not name.
 
-**Stop** when new interviews repeat what you have heard. Roughly 5-8 per segment, but the signal decides, not the number.
 
 ## Opportunity tree (lean)
 - **Outcome**: one measurable result for this discovery (from the decision in step 1).
@@ -69,15 +67,13 @@ Avoid: "Would you use...", "Do you think...", "How much would you pay for...", a
 
 ## Synthesize and triangulate
 - Code every observation (behaviour vs stated attitude; context; intensity cues like emotion, frequency, workaround effort). Group into themes; keep outliers visible.
-- Weigh behaviour above stated preference. A quote is evidence; the finding is your reading of it.
 - **Triangulate**: a finding stands on 2+ independent sources or methods (VoC, interviews, analytics, competitor facts, the user's own data). One source = hypothesis, label it Low confidence.
 - **Conflicts**: list every place sources disagree (e.g. reviews say price, interviews say trust), check whether they measure different people or moments, and report both. Never silently pick one.
-- Aim for 5-8 findings, each: statement, evidence with URLs, frequency, impact, confidence (High/Medium/Low).
 
 ## Output: `docs/discovery/<date>-<topic>.md`
 1. Decision this informs; sources used and dates; sample sizes.
 2. Job statement(s) with three sides and four forces; alternatives.
-3. Findings (above), then conflicts, then opportunity tree with scores.
+3. 5-8 findings (statement, evidence with URLs, frequency, impact, confidence), behaviour weighed above stated preference, then conflicts, then opportunity tree with scores.
 4. Assumptions list for the user, each with a test.
 5. **Decision and acceptance hints**: the recommended opportunity, who it is for, what "solved" looks like in observable terms (the planner turns each into a testable acceptance criterion), what is out of scope.
 6. Next experiments and interviews, in order.
