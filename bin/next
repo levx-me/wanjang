@@ -294,7 +294,7 @@ def main():
             print(json.dumps(o))
         else:
             f = lambda v: "never" if v is None else f"{v}s ago"
-            print(f"{'on' if o['on'] else 'off'}, schedule made {f(o['cron_age'])}, last check {f(o['last_check_age'])}, last hook {f(o['last_hook_age'])}, {o['asked']} asked")
+            print(f"{'on, schedule made ' + f(o['cron_age']) if o['on'] else 'off'}, last check {f(o['last_check_age'])}, last hook {f(o['last_hook_age'])}, {o['asked']} asked")
 
 
 main()

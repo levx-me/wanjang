@@ -81,7 +81,7 @@ st '{"on":true,"cron_created":"x"}'; [ "$(cron)" = recreate ] || bad "cron: bad 
 "$N" on; "$N" off
 [ "$(cron)" = off ] && [ "$(cron --exists no)" = off ] || bad "cron: after off should be off"
 "$N" on; "$N" status | grep -q '^on, schedule made' || bad "status should show on"
-"$N" off; "$N" status | grep -q '^off' || bad "status should show off"
+"$N" off; "$N" status | grep -q '^off, last check' || bad "status should show off without a schedule age"
 env -u CLAUDE_CODE_SESSION_ID "$N" on 2>/dev/null; [ $? = 2 ] || bad "on without session should exit 2"
 
 # no timestamp on the prompt: skip
