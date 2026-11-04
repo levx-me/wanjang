@@ -33,7 +33,7 @@ wants the verdict.
 choice between options, a go / no-go).
 1. h1 = the question, or the recommended answer, in one sentence.
 2. `.lede`: what we need from you and by when, what we recommend and the one reason, what
-   happens if nobody answers. A reader who stops here still decides correctly.
+   happens if nobody answers. Someone who reads only this part still decides correctly.
 3. One `.basis` line with the one main caveat.
 4. One `.decide` per decision, at most three. More decisions are more pages.
 5. At most four sections of reasons and evidence, each heading stating its conclusion.

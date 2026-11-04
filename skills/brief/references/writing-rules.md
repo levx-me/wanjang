@@ -6,14 +6,15 @@ no study behind it: calibrate it with reader tests (`reader-test.md`) and record
 ## Structure
 
 - **S1 The top block stands alone.** The first screen holds the ask, the recommendation with one
-  reason, what happens with no answer, and the deadline. Check: from it alone a reader passes
+  reason, what happens with no answer (and with do nothing, when that differs), and the deadline. Check: from it alone a reader passes
   R1-R3.
 - **S2 One decision per document,** or one per decision block, at most 3 blocks (*starting
   value*). More decisions mean more documents.
 - **S3 Headings state what the section concludes,** not its topic. Check: from the h1 and the h2s
   alone a reader can say the conclusion (R8).
 - **S4 At most 4 body sections** plus the appendix (*starting value*).
-- **S5 Two levels only.** Top block and body; the appendix is the only fold. No fold inside a
+- **S5 Two levels only:** a section and the blocks in it (a decision block is a block, not a
+  level, and is not in the table of contents). The appendix is the only fold. No fold inside a
   fold, no chain of links.
 - **S6 Developer detail lives in the appendix:** file names, commands, field names, versions, tool
   names, error text. Check: the W3 grep finds nothing in the body.
@@ -35,6 +36,12 @@ no study behind it: calibrate it with reader tests (`reader-test.md`) and record
   does not answer. When the two differ, state both.
 - **D6 One real alternative** that you do not recommend is present.
 - **D7 Who decides, by when.** No deadline: say so.
+- **D8 The dates and durations agree.** Write a timeline in the notes (today, the deadline, each
+  option's start, finish and "undo until" date, every date in the facts list) and check: each
+  option's time fits before the deadline or the date it is meant to beat; "undo until" falls after
+  the option finishes; no option contradicts a stated fact (a vendor shutdown, a quote's expiry, a
+  closed window). "3 weeks" starting on the deadline date that ends on a shutdown date fails.
+  Fix the option or say in the document why it still holds.
 
 ## Words (every language)
 
@@ -80,7 +87,7 @@ no study behind it: calibrate it with reader tests (`reader-test.md`) and record
 
 ## Length
 
-- **L1 Reading time of the top block and body** (*starting values*): decision brief 3 minutes or
+- **L1 Reading time of the top block and body,** the optional number strip included (*starting values*): decision brief 3 minutes or
   less, spec 5, progress update 1, what changed 2. Measure: English 200 words a minute; Korean 500
   non-space characters a minute; other languages, use the closer of the two and say it is
   unverified.
@@ -125,19 +132,38 @@ Separate, in this order.
 2. **Tells pass:** remove the habits of machine prose (inflated openers and closers, a list of
    three where one item is meant, vague praise, signposting, hedges piled on hedges, the same
    sentence rhythm throughout). It may not add or drop a fact (H1).
-3. **Mechanical checks** (commands below).
+3. **Mechanical checks** (commands below, and the D8 timeline check).
 4. **Reader test** by a fresh agent (`reader-test.md`); fix; two loops at most, then report what
    still fails to the caller.
 
 ## Commands
 
-Body text (top block and sections, appendix excluded; `<code>` becomes a backtick so W3 sees it):
+Facts list: one fact per line, each starting with an id (`F1 ...`), and every date, weekday,
+deadline, count word ("one", "two", "half"), named amount ("$600") and hedge the document uses is
+in it, written as the document writes it. The commands below read it, so a fact left out of the
+list shows up as an added fact.
+
+`strip.py` writes the text of the HTML page. `body` stops at the appendix; both drop the buttons,
+scripts, the contents list and every tag, including tags that span lines, so attribute text is
+never counted. `<code>` becomes a backtick so W3 sees it.
 
 ```sh
-# HTML
-sed -n '/<main/,/class="appendix"/{/class="appendix"/!p;}' brief.html | sed 's/<code[^>]*>/`/g; s/<[^>]*>//g' > body.txt
-# Markdown: cut at the appendix heading, whatever its wording
-sed '/^## <appendix heading>/,$d' brief.md > body.txt
+cat > strip.py <<'PY'
+import html, re, sys
+t = open(sys.argv[1], encoding="utf-8").read()
+t = re.search(r"<main.*</main>", t, re.S).group(0)
+if sys.argv[2] == "body":  # the appendix is the last section
+    m = re.search(r'<section[^>]*class="[^"]*\bappendix\b', t)
+    t = t[:m.start()] if m else t
+t = re.sub(r"<(script|style|button)\b.*?</\1>|<details class=\"toc-top\".*?</details>|<!--.*?-->", " ", t, flags=re.S)
+t = re.sub(r"<code[^>]*>", "`", t)
+t = re.sub(r"</?(p|h[1-6]|li|dt|dd|tr|div|section|header|details|summary|caption)\b[^>]*>", "\n", t)
+print(html.unescape(re.sub(r"<[^>]*>", "", t)))
+PY
+python3 -I strip.py brief.html body > body.txt
+python3 -I strip.py brief.html all > all.txt
+# Markdown instead: cut at the appendix heading, whatever its wording
+sed '/^## <appendix heading>/,$d' brief.md > body.txt; cp brief.md all.txt
 ```
 
 ```sh
@@ -146,14 +172,24 @@ grep -nE '`|[A-Za-z0-9_-]+\.(js|jsx|ts|tsx|py|rb|go|rs|java|sh|sql|json|ya?ml|to
 # L1: reading minutes (English words / 200; Korean non-space characters / 500)
 echo "$(wc -w < body.txt) / 200" | bc -l
 echo "$(LC_ALL=en_US.UTF-8 tr -d '[:space:]' < body.txt | LC_ALL=en_US.UTF-8 wc -m) / 500" | bc -l
-# E1 / K1: one sentence per line, then the long ones
-tr '\n' ' ' < body.txt | perl -CSD -pe 's/([.!?])\s+/$1\n/g' > sentences.txt
+# E1 / K1: one sentence per line (a heading or block is a sentence of its own), then the long ones
+perl -CSD -ne 's/\s+/ /g; s/^ | $//g; next unless length; s/([.!?]) /$1\n/g; print "$_\n"' body.txt > sentences.txt
 awk 'NF > 25' sentences.txt                                     # English
 perl -CSD -ne '$n = () = /\S/g; print if $n > 60' sentences.txt # Korean
-# H1 facts diff, on the whole document (appendix included): numbers in only one of the two
-sed -n '/<main/,/<\/main>/p' brief.html | sed 's/<[^>]*>//g' > all.txt   # Markdown: cp brief.md all.txt
-comm -3 <(grep -oE '[0-9][0-9.,:%]*' facts.md | sort -u) <(grep -oE '[0-9][0-9.,:%]*' all.txt | sort -u)
 ```
 
-Each line of the facts diff is explained or fixed. It also runs on hedges: every "unverified",
-"estimate", "about" and "not found" in the facts list survives in the document.
+H1 facts diff, on the whole document (appendix included). `tok` lists a file's numbers (trailing
+punctuation trimmed, so `$600,` and `$600` are both `600`), count words, months and weekdays (cut
+to three letters), and ignores the fact ids (`F4`, `F10`):
+
+```sh
+tok() { perl -ne 's/^F\d+ //; while (/\d[\d.,:%]*/g) { ($t = $&) =~ s/[.,:]+$//; print "$t\n" } print lc($&), "\n" while /\b(?:one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|half|third|quarter|twice|dozen)\b/gi; print substr($&, 0, 3), "\n" while /\b(?:Jan(?:uary)?|Feb(?:ruary)?|March|April|May|June|July|Aug(?:ust)?|Sept?(?:ember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?|Mon(?:day)?|Tue(?:s(?:day)?)?|Wed(?:nesday)?|Thu(?:rs(?:day)?)?|Fri(?:day)?|Sat(?:urday)?|Sun(?:day)?)\b/g' "$1" | sort -u; }
+echo "in the facts list only (dropped or reworded):"; comm -23 <(tok facts.md) <(tok all.txt)
+echo "in the document only (added):";                 comm -13 <(tok facts.md) <(tok all.txt)
+for w in unverified estimate about "not found" "doesn't say"; do   # hedges
+  grep -qi "$w" facts.md && ! grep -qi "$w" all.txt && echo "hedge lost: $w"; done
+```
+
+Every line the diff prints is explained or fixed: a dropped or added number, date or count word is
+a blocker unless it is the document's own date or a word like "one" in ordinary use. The diff shows
+that the listed facts survive; whether the list is complete is the reader test's job.

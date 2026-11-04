@@ -13,7 +13,7 @@ explained in the report.
 |---|---|---|
 | R1 | From the top block only: say in one sentence what you are asked to decide, and by when. | It matches the key. |
 | R2 | From the top block only: name the recommended option and its reason. | It matches. |
-| R3 | From the top block only: say what happens if you choose nothing, and if you do not answer. | It matches, with both cases when they differ. |
+| R3 | From the top block only: say what happens if you choose nothing, and if you do not answer. | It matches the key; when the two cases differ, the reader names both. |
 | R4 | For each option: what it costs (money, time, risk), and can it be undone? | Every option answered; "unknown" counts only where the document says unknown. |
 | R5 | Say what will change for you (spec: what you will be able to do; update: what is done). | It matches the claims. |
 | R6 | List every word or name you did not know. | At most the W1 budget, none of the W3 kinds. |
@@ -27,7 +27,7 @@ answers R1 as "what changed and do I need to approve again".
 
 Mechanical checks run beside it (`writing-rules.md`, Commands): the facts diff (H1), sentence flags
 (E1-E3 or K1-K4), the W3 grep, table size (T1), tag kinds (H3), section count (S4), reading time
-(L1), and every decision block field filled (D1-D7).
+(L1), every decision block field filled (D1-D7), and the dates fitting each other (D8).
 
 ## Agent reader test (every document)
 
@@ -36,7 +36,10 @@ Mechanical checks run beside it (`writing-rules.md`, Commands): the facts diff (
 1. Start a fresh agent (`wanjang:checker`; `general-purpose` if missing), never the writer and
    never a fork of the writer's context. Give it only: the document, this persona, and the
    questions. Persona: "You own this product and do not write code. You have 3 minutes and you
-   will decide alone. Answer only from what is in front of you."
+   will decide alone. Answer only from what is in front of you." The reader answers in the
+   document's language (English when that is unknown). If the caller cannot spawn agents, run
+   `claude -p < prompt.txt` with the whole prompt on stdin; flags such as `--allowedTools` take
+   the words after them, so a positional prompt next to them is swallowed.
 2. **Pass 1, top block only** (save it as its own file and withhold the rest): R1-R3.
 3. **Pass 2, the whole document:** R4-R10.
 4. A separate check, by the same or another fresh agent, runs the mechanical checks and the facts

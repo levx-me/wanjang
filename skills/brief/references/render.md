@@ -8,40 +8,64 @@ named here, visual-doc's `references/components.md` is the authority.
 
 Start from visual-doc's `assets/skeleton.html` with **all of** its `assets/base.css` pasted into
 the page's `<style>`, then follow visual-doc's markup rules (`references/page-markup.md`). Add only
-page-specific rules after the pasted stylesheet, using its tokens. Set `<html lang>` to the
-document's language.
+page-specific rules after the pasted stylesheet, using its tokens. Set `lang` on `nav` and `main`
+to the document's language. Where this file and visual-doc's `components.md`, `base.css` or
+`skeleton.html` differ, theirs win.
 
-**Top block** (in `header.hero`, under the skeleton's top row):
+**A file for the Artifact tool is a fragment** (it starts at `<title>`; no `<html>`, `<head>` or
+`<body>`: publish wraps it, as page-markup.md says). **A local file the reader opens from disk
+needs the full page** around the same content, or the browser renders it in quirks mode with no
+viewport on a phone:
 
 ```html
-<p class="eyebrow">Decision brief · for the shop owner · 5 Nov</p>  <!-- type · reader · date -->
-<h1>Move order emails to a new sending service before the sale?</h1>
-<div class="goal">
-  <p><b>What we need from you:</b> a choice on <a href="#d1">the sending service</a>, by 12 Nov.</p>
-  <p><b>We recommend:</b> switching now, because a third of order emails reach spam today.</p>
-  <p><b>If you don't answer:</b> nothing changes and the sale runs on the current service.</p>
-</div>
-<p class="basis"><b>Basis</b> last 30 days of orders · <b>Unsure</b> the spam share is an estimate from one week.</p>
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <!-- the skeleton from <title> through its last <style> -->
+</head><body>
+  <!-- the rest of the skeleton: sprite, nav, main, scripts -->
+</body></html>
 ```
 
-- A progress update puts its status word first in `.goal`; a spec or a re-approval puts its
-  verdict line there ("Approve this to start ...").
-- A number strip (`.figures`) is optional: 0-4 numbers, only ones the decision rests on.
-- A legend (`p.taglegend`) only when the page uses status tags: at most the three decision states,
-  `.tag.ok` decided, `.tag.prop` proposed, `.tag.open` open, with the word written in the tag.
-
-**Body sections:** `section#id > p.eyebrow + h2 + ...` as in visual-doc; the h2 states the
-section's conclusion. Tables at most 3 columns and 6 rows (`div.tablebox`); scorecards use the
-`.sc` cells from base.css. Detail most readers skip goes in a `details.more`, never one inside
-another.
-
-**Decision block**, its own section directly in `main`, right after "Why now". `data-toc` holds the
-`label`, so the table of contents shows it. Recommended option first, do nothing last:
+**Top block** is the skeleton's opening C, in `header.hero`: the top row (eyebrow and theme
+button), `h1`, one `p.lede`, one `p.basis`, then the decision blocks. No `.goal` box: it never
+holds a decision.
 
 ```html
-<section class="decide" id="d1" data-toc="Sending">
-  <h3 class="decide-q">Which service sends order emails during the sale?</h3>
-  <p class="decide-meta">Decides: <b>you</b> · by <b>12 Nov</b> · No answer: <b>the current service stays</b></p>
+<h1>Move order emails to a new sending service before the sale?</h1>
+<p class="lede"><b>What we need from you:</b> a choice on <a href="#d1">the sending service</a>, by 12 Nov.
+  <b>We recommend:</b> switching now, because a third of order emails reach spam today.
+  <b>If you don't answer:</b> nothing changes and the sale runs on the current service.</p>
+<p class="basis"><span class="tag prop">Proposed</span> for you to decide. <b>Basis</b> last 30 days of orders. <b>Unsure</b> the spam share is an estimate from one week.</p>
+```
+
+The eyebrow in the top row reads `type · reader · date` ("Decision brief · for the shop owner ·
+5 Nov"). When "do nothing" and "no answer" differ, the lede states both. A progress update starts
+the lede with its status word (bold); a spec or a re-approval starts it with the verdict line
+("Approve this to start ...").
+
+- `.basis` carries the legend and the evidence line in one line: the decision tags the page uses
+  (at most the three states, `.tag.ok` decided, `.tag.prop` proposed, `.tag.open` open, each with
+  its word inside the tag), what the numbers rest on, and the one main caveat. No `p.taglegend`.
+- A number strip (`.figures`, after `.basis`) is optional: 0-4 numbers, only ones the decision
+  rests on. Its words count toward the reading-time budget (L1) like any others.
+
+**Body sections:** `section#id > p.eyebrow ("2 · Why now") + h2 + ...`; the h2 states the
+section's conclusion. The table of contents is built by the skeleton's script from those
+eyebrows; do not hand-write it or add `data-toc`. Tables at most 3 columns and 6 rows
+(`div.tablebox`); scorecards use the `.sc` cells from base.css. A `details.more` is allowed only in
+the appendix.
+
+**Decision block** (`section.decide`, the markup of components.md). Type A puts it in
+`header.hero` right after `.basis`, as the skeleton's opening C and the visual-doc example do; the
+other types put it inside the section that raises the question ("Open questions", "Decisions
+needed"). A `.decide` nested in the header or in a section is not listed in the table of contents.
+Recommended option first, do nothing last:
+
+```html
+<section class="decide" id="d1" aria-labelledby="d1-q">
+  <h3 class="decide-q" id="d1-q">Which service sends order emails during the sale?</h3>
+  <p class="decide-meta"><b>Decides</b> you · <b>By</b> 12 Nov</p>
+  <p class="decide-meta"><b>No answer</b> the current service stays</p>
   <div class="opt reco">
     <h4>Switch now <span class="reco-label">Recommended</span></h4>
     <p class="opt-why">Most order emails reach the inbox before the sale starts. Downside: two days of setup in a busy week.</p>
@@ -64,18 +88,19 @@ another.
 </section>
 ```
 
-Translate the field names (Changes, Cost, Time, Risk, Undo, Recommended) into the document's
-language; keep them identical across blocks. Every option carries all five; a value you lack is
-"unknown".
+Translate the field names (Decides, By, No answer, Changes, Cost, Time, Risk, Undo, Recommended)
+into the document's language; keep them identical across blocks. Every option carries all five
+facts; a value you lack is "unknown". The block's `label` (the wizard header) is not shown on the
+page: keep it in the notes beside the document, with the `id`.
 
 **Receipt.** When the answer comes back: add `<span class="tag ok">Decided</span>` to the h3, a
-`div.decide-answer` right under `.decide-meta` (`<b>Decided on 8 Nov: Switch now.</b>` and the
-reader's comment, if any), the class `chosen` on the chosen `.opt`, and the same line at the top of
-`.goal`. Republish the same path.
+`p.decide-answer` after the second `p.decide-meta` (`<b>Decided on 8 Nov</b> Switch now. The
+reader's comment, if any.`), the class `chosen` on the chosen `.opt`, and the same line at the
+start of `.lede`. Republish the same path.
 
 **Appendix:** `section.appendix` at the end, with visual-doc's neutral label (details) or its
 developer label (files, commands, versions). Evidence quality, sources, method, large tables and
-the developer detail live here.
+the developer detail live here, in `details.more` where long.
 
 ## Markdown (doc connector)
 

@@ -47,8 +47,8 @@ The rules hold in every language; the sentence checks have an English and a Kore
    page** by default; **Markdown** when the reader works in a doc connector the session has (a
    living document with comments). Both come from the same content.
 2. **Before writing, keep two notes** beside the document (same folder, not shown to the
-   reader): a **facts list** (every number, unit, baseline, limit, risk, hedge and decision taken
-   from the source, each with where it came from) and an **answer key** for R1-R9
+   reader): a **facts list** (every number, unit, date, count word, named amount, baseline, limit, risk, hedge and
+   decision taken from the source, each with where it came from) and an **answer key** for R1-R9
    (`reader-test.md`). Source = what was decided, built or found in this conversation, the run's
    files and what the caller hands over. Anything else is not a fact: leave it out or mark it.
 3. **Write the content** (the types below, the rules in `writing-rules.md`): top block, at most
@@ -56,7 +56,7 @@ The rules hold in every language; the sentence checks have an English and a Kore
 4. **Render** (`render.md`). Files go in the run folder when a wanjang run called you, else in
    the scratchpad under `brief/<slug>.html` or `.md`.
 5. **Passes, in order, each separate:** tells pass (remove the habits of machine prose; it may
-   not add or drop a fact), mechanical checks (`writing-rules.md`, the commands), then the
+   not add or drop a fact), mechanical checks (`writing-rules.md`: the commands and the D8 consistency check), then the
    **reader test** by a fresh agent (`reader-test.md`). Fix the document, never the key; at most
    two loops, then return with what still fails. R1-R4 failing blocks publishing.
 6. **Publish or hand over.** HTML: publish as visual-doc does when the session has the Artifact
@@ -65,25 +65,29 @@ The rules hold in every language; the sentence checks have an English and a Kore
    scaffold first (`render.md`).
 7. **Ask** each decision with AskUserQuestion, paired as below, after the document is out and
    with a link to it. A subagent cannot ask the user: return the questions ready to pass to
-   AskUserQuestion as they are, and the session that asks writes the answers back.
+   AskUserQuestion as they are, as JSON `{"questions": [{"header", "question", "multiSelect",
+   "options": [{"label", "description"}]}]}` plus the document's path, and the session that asks
+   writes the answers back.
 8. **Write the answer back** into the document as its receipt and republish the same path.
 
 ## Every document: one frame
 
-**Top block → body (at most 4 sections) → appendix.** Two levels only: no fold inside a fold,
-no chain of links.
+**Top block → body (at most 4 sections) → appendix.** Two levels only: a section and the blocks
+in it (a decision block is a block, not a level; the table of contents lists sections, never
+blocks). The appendix is the only fold: no fold inside a fold, no chain of links.
 
-The **top block** stands alone: a reader who stops there still decides correctly.
+The **top block** stands alone: someone who reads only this part still decides correctly.
 - h1: the answer or the question, one sentence.
 - **What we need from you:** the decision (or approval) and the deadline, or "no deadline".
 - **We recommend:** the option, with one reason.
-- **If you don't answer:** what happens, and when.
+- **If you don't answer:** what happens, and when. When choosing do nothing differs from not
+  answering, add **If you choose to do nothing:** what happens.
 - One status word if the type has one; under it one line with the basis and the single main caveat.
 
 ### A. Decision brief (one decision per document)
 1. Top block.
-2. **Why now:** what changed and what it means for the reader, 2-4 sentences.
-3. **The decision block** (below).
+2. **The decision block** (below). In HTML it sits in the opening, under the top block.
+3. **Why now:** what changed and what it means for the reader, 2-4 sentences.
 4. **What happens next** for each choice, one line each, including when it stops being undoable.
 5. Optional: 3-5 questions the reader will likely ask, each answered in more than one line.
 6. Appendix: evidence, method, sources, developer detail.
@@ -169,6 +173,11 @@ action options plus do nothing, and at most 3 decision blocks plus one verdict p
 | Verdict (spec, re-approval) | "Approve <title>?"; options Approve / Request a change / Cancel; if comments are still open, Approve's description says how many |
 | A comment on a passage | no question: comments stay in the document, anchored by block id and an exact phrase |
 | Progress update | no question unless it holds a decision block |
+
+A block with two action options gives a question with three options (recommended, the other, do
+nothing); with three action options, four, the limit. Option label = the option's `name` (1-5
+words), and only the recommended one adds " (Recommended)". The header (`label`, at most 12
+characters) is different in every block of the document.
 
 - Same `id`, option names and order in the document and the question.
 - An "Other" answer counts as **Request a change** on that block, never as approval.
