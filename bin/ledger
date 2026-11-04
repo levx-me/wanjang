@@ -1,0 +1,68 @@
+#!/usr/bin/env bash
+# Shipped ledger, one file per user: ${CLAUDE_CONFIG_DIR:-~/.claude}/wanjang/ledger.md
+#   ledger hook   SubagentStop (PM only): add a line for each run log that is done, fresh and has a "Shipped:" line.
+#   ledger show [--week|--since 7d|DATE] [--repo X|--here] [--json]   print the ledger.
+# Line: - <date> · <repo> · <shipped> · why: <goal> · <where> · <folder>
+set -u
+home="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
+file="$home/wanjang/ledger.md"
+repo_of() { local d; d=$(git -C "${1:-.}" rev-parse --path-format=absolute --git-common-dir 2>/dev/null) || return 1; basename "$(dirname "$d")"; }
+
+hook() {
+  local input cwd dir repo log folder run text shipped where why line
+  input=$(cat)
+  case "$(printf '%s' "$input" | jq -r '.agent_type // empty')" in wanjang:pm|pm|wanjang:wanjang|wanjang) ;; *) return 0 ;; esac
+  cwd=$(printf '%s' "$input" | jq -r '.cwd // empty')
+  dir=$(git -C "${cwd:-.}" rev-parse --path-format=absolute --git-common-dir 2>/dev/null) && repo=$(basename "$(dirname "$dir")") || { dir=; repo=-; }
+  mkdir -p "$home/wanjang"
+  { [ -n "$dir" ] && find "$dir/wanjang" -maxdepth 2 -name log.md -mmin -360 2>/dev/null
+    find "$home/wanjang/runs" -maxdepth 2 -name log.md -mmin -360 2>/dev/null; } | while IFS= read -r log; do
+    head -n 1 "$log" | grep -q '^Status: done' || continue
+    text=$(grep -m1 '^Shipped:' "$log") || continue
+    run=$(dirname "$log")
+    case "$run" in "$home"/wanjang/runs/*) r=-; folder="${run/#$HOME/\~}" ;; *) r=$repo; folder=".git/wanjang/$(basename "$run")" ;; esac
+    [ -f "$file" ] && awk -v f=" · $folder" 'substr($0, length($0) - length(f) + 1) == f { found = 1 } END { exit !found }' "$file" && continue
+    text=${text#Shipped:}; shipped=${text%% | where:*}; where=none
+    case "$text" in *" | where:"*) where=${text#* | where:} ;; esac
+    # Goal: the text after "Goal:" on its line, else the first non-empty line below a Goal heading; newlines collapsed.
+    why=$(awk '/^(#+ *|\*\*)?Goal/ { sub(/^[^:]*:?\**/, ""); if ($0 ~ /[^ ]/) { print; exit } g=1; next } g && /[^ ]/ { print; exit }' "$log")
+    clean() { printf '%s' "$1" | tr '\n\t' '  ' | sed 's/^ *//;s/ *$//;s/  */ /g' | cut -c1-"$2"; }
+    line="- $(date +%F) · $r · $(clean "$shipped" 100) · why: $(clean "$why" 120) · $(clean "$where" 200) · $folder"
+    printf '%s\n' "$line" >> "$file"  # ponytail: single >> append; add flock if two PMs ever interleave
+  done
+  return 0
+}
+
+show() {
+  local since= repo= json=
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --week) since=7d ;;
+      --since) since=${2:-}; shift ;;
+      --repo) repo=${2:-}; shift ;;
+      --here) repo=$(repo_of .) || repo=- ;;
+      --json) json=1 ;;
+      *) echo "ledger show: unknown option $1" >&2; return 2 ;;
+    esac; shift
+  done
+  case "$since" in
+    "") ;;
+    [0-9]*d) n=${since%d}; since=$(date -v-"$n"d +%F 2>/dev/null || date -d "$n days ago" +%F) ;;
+    [0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]) ;;
+    *) echo "ledger show: --since wants 7d or YYYY-MM-DD" >&2; return 2 ;;
+  esac
+  out=$([ -f "$file" ] && grep '^- ' "$file" | awk -F' · ' -v s="$since" -v r="$repo" '($1 >= "- " s) && (r == "" || $2 == r) { print $2 "\t" $1 "\t" $0 }' | sort | cut -f3-)
+  if [ -z "$out" ]; then [ -n "$json" ] && echo '[]' || echo "nothing shipped"; return 0; fi
+  if [ -n "$json" ]; then
+    printf '%s\n' "$out" | jq -R -s 'split("\n") | map(select(length>0) | ltrimstr("- ") | split(" · ") |
+      {date: .[0], repo: .[1], shipped: (.[2:-3] | join(" · ")), why: (.[-3] | ltrimstr("why: ")), where: .[-2], run: .[-1]})'
+  else
+    printf '%s\n' "$out" | sed 's/^- //'
+  fi
+}
+
+case "${1:-}" in
+  hook) hook ;;
+  show) shift; show "$@" ;;
+  *) echo "usage: ledger hook | ledger show [--week|--since 7d|DATE] [--repo X|--here] [--json]" >&2; exit 2 ;;
+esac
