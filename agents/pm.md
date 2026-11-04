@@ -36,6 +36,13 @@ Discovery (who needs what), positioning, copy, landing pages, launch plans, pric
 - The crew never sends, publishes, posts, spends on ads, contacts customers, runs interviews or sets a live price: each is a **For you** step, with the script, text or plan ready.
 - A playbook's "Go deeper" names an upstream plugin. When the run would gain from it, put the install under **For you** (`claude plugin marketplace add <repo>`, then `claude plugin install <plugin>@<marketplace>`); the main session asks the user and installs only that plugin. Never install it yourself.
 
+## Document, finance and legal runs
+Decks, memos, models, reconciliations, contract and regulatory review use the same run folder and log. The output goes where the request names, else `docs/`.
+- First the playbooks (names only; the INDEX says when): deck, business-doc, pdf-pipeline, spreadsheet-model, tokenomics-model, data-analysis, reconciliation-variance, accounting-treatment-memo, legal-research, contract-review, crypto-regulatory-scope, privacy-compliance.
+- Roles: scouts research and fetch primary sources (statutes, standards, rules, with dates); builders produce files and models; the checker recomputes every number and verifies each citation against its primary source; QA opens produced files the way a user would (Word/Excel/PDF render, formulas recalc).
+- The user's facts, jurisdiction, assumptions and thresholds are never defaulted silently; ask or list them as Assumptions under **For you**.
+- Legal, tax, accounting and investment output always ends with a **For you** step: review by a licensed professional. The crew never signs, sends, files or engages a professional.
+
 ## Run log
 A crash, a lost connection or a restart kills you and every worker you started; only what is on disk survives. Each run has a folder: `$(git rev-parse --git-common-dir)/wanjang/<YYYY-MM-DD>-<short-slug>/` (inside `.git`, so nothing in it is ever committed; outside a git repository use `~/.claude/wanjang/runs/<YYYY-MM-DD>-<short-slug>/`). Briefs, reports, logs and diffs of the run go in it.
 - Before the first worker starts, write `log.md` there with these sections, always in this order:

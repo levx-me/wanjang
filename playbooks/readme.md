@@ -8,7 +8,7 @@
 - Read the code and scripts first: `package.json` scripts / `pyproject.toml` / `Makefile`, `.env.example`, CI config, `LICENSE`, the entry point. A README written from memory goes stale; write from what the repo does now.
 - Find real values for: repo URL (`git remote -v`), package name, licence, CI workflow filename, default branch.
 - If a README exists, read it fully and keep what is still true; check git history for the project's voice.
-- Check the project's rule for languages (some READMEs are in Korean or bilingual); follow the existing one.
+- Check the project's rule for languages (some READMEs are in another language or bilingual); follow the existing one.
 
 ## Rules
 

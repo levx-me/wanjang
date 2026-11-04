@@ -46,3 +46,21 @@ tells two similar playbooks apart.
 - [launch-plan](launch-plan.md) — planning a launch: readiness gate, phases, owned/rented/borrowed channels, checklist, email sequence logic
 - [pricing-packaging](pricing-packaging.md) — choosing a value metric, tiers and a price method (Van Westendorp etc.); price changes are the user's call
 - [seo-basics](seo-basics.md) — search visibility: crawl, technical, on-page, content, authority; untrusted fetched pages; a short AI-search checklist
+
+## Documents
+- [deck](deck.md) — slides for investors, a board, sales or a status review: story, one message per slide, text-fit checks (a memo is business-doc, a PDF file problem is pdf-pipeline)
+- [business-doc](business-doc.md) — a written Word (docx) document: memo, one-pager, proposal, SOW, report, policy; answer first, real styles, accessible (not slides, not fixed-layout PDF)
+- [pdf-pipeline](pdf-pipeline.md) — the file format is the problem: Markdown/HTML to PDF, fill forms, merge/split/redact, extract text or tables, OCR, PDF accessibility
+
+## Finance and data
+- [spreadsheet-model](spreadsheet-model.md) — building or auditing an .xlsx others will edit: runway, budget, unit economics, DCF; inputs apart from formulas, checks (not advice)
+- [tokenomics-model](tokenomics-model.md) — a token's supply: allocations, cliffs, vesting, emissions, burns, unlock calendar, FDV vs circulating; never decides if it is regulated
+- [data-analysis](data-analysis.md) — one dataset to a number, chart and short narrative: SQL/CSV/Parquet metrics, A/B results, "up 20%" claims, join and NULL traps (not a model)
+- [reconciliation-variance](reconciliation-variance.md) — two sources must agree (bank vs ledger) or actuals explained against budget; difference accounting, not modelling
+- [accounting-treatment-memo](accounting-treatment-memo.md) — a memo on how an entity could account for crypto assets or revenue, ends in review by a qualified accountant; no tax views
+
+## Legal and compliance
+- [legal-research](legal-research.md) — what a statute, rule or case says and its status, with cite-checks; the base the other legal playbooks cite; draft for a licensed lawyer
+- [contract-review](contract-review.md) — an NDA, SaaS/MSA, DPA or token paperwork checked against the user's positions, or drafted from an open template; ends in qualified counsel review
+- [crypto-regulatory-scope](crypto-regulatory-scope.md) — does a licensing, Travel Rule, securities or sanctions regime reach a wallet, SDK, sale or staking feature; a scope map for counsel
+- [privacy-compliance](privacy-compliance.md) — privacy notices, data maps, vendor DPAs, data-subject requests (GDPR/CCPA as examples); gap list for a privacy lawyer

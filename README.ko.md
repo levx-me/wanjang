@@ -5,7 +5,7 @@
 **연장 한 번 안 드는 리더가 이끄는 Claude Code 에이전트 크루예요.**
 
 [![Claude Code plugin](https://img.shields.io/badge/Claude_Code-plugin-d97757)](https://code.claude.com/docs/en/plugins)
-[![version](https://img.shields.io/badge/version-0.6.21-blue)](.claude-plugin/plugin.json)
+[![version](https://img.shields.io/badge/version-0.8.0-blue)](.claude-plugin/plugin.json)
 [![license](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
 [English](README.md) | 한국어
@@ -209,7 +209,7 @@ run마다 모든 것을 `.git/wanjang/<date>-<slug>/`에 둬요(`.git` 안이라
 
 1. 프로젝트의 `.claude/playbooks/INDEX.md` (먼저 읽어요)
 2. 모든 프로젝트에 쓰는 `~/.claude/playbooks/INDEX.md` (직접 추가하는 곳이에요. 이름이 같으면 플러그인 것보다 먼저 쓰여요)
-3. 플러그인의 `playbooks/INDEX.md`: wanjang에 들어 있는 24개
+3. 플러그인의 `playbooks/INDEX.md`: wanjang에 들어 있는 36개
 
 ```markdown
 - [postgres-migration](postgres-migration.md) — changing a live Postgres schema without downtime: lock levels, CONCURRENTLY, NOT VALID + VALIDATE
@@ -226,6 +226,9 @@ run마다 모든 것을 `.git/wanjang/<date>-<slug>/`에 둬요(`.git` 안이라
 | 품질 | debugging, test-writing, code-review, security-review, readme |
 | 도구 | claude-code-plugin |
 | 제품·마케팅 | product-discovery, positioning, marketing-copy, page-cro, launch-plan, pricing-packaging, seo-basics |
+| 문서 | deck, business-doc, pdf-pipeline |
+| 재무·데이터 | spreadsheet-model, tokenomics-model, data-analysis, reconciliation-variance, accounting-treatment-memo |
+| 법률·컴플라이언스 | legal-research, contract-review, crypto-regulatory-scope, privacy-compliance |
 
 제품·마케팅 playbook은 우리 말로 쓴 짧은 절차이고, 출처의 글을 옮겨 오지 않았어요. 각 playbook 끝의
 "Go deeper" 줄이 쓸 만한 외부 플러그인을 알려 줘요. 대신 설치해 주지는 않아요. run이 외부 플러그인으로 더 좋아질
@@ -235,6 +238,10 @@ run마다 모든 것을 `.git/wanjang/<date>-<slug>/`에 둬요(`.git` 안이라
 [anthropics/knowledge-work-plugins](https://github.com/anthropics/knowledge-work-plugins),
 [wondelai/skills](https://github.com/wondelai/skills), [phuryn/pm-skills](https://github.com/phuryn/pm-skills),
 [deanpeters/product-manager-skills](https://github.com/deanpeters/product-manager-skills)예요.
+
+법률, 회계, 규제 playbook은 초안, 적용 범위 정리, 빠진 곳 목록까지만 만들고 의견이나 자문은 내지 않아요. 이런
+run은 항상 사용자가 할 일로 끝나요. 변호사나 회계사 같은 자격 있는 전문가의 검토예요. 문서 playbook은 Anthropic의
+docx, xlsx, pptx, pdf skill(독점 라이선스)을 언급만 하고 넣어 두지는 않아요.
 
 라이선스: 저장소는 MIT이고 `cli-design`과 `security-review`는 CC BY-SA 4.0이에요. 모든 playbook의 출처와
 라이선스는 [playbooks/NOTICE.md](playbooks/NOTICE.md)에 있어요.

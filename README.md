@@ -5,7 +5,7 @@
 **A crew of Claude Code agents, run by one that never picks up a tool.**
 
 [![Claude Code plugin](https://img.shields.io/badge/Claude_Code-plugin-d97757)](https://code.claude.com/docs/en/plugins)
-[![version](https://img.shields.io/badge/version-0.6.21-blue)](.claude-plugin/plugin.json)
+[![version](https://img.shields.io/badge/version-0.8.0-blue)](.claude-plugin/plugin.json)
 [![license](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
 English | [한국어](README.ko.md)
@@ -213,13 +213,13 @@ work and names the one or two that fit in a worker's brief; nothing is loaded un
 
 1. `.claude/playbooks/INDEX.md` in the project (read first)
 2. `~/.claude/playbooks/INDEX.md` for every project (yours to add to; a playbook of the same name shadows the plugin's)
-3. `playbooks/INDEX.md` in the plugin: the 24 that ship with wanjang
+3. `playbooks/INDEX.md` in the plugin: the 36 that ship with wanjang
 
 ```markdown
 - [postgres-migration](postgres-migration.md) — changing a live Postgres schema without downtime: lock levels, CONCURRENTLY, NOT VALID + VALIDATE
 ```
 
-The 24 shipped playbooks, grouped as in the plugin's `playbooks/INDEX.md`:
+The 36 shipped playbooks, grouped as in the plugin's `playbooks/INDEX.md`:
 
 | Group | Playbooks |
 |---|---|
@@ -230,6 +230,9 @@ The 24 shipped playbooks, grouped as in the plugin's `playbooks/INDEX.md`:
 | Quality | debugging, test-writing, code-review, security-review, readme |
 | Tooling | claude-code-plugin |
 | Product and marketing | product-discovery, positioning, marketing-copy, page-cro, launch-plan, pricing-packaging, seo-basics |
+| Documents | deck, business-doc, pdf-pipeline |
+| Finance and data | spreadsheet-model, tokenomics-model, data-analysis, reconciliation-variance, accounting-treatment-memo |
+| Legal and compliance | legal-research, contract-review, crypto-regulatory-scope, privacy-compliance |
 
 The product and marketing playbooks are short procedures in our own words; none copies its sources. Each ends with a
 "Go deeper" line naming an upstream plugin. Nothing is installed for you: when a run would gain from one, the PM lists
@@ -239,6 +242,10 @@ the install under "Only you can do", the main session asks you, and on yes insta
 [anthropics/knowledge-work-plugins](https://github.com/anthropics/knowledge-work-plugins),
 [wondelai/skills](https://github.com/wondelai/skills), [phuryn/pm-skills](https://github.com/phuryn/pm-skills) and
 [deanpeters/product-manager-skills](https://github.com/deanpeters/product-manager-skills).
+
+The legal, accounting and regulatory playbooks produce drafts, scope maps and gap lists, never opinions or advice: every
+such run ends with a step for you, review by a licensed lawyer or accountant. The document playbooks name Anthropic's
+proprietary docx, xlsx, pptx and pdf skills but do not bundle them.
 
 Licences: the repository is MIT; `cli-design` and `security-review` are CC BY-SA 4.0. Every playbook's sources and
 licence are in [playbooks/NOTICE.md](playbooks/NOTICE.md).

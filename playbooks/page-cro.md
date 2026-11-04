@@ -62,4 +62,4 @@ Ship the page, change live prices, install analytics, run and read A/B tests, co
 
 ## Go deeper
 - coreyhaines31/marketingskills (MIT): `claude plugin marketplace add coreyhaines31/marketingskills` then `claude plugin install marketing-skills@marketingskills` (skills cro, signup, popups; the repo's `tools/clis` scripts read vendor API keys and some touch ad accounts or send email: do not run them).
-- wondelai/skills (MIT): `claude plugin marketplace add wondelai/skills` then `claude plugin install marketing-cro@wondelai-skills` (cro-methodology, storybrand-messaging); the conversion-optimization journey skill lives in the repo too, check its README for the plugin that bundles it.
+- wondelai/skills (MIT): `claude plugin marketplace add wondelai/skills` then `claude plugin install marketing-cro@wondelai-skills` (cro-methodology, storybrand-messaging); the conversion-optimization journey skill is in `metaskills@wondelai-skills`.
