@@ -173,5 +173,107 @@ n=$(jq '.asked|length' "$T/cfg/wanjang/next/s1.json"); [ "$n" = 50 ] || bad "ask
 "$N" status | grep -q "50 asked" || bad "status line"
 "$N" status --json | jq -e '.asked==50' >/dev/null || bad "status --json"
 
+# ---- promise (the clock is WANJANG_NOW, so nothing sleeps)
+PF=$T/cfg/wanjang/promises.json
+B0=1800000000; export WANJANG_NOW=$B0
+clk() { export WANJANG_NOW=$((B0 + $1)); }
+pl() { "$N" scan --cwd "${1:-$R}" | grep '^promise:' ; }
+pj() { jq -r "$1" "$PF"; }
+reset() { rm -rf "$T"/cfg/wanjang/next/* "$PF"; clk 0; }
+git -C "$R" checkout -q -- . 2>/dev/null; git -C "$R" reset -q; rm -f "$R/a.txt" "$R/MEMORY.md"; rm -rf "$R/.git/wanjang"
+reset
+# 1, 2
+id=$("$N" promise add "check release page" --words "once CI is green, check it" --fp c1 --at +2h --cwd "$R" | cut -f1); [ $? = 0 ] && [ -n "$id" ] || bad "add: no id"
+[ "$(pj '.promises|length')" = 1 ] && [ "$(pj '.promises[0]|[.status,.session,.by,.words,.fp,.at,.project]|@tsv')" = "$(printf 'open\ts1\tuser\tonce CI is green, check it\tc1\t%s\t%s' $((B0+7200)) "$(cd "$R" && pwd -P)")" ] || bad "add: fields: $(pj '.promises[0]')"
+"$N" promise add "x" --cwd "$R" 2>"$T/err"; [ $? = 2 ] && grep -q '^usage' "$T/err" || bad "add without at/when should exit 2 with usage"
+"$N" promise add "x" --at nonsense --cwd "$R" 2>/dev/null; [ $? = 2 ] || bad "add with a bad time should exit 2"
+# 3
+cp "$PF" "$T/before"; out=$("$N" promise add "  Check   RELEASE page" --fp c1 --at +5h --cwd "$R"); rc=$?
+{ [ $rc = 4 ] && [ "$out" = "$id" ] && cmp -s "$PF" "$T/before"; } || bad "duplicate: rc=$rc out=$out"
+"$N" promise add "check release page" --fp c2 --at +5h --cwd "$R" >/dev/null || bad "other fp is not a duplicate"
+# off: confirmation names the way to turn it on
+"$N" promise add "off one" --at +1h --cwd "$R" | grep -q 'next is off here.*session start.*/wanjang:next on' || bad "add while off: no hint"
+[ "$("$N" status --json | jq .on)" = false ] || bad "add turned next on"
+# 4
+[ -z "$(pl)" ] || bad "promise shown before at"
+clk 7300; l=$(pl | head -1)
+[ "${l%%$'\t'*}" = "promise:$id" ] && grep -q "once CI is green, check it; due: time passed" <<<"$l" || bad "due promise line: $l"
+echo one > "$R/a.txt"; git -C "$R" add a.txt
+[ "$("$N" scan --cwd "$R" | head -1 | cut -f1)" = "promise:$id" ] || bad "promise not first"
+git -C "$R" rm -q -f a.txt
+# 9
+fp9=$(pl | grep "^promise:$id" | cut -f2); "$N" ask "promise:$id" "$fp9"
+[ -z "$(pl | grep "^promise:$id")" ] || bad "asked promise shown again the same day"
+clk $((7300 + 86400)); [ -n "$(pl | grep "^promise:$id")" ] || bad "asked promise not shown on a later day"
+# 10
+clk 7300; "$N" promise set "$id" --at +1d; [ "$(pj ".promises[]|select(.id==\"$id\")|.snoozes")" = 1 ] || bad "set: snoozes"
+[ -z "$(pl | grep "^promise:$id")" ] || bad "snoozed promise shown"
+clk $((7300 + 86400)); l=$(pl | grep "^promise:$id"); [ -n "$l" ] && [ "$(cut -f2 <<<"$l")" != "$fp9" ] || bad "snooze: due again with a new fp"
+# 11
+"$N" promise done "$id" --note ok; "$N" promise list | grep -q "$id" && bad "list shows a done promise"
+"$N" promise list --all | grep -q "$id" || bad "list --all hides a done promise"
+[ -z "$(pl | grep "^promise:$id")" ] || bad "done promise shown"
+"$N" promise drop pffff 2>/dev/null; [ $? = 1 ] || bad "unknown id should exit 1"
+"$N" promise done "$id" 2>/dev/null; [ $? = 1 ] || bad "closed id should exit 1"
+d2=$("$N" promise add "drop me" --at +1m --cwd "$R" | cut -f1); "$N" promise drop "$d2"; [ "$(pj ".promises[]|select(.id==\"$d2\")|.status")" = dropped ] || bad "drop"
+# 5, 6, 7, 8
+reset; W=$T/flag
+c=$("$N" promise add "wait for flag" --when "test -f $W" --every 30m --cwd "$R" | cut -f1)
+[ -z "$(pl)" ] || bad "condition not met shown"
+touch "$W"; clk 600; [ -z "$(pl)" ] || bad "condition re-run within every"
+clk 1800; pl | grep -q "^promise:$c.*test -f $W. exits 0" || bad "met condition not shown"
+reset; M=$T/ran; for i in 1 2 3 4 5; do "$N" promise add "cond $i" --when "echo x >> $M; false" --cwd "$R" >/dev/null; done
+"$N" scan --cwd "$R" >/dev/null; [ $(wc -l < "$M") -eq 3 ] || bad "at most 3 conditions per scan: $(wc -l < "$M")"
+reset; "$N" promise add "slow" --when "sleep 30" --cwd "$R" >/dev/null
+s0=$(date +%s); [ -z "$(pl)" ] || bad "timed out condition shown"; [ $(( $(date +%s) - s0 )) -lt 20 ] || bad "condition not killed at 10 s"
+reset; "$N" promise add "nocmd" --when "nonexistent-cmd-xyz" --cwd "$R" >/dev/null
+pl | grep -q 'its check cannot run' || bad "127 should say the check cannot run"
+reset; "$N" promise add "later and true" --at +1d --when true --cwd "$R" >/dev/null
+[ -z "$(pl)" ] || bad "at in the future with true condition shown"
+clk 86500; [ -n "$(pl)" ] || bad "not due after at"
+# 12
+reset; "$N" promise add "short" --at +1m --for 1d --cwd "$R" >/dev/null; clk $((60 + 86400 + 5))
+pl | grep -q 'gave up after' || bad "expired not printed"
+[ "$(pj '.promises[0].status')" = expired ] || bad "status expired"
+[ -z "$(pl)" ] || bad "expired printed twice"
+# 13
+reset; RB=$T/repoB; mkdir "$RB"; git -C "$RB" init -q; git -C "$RB" -c user.email=a@b -c user.name=t commit -q --allow-empty -m i
+git -C "$RB" worktree add -q "$T/wtB" -b wt 2>/dev/null; mkdir -p "$RB/.git/wanjang/r1"
+"$N" promise add "in B" --at +1m --cwd "$RB" >/dev/null; "$N" promise add "from wt" --at +1m --cwd "$T/wtB" >/dev/null
+"$N" promise add "from run" --at +1m --cwd "$RB/.git/wanjang/r1" >/dev/null
+[ "$(pj '.promises|map(.project)|unique|length')" = 1 ] || bad "worktree/run folder did not resolve to the repo: $(pj '.promises|map(.project)')"
+clk 100; [ -z "$(pl "$R")" ] || bad "promise for B shown in A"
+[ "$(pl "$RB" | wc -l | tr -d " ")" -ge 1 ] || bad "promise for B not shown in B"
+"$N" promise list | grep -q "in B" && bad "list in A shows B"
+# 14
+rm -rf "$T"/cfg/wanjang/next; [ -n "$(CLAUDE_CODE_SESSION_ID=other pl "$RB")" ] || bad "promise lost with the session state"
+# 15
+reset; for i in 1 2 3 4 5 6; do "$N" promise add "par $i" --at +1m --cwd "$R" >/dev/null & done; wait
+[ "$(pj '.promises|length')" = 6 ] || bad "concurrent adds: $(pj '.promises|length') landed"
+# 16
+reset; Z=$T/touched; "$N" promise add "t" --at +1m --cwd "$RB" >/dev/null; "$N" promise add "c" --when "touch $Z" --cwd "$RB" >/dev/null
+for i in 3 4 5 6; do "$N" promise add "t$i" --at +1m --cwd "$RB" >/dev/null; done
+clk 100; out=$("$N" promise due --cwd "$RB")
+{ [ "$(grep -c '^- p' <<<"$out")" = 3 ] && grep -q 'and 2 more' <<<"$out" && [ ! -e "$Z" ]; } || bad "due: $out"
+[ -z "$("$N" promise due --cwd "$R")" ] || bad "due printed for a project without promises"
+# 18
+reset; echo '{"promises":[' > "$PF"; echo one > "$R/a.txt"; git -C "$R" add a.txt
+"$N" scan --cwd "$R" | grep -q '^uncommitted' || bad "corrupt promises.json broke scan"
+[ -z "$("$N" promise list)" ] && [ $? = 0 ] || bad "corrupt list"
+rm -f "$PF"; "$N" scan --cwd "$R" >/dev/null && [ -z "$("$N" promise list)" ] || bad "missing promises.json"
+RO=$T/ro2; mkdir -p "$RO/wanjang"; chmod 555 "$RO/wanjang"
+CLAUDE_CONFIG_DIR=$RO "$N" promise add "ro" --at +1m --cwd "$R" 2>"$T/err" >/dev/null
+[ "$(wc -l <"$T/err")" -eq 1 ] && grep -q '^next: cannot save' "$T/err" || bad "read-only promises dir: $(cat "$T/err")"
+chmod 755 "$RO/wanjang"; git -C "$R" rm -q -f a.txt
+# 19
+reset; for i in 1 2 3; do "$N" promise add "q$i" --at +1m --cwd "$R" >/dev/null; done
+clk 100; for k in $(pl | cut -f1 | head -2); do "$N" ask "$k" "$("$N" scan --cwd "$R" | awk -F'\t' -v k="$k" '$1==k{print $2}')"; done
+[ -z "$(pl)" ] || bad "third promise question offered in one idle stretch"
+jq -nc '{session_id:"s1",prompt:"carry on"}' | "$N" prompt; clk 101
+[ "$(pl | wc -l | tr -d " ")" = 1 ] || bad "a real prompt should reset the cap: $(pl | wc -l | tr -d ' ')"
+jq -nc '{session_id:"s1",prompt:"/wanjang:next check"}' | "$N" prompt; clk 102
+[ "$(pl | wc -l | tr -d " ")" = 1 ] || bad "a check prompt should not reset anything"
+unset WANJANG_NOW
+
 [ $fail = 0 ] && echo "next: all passed"
 exit $fail
