@@ -568,12 +568,18 @@ SAFE = {k: re.compile(v) for k, v in (
 CHAIN = re.compile(r"[,;&|]|\b(and|then|also|plus)\b")
 
 
+def plain(s):
+    """printable ASCII only: words() drops every other character (other scripts, emoji, zero-width marks), so
+    text holding any of them must not reach the full match"""
+    return bool(re.fullmatch(r"[\x20-\x7e]*", unicodedata.normalize("NFKC", str(s or ""))))
+
+
 def safe(k, key, what):
     """--what is the kind's own wording, one clause, nothing outward"""
     w = words(what)
-    m = SAFE[k].fullmatch(w) if k in SAFE else None
+    m = SAFE[k].fullmatch(w) if k in SAFE and plain(what) else None
     return bool(m) and not CHAIN.search(unicodedata.normalize("NFKC", what or "").lower()) and not outward(what) \
-        and (k != "relay" or m.group("to") == words(key.partition(":")[2]))
+        and (k != "relay" or (plain(key.partition(":")[2]) and m.group("to") == words(key.partition(":")[2])))
 YES_N, YES_AGE, YES_WIN, YES_KEEP, AUTO_KEEP, STRETCH, DAYMAX = 3, 86400, 14 * 86400, 10, 20, 2, 6
 STALE = 3600  # ponytail: a running auto action never closed by `did` stops blocking after an hour
 

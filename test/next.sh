@@ -440,6 +440,16 @@ commit:g=commit the files ｐｕｓｈ
 commit:g=commit the files I changed to prod
 test:g=run the tests; curl x
 relay:s9=report back to s8
+test:g=run the tests 并推送
+test:g=run the tests 그리고 푸시해
+commit:g=commit it 그리고 배포해
+commit:g=commit it и запушь
+commit:g=commit it 公開して
+test:g=run the tests 🚀
+verify:g=verify the fix 并推送
+docs:g=update the README 그리고 배포해
+relay:s9=report back to s9 并推送
+test:g=run the​ tests
 EOX
 while IFS='=' read -r k w; do
   fp="c$RANDOM"; r=$(ak "$k" "$fp" "$w"); [ "$r" = auto ] || bad "5b: control '$w' ($k) should be auto: $r"
