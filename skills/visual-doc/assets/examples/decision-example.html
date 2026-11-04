@@ -1,0 +1,198 @@
+<title>Sign-in links decision</title>
+<!-- A made-up decision page (the shop, numbers and options are invented) to show the structure.
+     It links ../base.css so it opens from this folder; a published page pastes base.css into a <style> instead. -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&family=Noto+Sans+KR:wght@400;500;600;700&display=swap">
+<link rel="stylesheet" href="../base.css">
+
+<nav class="toc-side" lang="en" aria-label="Contents"><p class="toc-h">Contents</p><ol class="toc-list" id="toc-side"></ol></nav>
+
+<main lang="en">
+  <details class="toc-top"><summary>Contents ▾</summary><ol class="toc-list" id="toc-top"></ol></details>
+
+  <header class="hero">
+    <div class="topbar">
+      <span class="eyebrow">Online shop · For the head of product · Decision needed · 2026-11-05</span>
+      <button type="button" class="theme-btn" id="theme-btn" aria-pressed="false" aria-label="Switch to dark mode"
+        data-light="Light" data-dark="Dark" data-to-dark="Switch to dark mode" data-to-light="Switch to light mode"><span class="theme-label">Light</span></button>
+    </div>
+    <h1>Should customers be able to sign in with an email link?</h1>
+    <p class="lede">We need your choice by <b>1 December</b> to have it live before the January sale. We recommend adding the link next to the password: it should halve the "forgot password" tickets for about $30 a month. With no answer, nothing changes and the tickets keep coming.</p>
+    <p class="basis"><b>Numbers assume</b> 9,000 sign-ins a week and the support log for August to October. <b>Main caveat</b> the ticket drop is an estimate from two similar shops, not measured here.</p>
+    <div class="figures" aria-label="Key numbers">
+      <div class="fig"><span class="v">310</span><span class="k">password tickets a month now</span></div>
+      <div class="fig"><span class="v">$30</span><span class="k">extra cost a month, recommended option</span></div>
+      <div class="fig"><span class="v">3<small> weeks</small></span><span class="k">to build and test</span></div>
+    </div>
+
+    <section class="decide" id="d1" aria-labelledby="d1-q">
+      <h3 class="decide-q" id="d1-q">Which sign-in should customers have from January?</h3>
+      <p class="decide-meta"><b>Decides</b> Head of product · <b>By</b> 2026-12-01</p>
+      <p class="decide-meta"><b>No answer</b> nothing changes; we ask again after the sale</p>
+      <div class="opt reco">
+        <h4>Add an email link <span class="reco-label">Recommended</span></h4>
+        <p class="opt-why">Customers who forget their password get in without calling us. Those with slow email wait up to a minute.</p>
+        <dl class="opt-facts">
+          <dt>Changes</dt><dd>A "send me a link" button sits under the password box</dd>
+          <dt>Cost</dt><dd>About $30 a month for sending email</dd>
+          <dt>Time</dt><dd>3 weeks</dd>
+          <dt>Risk</dt><dd>Some links land in spam; those customers still have the password</dd>
+          <dt>Undo</dt><dd>Yes, one switch, any time</dd>
+        </dl>
+      </div>
+      <div class="opt">
+        <h4>Replace passwords with links</h4>
+        <dl class="opt-facts">
+          <dt>Changes</dt><dd>Every sign-in goes through email; no passwords to forget</dd>
+          <dt>Cost</dt><dd>About $45 a month</dd>
+          <dt>Time</dt><dd>5 weeks, including a notice to all customers</dd>
+          <dt>Risk</dt><dd>Customers who cannot reach their email cannot buy</dd>
+          <dt>Undo</dt><dd>Until 31 January; after that, passwords are gone</dd>
+        </dl>
+      </div>
+      <div class="opt none">
+        <h4>Do nothing</h4>
+        <dl class="opt-facts">
+          <dt>Changes</dt><dd>Nothing</dd>
+          <dt>Cost</dt><dd>About 26 support hours a month on password tickets</dd>
+          <dt>Time</dt><dd>None</dd>
+          <dt>Risk</dt><dd>Tickets rise in the sale, when support is busiest</dd>
+          <dt>Undo</dt><dd>Yes</dd>
+        </dl>
+      </div>
+    </section>
+  </header>
+
+  <section id="s1" aria-labelledby="h-s1">
+    <p class="eyebrow">1 · Why now</p>
+    <h2 id="h-s1">One support ticket in four is a forgotten password</h2>
+    <p>Of 1,240 tickets a month, 310 ask for a new password. Each takes about five minutes, and most come in the evening when the shop is busiest.</p>
+    <div class="bars" role="list" aria-label="Support tickets a month by reason">
+      <div class="brow on" role="listitem"><span>Password</span><span class="bar"><b style="width:100%"></b></span><span class="v">310</span></div>
+      <div class="brow" role="listitem"><span>Delivery</span><span class="bar"><b style="width:87%; --c: var(--c2)"></b></span><span class="v">270</span></div>
+      <div class="brow" role="listitem"><span>Returns</span><span class="bar"><b style="width:61%; --c: var(--c2)"></b></span><span class="v">190</span></div>
+    </div>
+    <div class="conclude"><p class="eyebrow">Conclusion</p><p><b>Password tickets are the largest group we can remove without hiring.</b> The other reasons need changes in the warehouse.</p></div>
+  </section>
+
+  <section id="s2" aria-labelledby="h-s2">
+    <p class="eyebrow">2 · What others do</p>
+    <h2 id="h-s2">Shops our size offer both, not links alone</h2>
+    <p>We looked at three comparable shops. Two keep the password and add a link; the one that dropped passwords brought them back after customer complaints.</p>
+    <div class="tablebox">
+      <table>
+        <caption>From each shop's sign-in page, 2026-10-20. Ticket figures are what they told us; we could not check them.</caption>
+        <thead><tr><th>Shop</th><th>Password</th><th>Email link</th></tr></thead>
+        <tbody>
+          <tr class="hl"><td>Ours today</td><td><span class="sc yes">Yes</span></td><td><span class="sc no">No</span></td></tr>
+          <tr><td>Shop A</td><td><span class="sc yes">Yes</span></td><td><span class="sc yes">Yes</span></td></tr>
+          <tr><td>Shop B</td><td><span class="sc yes">Yes</span></td><td><span class="sc part">Partly</span></td></tr>
+          <tr><td>Shop C</td><td><span class="sc part">Partly</span></td><td><span class="sc unk">Unknown</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>"Partly" means a link only for returning customers on the same device. <a href="#d1">Back to the decision</a>.</p>
+  </section>
+
+  <section id="s-more" class="appendix" aria-labelledby="h-more">
+    <p class="eyebrow">Appendix · Details</p>
+    <h2 id="h-more">How the numbers were worked out</h2>
+    <details class="more"><summary>The ticket estimate</summary><p>310 password tickets a month × 5 minutes = about 26 hours. Shops A and B reported 45% and 55% fewer password tickets after adding a link; we used the midpoint, 50%.</p></details>
+    <details class="more"><summary>Words used on this page</summary>
+      <dl class="kv">
+        <div><dt>Email link</dt><dd>A one-time link sent to the customer's email; opening it signs them in.</dd></div>
+        <div><dt>Ticket</dt><dd>One customer request to support, by email or chat.</dd></div>
+      </dl>
+    </details>
+  </section>
+</main>
+
+<script>
+/* theme toggle: viewer's stamped data-theme > saved choice > system. Storage is optional. */
+(() => {
+  const root = document.documentElement;
+  const btn = document.getElementById('theme-btn');
+  const label = btn.querySelector('.theme-label');
+  const mq = matchMedia('(prefers-color-scheme: dark)');
+  const KEY = 'visual-doc-theme';
+  const L = btn.dataset; /* labels in the page's language */
+  if (!root.hasAttribute('data-theme')) {
+    let saved = null;
+    try { saved = localStorage.getItem(KEY); } catch (e) {}
+    if (saved === 'dark' || saved === 'light') root.setAttribute('data-theme', saved);
+  }
+  const current = () => root.getAttribute('data-theme') || (mq.matches ? 'dark' : 'light');
+  const render = () => {
+    const dark = current() === 'dark';
+    btn.setAttribute('aria-pressed', String(dark));
+    btn.setAttribute('aria-label', dark ? (L.toLight || 'Switch to light mode') : (L.toDark || 'Switch to dark mode'));
+    label.textContent = dark ? (L.dark || 'Dark') : (L.light || 'Light');
+  };
+  btn.addEventListener('click', () => {
+    const next = current() === 'dark' ? 'light' : 'dark';
+    root.setAttribute('data-theme', next);
+    try { localStorage.setItem(KEY, next); } catch (e) {}
+    render();
+  });
+  mq.addEventListener('change', render);
+  new MutationObserver(render).observe(root, { attributes: true, attributeFilter: ['data-theme'] });
+  render();
+})();
+
+/* table of contents: built from each top-level section's .eyebrow ("2 · Costs": number + short name;
+   data-toc overrides the name), or on legacy pages the .sec-head pill number and the h2.
+   A section inside a section (a .decide block) is not listed. Highlights the section in view. */
+(() => {
+  const secs = [...document.querySelectorAll('main > section[id]')];
+  const items = secs.map((s) => {
+    const eb = s.querySelector(':scope > .eyebrow');
+    const head = eb || s.querySelector('.sec-head .pill');
+    const h = s.querySelector('h2');
+    const txt = head ? head.textContent.trim() : '';
+    const m = txt.match(/^(\d+)\s*(?:·\s*(.+))?$/);
+    const name = eb ? (m ? (m[2] || '') : txt) : '';
+    return { id: s.id, n: m ? m[1] : '', t: s.dataset.toc || name || (h ? h.textContent : s.id) };
+  });
+  for (const id of ['toc-side', 'toc-top']) {
+    const ol = document.getElementById(id);
+    if (!ol) continue;
+    for (const i of items) {
+      const li = document.createElement('li');
+      const a = document.createElement('a');
+      a.href = '#' + i.id; a.dataset.id = i.id;
+      const n = document.createElement('span'); n.className = 'tn'; n.textContent = i.n;
+      const t = document.createElement('span'); t.textContent = i.t;
+      a.append(n, t); li.append(a); ol.append(li);
+    }
+  }
+  const drop = document.querySelector('.toc-top');
+  document.querySelectorAll('#toc-top a').forEach((a) => a.addEventListener('click', () => { if (drop) drop.open = false; }));
+  const links = [...document.querySelectorAll('.toc-list a')];
+  const setOn = (id) => links.forEach((a) => {
+    const on = a.dataset.id === id;
+    a.classList.toggle('on', on);
+    if (on) a.setAttribute('aria-current', 'true'); else a.removeAttribute('aria-current');
+  });
+  if (!items.length) return;
+  setOn(items[0].id);
+  if (!('IntersectionObserver' in window)) return;
+  const io = new IntersectionObserver((es) => {
+    const vis = es.filter((e) => e.isIntersecting).sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top);
+    if (vis.length) setOn(vis[0].target.id);
+  }, { rootMargin: '-15% 0px -70% 0px' });
+  secs.forEach((s) => io.observe(s));
+})();
+
+/* entry motion: blocks below the fold slide in; everything is visible at rest */
+(() => {
+  const els = document.querySelectorAll('.reveal');
+  if (!('IntersectionObserver' in window) || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  const fold = innerHeight;
+  const io = new IntersectionObserver((entries) => {
+    for (const e of entries) if (e.isIntersecting) { e.target.classList.remove('pre'); io.unobserve(e.target); }
+  }, { rootMargin: '0px 0px -8% 0px' });
+  els.forEach((el) => { if (el.getBoundingClientRect().top > fold) { el.classList.add('pre'); io.observe(el); } });
+})();
+</script>
+

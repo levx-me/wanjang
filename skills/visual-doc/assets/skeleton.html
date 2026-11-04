@@ -1,0 +1,355 @@
+<title>{{Page name, 2-4 words}}</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<!-- Geist covers Latin; Noto Sans KR covers Korean. For Japanese or Chinese, swap in that script's Noto Sans
+     here and set --font-body / --font-display in the page-only style (see references/page-markup.md). -->
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&family=Noto+Sans+KR:wght@400;500;600;700&display=swap">
+<style>
+/* {{paste all of assets/base.css here, unchanged}} */
+</style>
+<style>
+/* page-only additions: tokens only, no literal colours */
+</style>
+
+<!-- Icons: copy only the <symbol>s this page uses from assets/icons.svg. Delete this svg when the page has none. -->
+<svg class="sprite" aria-hidden="true" focusable="false">
+  <symbol id="i-db" viewBox="0 0 24 24"><ellipse cx="12" cy="6" rx="7" ry="2.8"/><path d="M5 6v12c0 1.5 3.1 2.8 7 2.8s7-1.3 7-2.8V6M5 12c0 1.5 3.1 2.8 7 2.8s7-1.3 7-2.8"/></symbol>
+</svg>
+
+<!-- lang: the page's language (en, ko, ja, ...) on both nav and main, for screen readers and line breaking.
+     Table of contents: leave the lists empty; the script fills them from each top-level section's .eyebrow
+     ("2 · Costs": number and name). data-toc on a section overrides the name. Translate "Contents". -->
+<nav class="toc-side" lang="{{en}}" aria-label="{{Contents}}"><p class="toc-h">{{Contents}}</p><ol class="toc-list" id="toc-side"></ol></nav>
+
+<main lang="{{en}}">
+  <details class="toc-top"><summary>{{Contents}} ▾</summary><ol class="toc-list" id="toc-top"></ol></details>
+
+  <!-- ═════ Opening A · Story (design, proposal, explainer, plan) ═════
+       Conclusions are not gathered at the top: each section ends with its .conclude after its evidence.
+       Decisions, if any, are .decide blocks in the last section. -->
+  <header class="hero">
+    <div class="topbar">
+      <span class="eyebrow">{{Project}} · {{Reader: whole team}} · {{Status: draft for review}} · {{YYYY-MM-DD}}</span>
+      <!-- the four data-* labels are in the page's language; the script shows them -->
+      <button type="button" class="theme-btn" id="theme-btn" aria-pressed="false" aria-label="{{Switch to dark mode}}"
+        data-light="{{Light}}" data-dark="{{Dark}}" data-to-dark="{{Switch to dark mode}}" data-to-light="{{Switch to light mode}}"><span class="theme-label">{{Light}}</span></button>
+    </div>
+    <h1>{{Page name or a one-line claim}}</h1>
+    <p class="lede">{{What changed and why, in one or two sentences: we replaced the nightly export with an hourly one, so reports are at most an hour old.}} Read it in this order: {{why}} → {{how it works}} → {{decide}}.</p>
+    <!-- one line: the tags this page uses (at most three) and what the numbers rest on -->
+    <p class="basis"><span class="tag ok">{{Confirmed}}</span> {{decided}} · <span class="tag prop">{{Proposed}}</span> {{for review}} · <span class="tag open">{{Open}}</span> {{not decided}}. <b>{{Numbers assume}}</b> {{1,200 orders a day, prices as of 2026-10-01}}.</p>
+    <!-- 0-4 numbers, only numbers a decision rests on; drop the strip when there are none -->
+    <div class="figures" aria-label="{{Key numbers}}">
+      <div class="fig"><span class="v">{{1<small>h</small>}}</span><span class="k">{{how old a report can be, was 24h}}</span></div>
+      <div class="fig"><span class="v">{{$40}}</span><span class="k">{{extra cost a month}}</span></div>
+      <div class="fig"><span class="v">{{2<small>weeks</small>}}</span><span class="k">{{to switch over}}</span></div>
+    </div>
+    <ol class="readorder" aria-label="{{Reading order}}">
+      <li><a href="#s1"><b>{{Why}}</b>: {{what went wrong with the old way}}</a></li>
+      <li><a href="#s2"><b>{{How it works}}</b>: {{what runs, and when}}</a></li>
+      <li><a href="#s-open"><b>{{Decide}}</b>: {{what we need from you}}</a></li>
+    </ol>
+  </header>
+
+  <!-- ═════ Opening B · Conclusion first (review results, status reports, incidents). Use instead of A ═════
+  <header class="hero">
+    <div class="topbar">
+      <span class="eyebrow">{{Project}} · {{Review results}} · {{YYYY-MM-DD}}</span>
+      <button ... same theme button as A ...></button>
+    </div>
+    <h1>{{The answer in one sentence: two things must be fixed before launch}}</h1>
+    <p class="basis">{{legend and basis in one line, as in A}}</p>
+    <ol class="steps" aria-label="{{Three conclusions}}">
+      <li><div><b>{{A conclusion, at most two short sentences.}}</b> <a class="small" href="#s1">{{Evidence · section 1}}</a></div></li>
+      <li><div><b>{{A conclusion.}}</b> <a class="small" href="#s2">{{Evidence · section 2}}</a></div></li>
+      <li><div><b>{{A conclusion.}}</b></div></li>
+    </ol>
+    {{the page's .decide block(s) here, if the reader must decide; the last section only links back}}
+    <div class="figures" aria-label="{{Key numbers}}">{{0-4 .fig}}</div>
+  </header>
+  ═════ -->
+
+  <!-- ═════ Opening C · Decision (the page exists to get one to three answers). Use instead of A ═════
+  <header class="hero">
+    <div class="topbar">... eyebrow: {{Project}} · {{Decision needed}} · {{YYYY-MM-DD}}, theme button ...</div>
+    <h1>{{The question, or the recommended answer, in one sentence}}</h1>
+    <p class="lede">{{What we need from you, by when; what we recommend and why; what happens with no answer.}}</p>
+    <p class="basis">{{legend and basis in one line; the one main caveat}}</p>
+    {{one .decide block per decision, at most three (markup in the last section below)}}
+  </header>
+  Then at most four sections of reasons and evidence; the appendix last.
+  ═════ -->
+
+  <section id="s1" aria-labelledby="h-s1">
+    <p class="eyebrow">1 · {{Why}}</p>
+    <h2 id="h-s1">{{A claim or a question: the nightly export left reports a day behind}}</h2>
+    <p>{{One or two sentences on how to read the evidence: what the table shows and where to look.}}</p>
+    <div class="tablebox">
+      <table>
+        <caption>{{Units, source and date, in one line.}}</caption>
+        <thead><tr><th>{{Item}}</th><th class="r">{{Value}}</th><th>{{Note}}</th></tr></thead>
+        <tbody>
+          <tr><td>{{Name}}</td><td class="r">{{0.41×}}</td><td>{{a few words}}</td></tr>
+          <tr><td>{{Name}}</td><td class="r">{{0.08×}}</td><td>{{a few words}}</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="conclude">
+      <p class="eyebrow">{{Conclusion}}</p>
+      <p><b>{{One sentence from the evidence: the delay came from the schedule, not the volume.}}</b> {{One or two sentences on what this design settles first.}}</p>
+    </div>
+    <details class="more"><summary>{{More: what was not measured, limits of the reading}}</summary><p>{{What most readers can skip.}}</p></details>
+  </section>
+
+  <section id="s2" aria-labelledby="h-s2">
+    <p class="eyebrow">2 · {{How it works}}</p>
+    <h2 id="h-s2">{{A question: where does each order go?}}</h2>
+    <!-- comparing sizes: .bars (bar length = true proportion, the largest is 100%) -->
+    <div class="bars" role="list" aria-label="{{Orders by channel}}">
+      <div class="brow on" role="listitem"><span>{{Web shop}}</span><span class="bar"><b style="width:100%"></b></span><span class="v">{{60%}}</span></div>
+      <div class="brow" role="listitem"><span>{{Phone}}</span><span class="bar"><b style="width:41.7%; --c: var(--c2)"></b></span><span class="v">{{25%}}</span></div>
+    </div>
+    <!-- one whole split into shares: .split (each span's style holds the number f and the colour c) + .legend -->
+    <div class="split" role="img" aria-label="{{Each sale: supplier 70%, shipping 18%, card fees 2%, margin 10%}}">
+      <span style="--f: 70; --c: var(--c1)">{{70%}}</span><span style="--f: 18; --c: var(--c2)">{{18%}}</span><span style="--f: 2; --c: var(--c8)"></span><span style="--f: 10; --c: var(--c3)">{{10%}}</span>
+    </div>
+    <div class="legend"><span><i style="--c: var(--c1)"></i>{{Supplier}}</span><span><i style="--c: var(--c2)"></i>{{Shipping}}</span><span><i style="--c: var(--c8)"></i>{{Card fees}}</span><span><i style="--c: var(--c3)"></i>{{Margin}}</span></div>
+    <h3>{{Sub-heading: what changes}} <span class="tag prop">{{Proposed}}</span></h3>
+    <div class="steps">
+      <div class="step"><p><b>{{Start with one bold sentence.}}</b> {{One or two more.}}</p></div>
+      <div class="step"><p><b>{{One bold sentence.}}</b> {{One or two more.}}</p></div>
+    </div>
+    <div class="pair">
+      <div><h3>{{Before}}</h3><p>{{Two or three sentences}}</p></div>
+      <div><h3>{{After}}</h3><p>{{Two or three sentences}}</p></div>
+    </div>
+    <!-- time order: a hand-drawn SVG inside .timeline (phases = .ph bars, events = .ev dots) -->
+    <div class="timeline" role="img" aria-label="{{Two weeks of side-by-side running, switch-over in week 3, old export removed after 90 days}}">
+      <svg viewBox="0 0 760 120" aria-hidden="true">
+        <line class="track" x1="30" y1="60" x2="740" y2="60"/>
+        <rect class="ph" x="30" y="48" width="164" height="24" rx="4"/><text class="s" x="112" y="64" text-anchor="middle">{{2 weeks}}</text>
+        <circle class="ev" cx="30" cy="60" r="6"/><text class="t" x="30" y="32">{{Start}}</text>
+        <circle class="ev" cx="440" cy="60" r="6"/><text class="t" x="440" y="32" text-anchor="middle">{{Week 3}}</text><text class="s" x="440" y="98" text-anchor="middle">{{what happens}}</text>
+      </svg>
+    </div>
+    <div class="conclude"><p><b>{{Close the section with its conclusion in one sentence.}}</b></p></div>
+  </section>
+
+  <!-- a chart, when needed: <div class="shell"><div class="core"><div class="chart-box"><canvas id="c-trend" role="img" aria-label="…"></canvas></div><div class="chart-legend">…</div></div></div> + a .tablebox with the same numbers -->
+
+  <section id="s-open" aria-labelledby="h-open">
+    <p class="eyebrow">3 · {{Decide}}</p>
+    <h2 id="h-open">{{What we need from you}}</h2>
+    <!-- one .decide per decision, at most three per page; a decision appears once on the page, elsewhere only a link to #d1.
+         Options in the same order as the AskUserQuestion that pairs with it: recommended first, "do nothing" last. -->
+    <section class="decide" id="d1" aria-labelledby="d1-q">
+      <h3 class="decide-q" id="d1-q">{{The question, one sentence the reader can answer}}</h3>
+      <p class="decide-meta"><b>{{Decides}}</b> {{who}} · <b>{{By}}</b> {{YYYY-MM-DD, or "no deadline"}}</p>
+      <p class="decide-meta"><b>{{No answer}}</b> {{what happens if nobody answers, and when}}</p>
+      <div class="opt reco">
+        <h4>{{Option name, 1-5 words}} <span class="reco-label">{{Recommended}}</span></h4>
+        <p class="opt-why">{{One reason. One downside.}}</p>
+        <dl class="opt-facts">
+          <dt>{{Changes}}</dt><dd>{{what changes for the reader, one sentence}}</dd>
+          <dt>{{Cost}}</dt><dd>{{money, with a unit and a comparison}}</dd>
+          <dt>{{Time}}</dt><dd>{{how long}}</dd>
+          <dt>{{Risk}}</dt><dd>{{what could go wrong, for whom, how much}}</dd>
+          <dt>{{Undo}}</dt><dd>{{yes / until a date / no}}</dd>
+        </dl>
+      </div>
+      <div class="opt">
+        <h4>{{A real alternative}}</h4>
+        <dl class="opt-facts">
+          <dt>{{Changes}}</dt><dd>…</dd><dt>{{Cost}}</dt><dd>…</dd><dt>{{Time}}</dt><dd>…</dd><dt>{{Risk}}</dt><dd>…</dd><dt>{{Undo}}</dt><dd>…</dd>
+        </dl>
+      </div>
+      <div class="opt none">
+        <h4>{{Do nothing}}</h4>
+        <dl class="opt-facts">
+          <dt>{{Changes}}</dt><dd>{{what keeps happening}}</dd><dt>{{Cost}}</dt><dd>…</dd><dt>{{Time}}</dt><dd>{{none}}</dd><dt>{{Risk}}</dt><dd>…</dd><dt>{{Undo}}</dt><dd>{{yes}}</dd>
+        </dl>
+      </div>
+    </section>
+  </section>
+
+  <!-- Appendix, last: long tables, sources, method ("Appendix · Details") or files, functions, commands
+       ("Appendix · For developers"). Long parts fold in details.more; a glossary is a details.more holding dl.kv.
+  <section id="s-more" class="appendix" aria-labelledby="h-more">
+    <p class="eyebrow">{{Appendix · Details}}</p>
+    <h2 id="h-more">{{What the numbers rest on}}</h2>
+    <details class="more"><summary>{{Full comparison table}}</summary><div class="tablebox">…</div></details>
+    <details class="more"><summary>{{Words used on this page}}</summary><dl class="kv"><div><dt>{{term}}</dt><dd>{{what it means for the reader}}</dd></div></dl></details>
+  </section> -->
+</main>
+
+<script>
+/* theme toggle: viewer's stamped data-theme > saved choice > system. Storage is optional. */
+(() => {
+  const root = document.documentElement;
+  const btn = document.getElementById('theme-btn');
+  const label = btn.querySelector('.theme-label');
+  const mq = matchMedia('(prefers-color-scheme: dark)');
+  const KEY = 'visual-doc-theme';
+  const L = btn.dataset; /* labels in the page's language */
+  if (!root.hasAttribute('data-theme')) {
+    let saved = null;
+    try { saved = localStorage.getItem(KEY); } catch (e) {}
+    if (saved === 'dark' || saved === 'light') root.setAttribute('data-theme', saved);
+  }
+  const current = () => root.getAttribute('data-theme') || (mq.matches ? 'dark' : 'light');
+  const render = () => {
+    const dark = current() === 'dark';
+    btn.setAttribute('aria-pressed', String(dark));
+    btn.setAttribute('aria-label', dark ? (L.toLight || 'Switch to light mode') : (L.toDark || 'Switch to dark mode'));
+    label.textContent = dark ? (L.dark || 'Dark') : (L.light || 'Light');
+  };
+  btn.addEventListener('click', () => {
+    const next = current() === 'dark' ? 'light' : 'dark';
+    root.setAttribute('data-theme', next);
+    try { localStorage.setItem(KEY, next); } catch (e) {}
+    render();
+  });
+  mq.addEventListener('change', render);
+  new MutationObserver(render).observe(root, { attributes: true, attributeFilter: ['data-theme'] });
+  render();
+})();
+
+/* table of contents: built from each top-level section's .eyebrow ("2 · Costs": number + short name;
+   data-toc overrides the name), or on legacy pages the .sec-head pill number and the h2.
+   A section inside a section (a .decide block) is not listed. Highlights the section in view. */
+(() => {
+  const secs = [...document.querySelectorAll('main > section[id]')];
+  const items = secs.map((s) => {
+    const eb = s.querySelector(':scope > .eyebrow');
+    const head = eb || s.querySelector('.sec-head .pill');
+    const h = s.querySelector('h2');
+    const txt = head ? head.textContent.trim() : '';
+    const m = txt.match(/^(\d+)\s*(?:·\s*(.+))?$/);
+    const name = eb ? (m ? (m[2] || '') : txt) : '';
+    return { id: s.id, n: m ? m[1] : '', t: s.dataset.toc || name || (h ? h.textContent : s.id) };
+  });
+  for (const id of ['toc-side', 'toc-top']) {
+    const ol = document.getElementById(id);
+    if (!ol) continue;
+    for (const i of items) {
+      const li = document.createElement('li');
+      const a = document.createElement('a');
+      a.href = '#' + i.id; a.dataset.id = i.id;
+      const n = document.createElement('span'); n.className = 'tn'; n.textContent = i.n;
+      const t = document.createElement('span'); t.textContent = i.t;
+      a.append(n, t); li.append(a); ol.append(li);
+    }
+  }
+  const drop = document.querySelector('.toc-top');
+  document.querySelectorAll('#toc-top a').forEach((a) => a.addEventListener('click', () => { if (drop) drop.open = false; }));
+  const links = [...document.querySelectorAll('.toc-list a')];
+  const setOn = (id) => links.forEach((a) => {
+    const on = a.dataset.id === id;
+    a.classList.toggle('on', on);
+    if (on) a.setAttribute('aria-current', 'true'); else a.removeAttribute('aria-current');
+  });
+  if (!items.length) return;
+  setOn(items[0].id);
+  if (!('IntersectionObserver' in window)) return;
+  const io = new IntersectionObserver((es) => {
+    const vis = es.filter((e) => e.isIntersecting).sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top);
+    if (vis.length) setOn(vis[0].target.id);
+  }, { rootMargin: '-15% 0px -70% 0px' });
+  secs.forEach((s) => io.observe(s));
+})();
+
+/* entry motion: blocks below the fold slide in; everything is visible at rest */
+(() => {
+  const els = document.querySelectorAll('.reveal');
+  if (!('IntersectionObserver' in window) || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  const fold = innerHeight;
+  const io = new IntersectionObserver((entries) => {
+    for (const e of entries) if (e.isIntersecting) { e.target.classList.remove('pre'); io.unobserve(e.target); }
+  }, { rootMargin: '0px 0px -8% 0px' });
+  els.forEach((el) => { if (el.getBoundingClientRect().top > fold) { el.classList.add('pre'); io.observe(el); } });
+})();
+</script>
+
+<!-- ───── optional: charts. Keep only when the page has a <canvas> chart. ───── -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script>
+/* vdChart(canvas, build): build(t) returns a Chart.js config; t reads the theme tokens
+   (t('--accent'), t.c(1) for --c1). Every chart is rebuilt when the theme changes. */
+const vdChart = (() => {
+  const root = document.documentElement;
+  const t = (name) => getComputedStyle(root).getPropertyValue(name).trim();
+  t.c = (n) => t('--c' + n);
+  const list = [];
+  const draw = (e) => {
+    if (e.chart) e.chart.destroy();
+    Chart.defaults.font.family = t('--font-body');
+    Chart.defaults.color = t('--mid');
+    Chart.defaults.borderColor = t('--hair');
+    /* set fields, never replace the object: it also holds the easing Chart.js animates with */
+    if (matchMedia('(prefers-reduced-motion: reduce)').matches) Chart.defaults.animation = false;
+    else Chart.defaults.animation.duration = 600;
+    e.chart = new Chart(e.el, e.build(t));
+  };
+  const redraw = () => list.forEach(draw);
+  if (window.Chart) {
+    new MutationObserver(redraw).observe(root, { attributes: true, attributeFilter: ['data-theme'] });
+    matchMedia('(prefers-color-scheme: dark)').addEventListener('change', redraw);
+  }
+  return (el, build) => {
+    if (!window.Chart || !el) return null; /* no chart: the table/text fallback still carries the numbers */
+    const e = { el, build, chart: null };
+    e.redraw = () => draw(e); /* call after changing the data build() reads (a chip, a toggle) */
+    list.push(e); draw(e);
+    return e;
+  };
+})();
+
+/* example
+vdChart(document.getElementById('c-trend'), (t) => ({
+  type: 'line',
+  data: { labels: ['Week 1', 'Week 2', 'Week 3'], datasets: [
+    { label: 'This year', data: [12, 18, 24], borderColor: t('--accent'), backgroundColor: t('--accent'), borderWidth: 2.4, pointRadius: 0, tension: .3 },
+    { label: 'Last year', data: [10, 11, 13], borderColor: t('--slate'), backgroundColor: t('--slate'), borderWidth: 1.6, borderDash: [5, 4], pointRadius: 0, tension: .3 }
+  ] },
+  options: { responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
+    plugins: {
+      legend: { display: true, position: 'bottom', labels: { color: t('--ink'), usePointStyle: true, boxWidth: 8 } }, // click toggles a series
+      tooltip: { backgroundColor: t('--core'), titleColor: t('--ink'), bodyColor: t('--ink'), borderColor: t('--faint'), borderWidth: 1, padding: 10,
+                 callbacks: { label: (c) => `${c.dataset.label}: $${c.formattedValue}k` } } }, // units in every tooltip
+    scales: { x: { grid: { display: false }, border: { color: t('--faint') }, title: { display: true, text: 'Week', color: t('--mid') } },
+              y: { grid: { color: t('--hair') }, border: { display: false }, title: { display: true, text: 'Thousand dollars', color: t('--mid') } } } }
+}));
+*/
+
+/* vdHighlight: registered once for every chart. On mousemove inside the chart area it dims every
+   dataset but the nearest; outside the area or on mouseout it restores all. Originals are kept on
+   the chart instance (chart._vdO), so a chart rebuilt by vdChart starts clean. Skips update() when
+   the highlighted dataset is unchanged. Legend swatches keep the original colours. */
+if (window.Chart) Chart.register({
+  id: 'vdHighlight',
+  afterEvent(chart, { event }) {
+    const a = chart.chartArea, ds = chart.data.datasets;
+    if (!a || ds.length < 2) return;
+    const inside = event.type !== 'mouseout' && event.x >= a.left && event.x <= a.right && event.y >= a.top && event.y <= a.bottom;
+    const near = inside ? chart.getElementsAtEventForMode(event, 'nearest', { intersect: false }, false)[0] : null;
+    const idx = near ? near.datasetIndex : -1;
+    if (chart._vdI === idx || (chart._vdI === undefined && idx < 0)) return;
+    chart._vdI = idx;
+    chart._vdO = chart._vdO || ds.map((d) => ({ b: d.borderColor, f: d.backgroundColor }));
+    const dim = getComputedStyle(document.documentElement).getPropertyValue('--faint').trim();
+    chart.stop(); /* an entry or theme animation still running would throw on update('none') */
+    ds.forEach((d, i) => {
+      const o = chart._vdO[i], off = idx >= 0 && i !== idx;
+      d.borderColor = off ? dim : o.b;
+      d.backgroundColor = off ? dim : o.f;
+    });
+    chart.update('none');
+  }
+});
+if (window.Chart) {
+  const L = Chart.defaults.plugins.legend.labels, gl = L.generateLabels;
+  L.generateLabels = (c) => gl(c).map((l) => { const o = c._vdO && c._vdO[l.datasetIndex]; return o ? { ...l, strokeStyle: o.b, fillStyle: o.f } : l; });
+}
+/*
+*/
+</script>
