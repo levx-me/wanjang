@@ -168,7 +168,7 @@ field: know-how for a field comes from playbooks.
 | `/wanjang:next on\|off\|status` | A quiet look-ahead: when idle, asks once whether to do the most likely next piece of work (off by default, this session only) |
 | `/wanjang:next promises` | The promises written down for this project: id, when due, its condition, what was asked (see below) |
 | `/wanjang:next trust [off\|on\|<kind> ask\|<kind> reset]` | Which kinds of action are done without asking; `off` asks for everything again (see below) |
-| `/wanjang:next undo` | Takes back the last thing done without asking (a local commit), if it can |
+| `/wanjang:next undo` | Undoes the last action done without asking (a local commit or a docs edit), if it can |
 | `/wanjang:slim` | Move rules only the main session needs out of what every subagent loads (see below) |
 | `/wanjang:relay <session> <request>` · `status` | Hand work to the Claude session that owns another repo on this machine (Claude Code's ListAgents/SendMessage) and track its report |
 | `/wanjang:optimize` | See where this session's tokens go and fix what applies, with agents still running |
