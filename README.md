@@ -4,8 +4,11 @@
 
 **A crew of Claude Code agents, run by one that never picks up a tool.**
 
+Hand Claude Code a multi-step job: a PM splits it across a crew, a second agent checks the result,
+and you review the choices it made in one list at the end.
+
 [![Claude Code plugin](https://img.shields.io/badge/Claude_Code-plugin-d97757)](https://code.claude.com/docs/en/plugins)
-[![version](https://img.shields.io/badge/version-0.9.0-blue)](.claude-plugin/plugin.json)
+[![version](https://img.shields.io/badge/version-0.10.0-blue)](.claude-plugin/plugin.json)
 [![license](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
 English | [한국어](README.ko.md)
@@ -27,25 +30,43 @@ builder writes the copy, the designer builds the page, the checker verifies clai
 and QA does a reader test as the target customer. Sending, publishing, posting, ad spend, interviews and live
 prices are never done by the crew: they come back as steps for you.
 
-## Why
+## What it does for you
 
-- **Your main session stays small.** Multi-step work goes to the PM; what comes back is one short summary.
-  Briefs, reports and logs live in files, not in anyone's context.
-- **Each task gets the model it needs.** Haiku for lookups and mechanical edits, Sonnet for ordinary building and
-  checking, Opus for UI and the genuinely hard parts; reasoning effort set the same way (low, medium, high). A task that fails moves one tier up.
-- **Every turn stays light.** The main session is warned before it reads a big file whole (`bin/read-warn`); docs
+- **Brings you the next job.** Turn on `/wanjang:next` and, when the session goes quiet, it offers the most likely
+  next task in one question, with why now and what it costs. A declined offer stays closed until its evidence
+  changes.
+- **Remembers what it promised.** "Check the deploy once CI is green", "remind me in three days": it writes the
+  promise down with a time or a condition, and when it comes due the next check asks you once: do it, later, or drop
+  it. The conditions run only inside that check (10-second limit, at most 3 per check), never from a hook.
+- **Earns your trust.** Say yes to the same kind of action three times (first to last at least 24 hours apart,
+  within 14 days) and it stops asking for that kind: it does it and tells you in one line. A local commit can earn
+  this; push, deploy, migrations, deletes, installs, paid services and messages to people are always asked.
+- **Gets its work checked.** A fresh checker runs the build and the tests itself and goes through every requirement,
+  with a security review for auth, payments and permissions; QA uses the product as a user would.
+- **Saves its questions for the end.** Defaults are decided and logged; when the run ends you keep or change each one
+  in a single wizard. Steps that cannot be undone are still asked first.
+- **Picks up where it left off.** Workers commit each step and the PM keeps a run log, so a crash costs one step and
+  the next session resumes the run by itself.
+- **Takes hard calls to one senior.** A blocked run gets one advisor on the strongest model, and every ruling is
+  logged with why and how to revert it.
+- **Tells you how it's going.** `/wanjang:now` lists what each agent is doing, for how long, and which one has gone
+  silent for over ten minutes.
+- **Spends to fit the task.** Haiku for lookups and mechanical edits, Sonnet for ordinary building and checking, Opus
+  for UI and the hard parts; reasoning effort set the same way (low, medium, high). A task that fails moves one tier
+  up.
+- **Keeps your session small.** Multi-step work goes to the PM; what comes back is one short summary with what you
+  can use now (with QA's screenshots), how to see it, what was decided for you and what was checked. Briefs, reports
+  and logs live in files, not in anyone's context.
+- **Travels light.** The main session is warned before it reads a big file whole (`bin/read-warn`); docs
   are searched by section with `docindex` instead of read whole (in a test on real docs it found the section the
   grep-and-read approach missed); main-only rules stay out of the workers (`/wanjang:slim` cut one setup's worker
-  instruction load from 14.3K to 8.3K characters); workers go without the Workflow tool they never use, and the builder, checker, QA and planner without the Artifact tools (about 9K tokens a start); forks only for short
+  instruction load from 14.3K to 8.3K characters); workers go without the Workflow tool they never use, and the
+  builder, checker, QA and planner without the Artifact tools (about 9K tokens a start); forks only for short
   non-code jobs.
-- **Nothing ships unchecked.** QA uses the product like a user; the checker builds, tests and walks the spec,
-  with a security review for auth, payments and permissions.
-- **A crash costs a step, not the run.** Workers commit as they go, the PM keeps a run log, and the next
-  session picks the run up on its own.
-- **No questions mid-run.** Sensible defaults are decided and listed; when the run ends you review each one in a
-  single wizard (keep it, or pick the alternative). Only what cannot be undone is asked up front.
-- **A completion report, not a transcript.** What you can use now (with QA's screenshots), how to see it, what was
-  decided for you, what was checked.
+
+What it costs: on one Next.js task, run once each, wanjang 0.5.5 scored 33 of 35 in a blind review against 26 for
+Claude Code alone, at about 2.4x the cost ($3.12 vs $1.29) and 2.8x the time (16.2 vs 5.8 minutes). Blind scores
+move about two points between rounds; see [Benchmarks](#benchmarks).
 
 ## Quick start
 
@@ -145,6 +166,8 @@ field: know-how for a field comes from playbooks.
 | `/wanjang:docs <query> [dir]` | Find a section in .md/.txt/.html docs with `docindex` and answer from only those lines |
 | `/wanjang:now` | What each running agent is doing now, for how long, what is done and what looks stuck (`bin/status`, read-only) |
 | `/wanjang:next on\|off\|status` | A quiet look-ahead: when idle, asks once whether to do the most likely next piece of work (off by default, this session only) |
+| `/wanjang:next promises` | The promises written down for this project: id, when due, its condition, what was asked (see below) |
+| `/wanjang:next trust [off\|on]` | Which kinds of action are done without asking; `off` asks for everything again (see below) |
 | `/wanjang:slim` | Move rules only the main session needs out of what every subagent loads (see below) |
 | `/wanjang:relay <session> <request>` · `status` | Hand work to the Claude session that owns another repo on this machine (Claude Code's ListAgents/SendMessage) and track its report |
 | `/wanjang:optimize` | See where this session's tokens go and fix what applies, with agents still running |
@@ -191,6 +214,41 @@ and runs only at startup, so it cannot surface other OpenRouter models; the pick
 It looks once right after a piece of work finishes (a Stop hook, main session only, never in subagents; not after a plain question-and-answer turn, not while its own background work runs), and every 30 minutes while the session is idle (a session cron Claude Code runs between turns, which survives `--resume`; each check makes sure the schedule exists and renews it a day before Claude Code's 7-day limit, so it keeps running until `/wanjang:next off` or the session ends; `off` deletes it and nothing turns it back on). It reads this conversation and its task list (follow-ups such as verification, docs or a commit, stalled pending tasks, subagent results not yet reported), the repository (uncommitted changes, TODO/FIXME on changed lines, the "next" section of `MEMORY.md`, unfinished wanjang runs, failing tests or lint already seen; it never runs your tests just to look) and other sessions (relay requests with no report back, a session waiting on this one). Not GitHub.
 
 Nothing found means no question and no message beyond a single `·` (Claude Code refuses an empty reply and would add its own line). A `UserPromptSubmit` hook also stops the schedule's `/wanjang:next check` before the model runs when it would find nothing (off, or checked within 25 minutes); Claude Code shows that block as one short `· next check skipped: ...` notice, with no model turn. The first check after `off` still reaches the model so it can delete a leftover schedule. One question per check, and no further check while one is open. A candidate you declined or left unanswered is not asked again until its evidence changes (a new commit, a new failure, a new message). `bin/next` keeps that record in `~/.claude/wanjang/next/<session id>.json` (honours `CLAUDE_CONFIG_DIR`), pruned after 7 days. It also holds whether `next` is on or off and when the schedule was made. The check is one shell scan in the main session; no subagent is spawned to look.
+
+#### Promises
+
+When you or the agent commit to something for later ("check the release once CI finishes", "remind me on Friday",
+"once the migration PR merges, update the docs"), it is written down at once with `bin/next promise add`: what was
+asked in your words, and a time (`--at`, ISO 8601 or `+30m`/`+2h`/`+3d`; "tomorrow" means 09:00 local), a condition
+(`--when`, a shell test such as `gh run view ID --json status -q .status | grep -qx completed`), or both. A condition
+is rechecked every 30 minutes (`--every`) and the promise gives up after 14 days (`--for`). Writing one down does not
+turn `next` on.
+
+Conditions run only inside `next scan` (the check), with a 10-second timeout and at most 3 per scan; never from a
+hook. A due promise comes before every other candidate, and the question names your words and why it is due, with
+three answers: Do it, Later (tomorrow 09:00, or a time you type) and Drop it. Promises are kept per user in
+`~/.claude/wanjang/promises.json` (honours `CLAUDE_CONFIG_DIR`), each tied to its project.
+
+| `bin/next promise` | What it does |
+|---|---|
+| `add "WHAT" --at T --when CMD` | Write one down (`--at` and/or `--when`); exit 4 if it is already recorded |
+| `list [--all] [--json]` | Open promises for this project (`--all`: every project, and recently closed ones) |
+| `set ID [--at T] [--when CMD] [--what W]` | Snooze or change one |
+| `done ID [--note N]` · `drop ID` | Close one |
+| `due` | The promises due here, read-only (runs no condition) |
+
+`/wanjang:next promises` shows the list as a table; "drop 2" or "later 2" afterwards closes or snoozes one.
+
+#### Trust
+
+While `next` is on, the kinds of action you keep saying yes to stop being asked. After 3 yeses for one kind, the
+first and last at least 24 hours apart and all within 14 days, that kind is done without asking and reported in one
+line, and the first time it says it was promoted. A local commit can be promoted: only the files this session
+changed, after they are verified, never pushed, and the last one can be undone. At most 2 such actions per idle
+stretch and 6 a day. One "Not now" for a kind puts it back to asking. Push, deploy, migrations, deletes, installs,
+paid services and messages to people are never done without asking, and promise questions are always asked.
+`/wanjang:next trust` shows each kind and whether it is asked; `/wanjang:next trust off` turns this off and asks for
+everything (`on` turns it back on).
 
 ## Main-session rules and `/wanjang:slim`
 
