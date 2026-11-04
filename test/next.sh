@@ -354,9 +354,10 @@ for k in task:1 run:r1 promise:p1 foo:bar todo; do [ "$(ak "$k" "$RANDOM" "look 
 [ "$(ak commit:ok o1 "commit the verified work")" = auto ] || bad "5: commit itself should still be auto"
 "$N" did commit:ok o1 ask --cwd "$L"
 # 5b: auto needs the kind's own wording and nothing outward, spelled any way; a denylist is never complete
-lreset; three test >/dev/null; three docs >/dev/null; three commit >/dev/null; clk $((3*D))
+lreset; for k in test docs commit verify relay; do three $k >/dev/null; done; clk $((3*D))
 while IFS= read -r w; do
-  for kp in "commit:g=" "test:g=run the tests, then " "docs:g=update the README, then " "commit:g=commit the files, then "; do
+  ak commit:g "$RANDOM$RANDOM" "$w" >/dev/null; [ "$(jq -r '.asked[-1].kind' "$SF")" = outward ] || bad "5b: not outward: $w"
+  for kp in "test:g=run the tests, then " "docs:g=update the README, then " "commit:g=commit the files, then "; do
     [ "$(ak "${kp%%=*}" "$RANDOM$RANDOM" "${kp#*=}$w")" = ask ] || bad "5b: '${kp#*=}$w' came back auto"
   done
 done <<'EOP'
@@ -415,6 +416,31 @@ EOP
 for w in "look at the tests" "please run the tests" "tidy up" "do the usual"; do
   [ "$(ak test:g "$RANDOM" "$w")" = ask ] || bad "5b: unrecognised '$w' came back auto"
 done
+# compounds whose outward verb no denylist names: one clause of the kind's own words only
+while IFS='=' read -r k w; do
+  fp="x$RANDOM"; [ "$(ak "$k" "$fp" "$w")" = ask ] || { bad "5b: compound '$w' ($k) came back auto"; "$N" did "$k" "$fp" ask --cwd "$L"; }
+done <<'EOX'
+commit:g=commit the files and let Bob know
+verify:g=verify the build, then launch the site
+test:g=run the tests and sign up for the service
+commit:g=commit the files and make it public
+commit:g=commit and announce it
+commit:g=commit the files and add the package x
+docs:g=update the README and put it on the server
+verify:g=check the site and then order a domain
+commit:g=commit the files, then publicize
+test:g=run the tests and bump the version
+verify:g=verify then kill the process
+commit:g=commit the files and chmod 777 /
+docs:g=update the README then whatsapp Bob
+relay:s9=relay a note then sign up
+verify:g=check and restart the service
+commit:g=commit the files and ｐｕｓｈ
+commit:g=commit the files ｐｕｓｈ
+commit:g=commit the files I changed to prod
+test:g=run the tests; curl x
+relay:s9=report back to s8
+EOX
 while IFS='=' read -r k w; do
   fp="c$RANDOM"; r=$(ak "$k" "$fp" "$w"); [ "$r" = auto ] || bad "5b: control '$w' ($k) should be auto: $r"
   "$N" did "$k" "$fp" ask --cwd "$L"
@@ -423,6 +449,8 @@ test:g=run the unit tests
 test:g=run tests
 docs:g=update the README
 commit:g=commit the files I changed
+verify:g=verify the fix
+relay:s9=report back to s9
 EOC
 # 6: pin and reset
 "$N" trust commit ask --cwd "$L" >/dev/null; clk $((3*D + 1)); [ "$(ak commit:x p1 "commit it")" = ask ] || bad "6: pinned should be ask"
@@ -465,7 +493,7 @@ lreset; out=$("$N" trust --cwd "$L"); [ "$(grep -c $'\t[0-9]/3\t' <<<"$out")" = 
 lreset; three relay >/dev/null; echo '{}' > "$T/cfg/wanjang/next/old.json"; touch -t 202001010000 "$T/cfg/wanjang/next/old.json"
 clk $((3*D)); CLAUDE_CODE_SESSION_ID=s2 "$N" on
 [ ! -e "$T/cfg/wanjang/next/old.json" ] && [ -f "$(tf)" ] || bad "13: prune should drop old sessions and keep trust/"
-[ "$(CLAUDE_CODE_SESSION_ID=s2 "$N" ask relay:x r1 --what "report back to s9" --cwd "$L")" = auto ] || bad "13: new session should see the trust"
+[ "$(CLAUDE_CODE_SESSION_ID=s2 "$N" ask relay:s9 r1 --what "report back to s9" --cwd "$L")" = auto ] || bad "13: new session should see the trust"
 gl worktree add -q "$T/wtL" -b wtl 2>/dev/null
 [ "$("$N" trust --json --cwd "$T/wtL" | jq '.kinds[]|select(.kind=="relay")|.yeses')" = 3 ] || bad "13: worktree should share the counts"
 # 14: corrupt trust file asks, no stderr; read-only trust dir asks with one line

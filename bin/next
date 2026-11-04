@@ -49,7 +49,7 @@ Examples:
 
 Exit codes: 0 ok, 1 not asked (asked), unknown promise or no running auto action, 2 bad arguments or no session,
 3 periodic check skipped, 4 duplicate promise or undo refused."""
-import argparse, contextlib, fcntl, glob, hashlib, json, os, random, re, signal, subprocess, sys, tempfile, time
+import argparse, contextlib, fcntl, glob, hashlib, json, os, random, re, signal, subprocess, sys, tempfile, time, unicodedata
 from datetime import datetime
 
 CRON = "/wanjang:next check"
@@ -553,22 +553,34 @@ OUTWARD = re.compile(
 # not to turn up across word joins
 JOINED = re.compile(r"push|deploy|publish|release|migrat|delet|install|upgrad|upload|rollout|truncat|purge|rmdir|unlink|"
                     r"terraform|kubectl|production|email|tweet|subscri|transfer|invoice|rebase|rsync|payment")
-TESTS = r"(re ?)?run( \w+){0,3} (tests?|test suite|specs?|lint|linters?|typecheck|type check|build check)\b|(lint|typecheck)\b"
-# a kind is `auto` only when --what starts with its own safe wording
+TESTS = (r"(re ?)?run (the |all )?((unit|integration|e2e|failing|affected) )?"
+         r"(tests?|test suite|specs?|lint|linters?|typecheck|type check|build check)( again)?|(lint|typecheck)( again)?")
+# a kind is `auto` only when the whole --what is one of its own short closed forms: an extra clause or an
+# unknown word is asked. relay's `to` must be the session the key names.
 SAFE = {k: re.compile(v) for k, v in (
     ("test", TESTS),
-    ("verify", TESTS + r"|(verify|check|confirm|review|recheck)\b"),
-    ("docs", r"(update|fix|edit|correct|tidy|reword|rewrite|write|clarify|add to)( \w+){0,3} "
-             r"(readme|docs?|documentation|comments?|docstrings?|changelog|notes|\w+ md)\b"),
-    ("commit", r"commit\b"),
-    ("relay", r"(relay|hand|pass|report back)\b"))}
+    ("verify", TESTS + r"|(verify|check|confirm|review|recheck)( it| the (fix|change|changes|work|build|result|results|tests))?"
+                       r"( with the checker)?"),
+    ("docs", r"(update|fix|edit|correct|tidy|reword|rewrite|clarify) (the )?"
+             r"(readme|docs?|documentation|comments?|docstrings?|changelog|notes|[a-z0-9]+ md)"),
+    ("commit", r"commit( it| (the |these |my )?(files|listed files|changes|work|verified work|fix|docs))?( (i|we) changed)?"),
+    ("relay", r"(report back|(relay|hand|pass) (a |the )?(note|results?|report)( back)?) to (?P<to>[a-z0-9 ]+)"))}
+CHAIN = re.compile(r"[,;&|]|\b(and|then|also|plus)\b")
+
+
+def safe(k, key, what):
+    """--what is the kind's own wording, one clause, nothing outward"""
+    w = words(what)
+    m = SAFE[k].fullmatch(w) if k in SAFE else None
+    return bool(m) and not CHAIN.search(unicodedata.normalize("NFKC", what or "").lower()) and not outward(what) \
+        and (k != "relay" or m.group("to") == words(key.partition(":")[2]))
 YES_N, YES_AGE, YES_WIN, YES_KEEP, AUTO_KEEP, STRETCH, DAYMAX = 3, 86400, 14 * 86400, 10, 20, 2, 6
 STALE = 3600  # ponytail: a running auto action never closed by `did` stops blocking after an hour
 
 
 def words(s):
     """lowercase words, one space apart: what the guard reads"""
-    return " ".join(re.findall(r"[a-z0-9]+", str(s or "").lower()))
+    return " ".join(re.findall(r"[a-z0-9]+", unicodedata.normalize("NFKC", str(s or "")).lower()))
 
 
 def outward(s):
@@ -663,7 +675,7 @@ def ask_level(d, sid, a, k, now):
     changed, v = dropped(t, a.cwd, now), "ask"
     au = t["auto"]
     done = [e for e in au if e.get("state") != "asked"]
-    if d.get("on") is True and k in SAFE and SAFE[k].match(words(a.what)) and not outward(a.what) \
+    if d.get("on") is True and safe(k, a.key, a.what) \
             and level(t, k, now) == "auto" \
             and not any(e.get("state") == "running" and now - num(e.get("at")) < STALE for e in au) \
             and sum(1 for e in done if e.get("session") == sid and num(e.get("at")) > num(d.get("last_prompt"))) < STRETCH \
