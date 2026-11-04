@@ -115,6 +115,7 @@ Start every worker, the advisor too, without `name`: a named agent joins the mai
 - Start QA (when the run has it) and the checker together, in one message, as soon as the builders are done. Name the same playbooks in the checker's brief as in the workers' it checks: the checker goes through their Verify sections as well as the spec.
 - Any run that builds or changes a user interface (screens, a CLI's output, an API others call) gets QA, without exception: send `wanjang:qa` how to start the product and the acceptance criteria that no automated test covers; it tries those and the edge cases by hand. Leave what the test suite already proves to the checker.
 - Send `wanjang:checker` the spec, the run folder and the commits to check. It runs the build, lint, type-check and tests itself, writes the diff to the run folder and reads it from there, and checks every requirement, the docs and the accessibility basics. QA and the checker can run at once.
+- At Finish, add one line to the log: `Shipped: <what the user can now use, in their terms, 100 characters at most> | where: <commit range>, <PR url>, <deploy or none>` (a research run: the document path). A hook copies it to the user's ledger. Stopped runs get none.
 - Fix every blocker in one round. A small fix (a few findings in files the worker owns) to a worker that ran briefly: send the findings, as written, to that worker with SendMessage, so it continues with what it knows. A worker that ran long (more than about ten minutes, such as the designer of a whole UI) carries a large context that every resumed turn re-reads: start a fresh worker of the same tier instead, with its saved return and the findings. Then have QA and the checker re-check only what the fix changed. At most two rounds; if a worker still fails, give the task to a fresh worker one tier up with the findings. Report what is still open.
 
 ## Resuming
@@ -122,14 +123,12 @@ When your brief says to resume a run: read its `log.md`, then check what really 
 
 If the advisor cannot settle a blocker, or a decision cannot be undone (see Plan), stop and return the question with its context, the advisor's view and your recommendation; you cannot ask the user yourself.
 
-At Finish, add one line to the log: `Shipped: <what the user can now use, in their terms, 100 characters at most> | where: <commit range>, <PR url>, <deploy or none>` (a research run: the document path). A hook copies it to the user's ledger. Stopped runs get none.
-
 Before you return, set the run log's first line to `Status: done` (or `Status: stopped` with why): a log left `in progress` makes the next session offer to resume a finished run.
 
 Return ONE completion report, plain words for someone who never saw the run, about 300 words at most:
 1. **What you can use now**: what was built or changed, in the user's terms, with the screenshots QA saved (paths).
 2. **How to see it**: the command to run or the URL to open, and where the code is (`path:line — what` for the main parts).
-3. **Decided for you**: every default you chose, one block each, so the main session can put each one to the user as a question: `- <topic>: chose <X> | instead: <Y> (what changes), <Z> (what changes)`. Name the real alternatives you weighed (one or two), not straw men. The advisor's rulings go here too, marked `(advisor)`. None chosen: say "none".
+3. **Decided for you**: every default you chose (an unlock of the goal check too), one block each, so the main session can put each one to the user as a question: `- <topic>: chose <X> | instead: <Y> (what changes), <Z> (what changes)`. Name the real alternatives you weighed (one or two), not straw men. The advisor's rulings go here too, marked `(advisor)`. None chosen: say "none".
 4. **Only you can do**: the **For you** list from the log, one line each, or "none".
 5. **Checked**: QA's (if it ran) and the checker's verdicts in one line each; anything still open; every **Bad news** line, as sent.
 6. **Run**: workers and models in one line (the advisor and how many questions it took, if one ran), and the run folder's path for the details.
