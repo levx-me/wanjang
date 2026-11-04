@@ -1,5 +1,5 @@
 {
-  "description": "Wanjang: put the routing rule (and any unfinished run) into every session, keep the PM from changing project files, keep it from reporting with its run log still open, tell the parent when a finished subagent's promised files are missing, run /wanjang:provider without the model, and switch back to the subscription when OpenRouter refuses a turn, and offer the next piece of work when /wanjang:next is on",
+  "description": "Wanjang: put the routing rule (and any unfinished run) into every session, keep the PM from changing project files, keep it from reporting with its run log still open, tell the parent when a finished subagent's promised files are missing, run /wanjang:provider without the model, and switch back to the subscription when OpenRouter refuses a turn, offer the next piece of work when /wanjang:next is on, and skip its schedule's checks that would find nothing before the model runs",
   "hooks": {
     "SessionStart": [
       {
@@ -64,6 +64,17 @@
           {
             "type": "command",
             "command": "\"${CLAUDE_PLUGIN_ROOT}/bin/next\" stop",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/bin/next\" prompt",
             "timeout": 5
           }
         ]

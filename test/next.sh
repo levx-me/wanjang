@@ -93,6 +93,42 @@ err=$(echo '{"session_crons":[{"prompt":"/wanjang:next check"}],"transcript_path
 { [ -z "$err" ] && [ $rc = 0 ]; } || bad "HOME unset / odd input: rc=$rc stderr=$err"
 err=$(echo 'garbage' | env -u HOME "$N" stop 2>&1 >/dev/null); [ -z "$err" ] || bad "garbage stderr: $err"
 
+# ---- prompt (UserPromptSubmit): block checks that would find nothing
+rm -f "$T"/cfg/wanjang/next/*
+pr() {  # want(block|pass) label prompt
+  out=$(jq -nc --arg p "$3" '{session_id:"s1",prompt:$p}' | "$N" prompt); rc=$?
+  got=pass; [ -n "$out" ] && got=block
+  [ $rc = 0 ] || bad "$2: exit $rc"
+  [ "$got" = "$1" ] || bad "$2: want $1 got $got"
+  [ "$got" = pass ] || jq -e '.decision=="block" and (.reason|startswith("·"))' <<<"$out" >/dev/null || bad "$2: wrong JSON: $out"
+}
+C='/wanjang:next check'
+pr pass "no state" "$C"
+"$N" on
+pr pass "on, never checked" "$C"
+pr pass "on, non-check prompt" "fix the bug"
+"$N" scan --periodic --cwd "$R" >/dev/null
+pr block "on, checked just now" "$C"
+pr block "padded prompt" " $C "
+pr pass "recent but another prompt" "/wanjang:next check now"
+pr pass "recent but status" "/wanjang:next status"
+st "{\"on\":true,\"last_check\":$(( $(date +%s) - 1600 ))}"
+pr pass "on, checked 26 min ago" "$C"
+st "{\"on\":true,\"last_check\":$(( $(date +%s) - 1400 ))}"
+pr block "on, checked 23 min ago" "$C"
+"$N" off
+pr pass "off, first fire reaches the model (leftover cron sweep)" "$C"
+pr block "off, second fire" "$C"
+pr pass "off, other prompt" "hello"
+"$N" on; "$N" off
+pr pass "off again resets the sweep" "$C"
+echo '{"on":false' > "$T/cfg/wanjang/next/s1.json"
+pr pass "corrupt state" "$C"
+out=$(echo 'garbage' | "$N" prompt 2>&1); [ -z "$out" ] || bad "garbage stdin printed: $out"
+out=$(echo '{"session_id":"s1","prompt":5}' | "$N" prompt 2>&1); [ -z "$out" ] || bad "odd prompt printed: $out"
+jq -e '.hooks.UserPromptSubmit[0].hooks[0].command|endswith("bin/next\" prompt")' hooks/hooks.json >/dev/null || bad "hooks.json lacks the UserPromptSubmit prompt hook"
+rm -f "$T"/cfg/wanjang/next/*
+
 # ---- scan
 fp() { "$N" scan --cwd "$R" | awk -F'\t' -v k="$1" '$1==k{print $2}'; }
 [ -z "$(fp uncommitted)" ] || bad "clean repo shows uncommitted"
