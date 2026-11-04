@@ -39,5 +39,15 @@ printf 'Status: done\n## Goal\nresearch it\nShipped: A report | where: /x/report
 hook wanjang:pm "$N"; hook wanjang:pm "$N"
 ok S5 1 "$("$L" show --repo - | wc -l | tr -d ' ')"
 ok S5-where "/x/report.md" "$("$L" show --repo - --json | jq -r '.[0].where')"
+# fix round: " · " in text, same slug in two repos, bulleted lines, ~/.claude runs under another config dir, missing values
+mkdir -p "$R/.git/wanjang/run2"; printf 'Status: done\n- Shipped: A · B | where: x · y\n' > "$R/.git/wanjang/run2/log.md"
+hook; ok F1 "A - B" "$("$L" show --repo proj --json | jq -r '.[] | select(.run | endswith("run2")) | .shipped')"
+ok F1-where "x - y" "$("$L" show --repo proj --json | jq -r '.[] | select(.run | endswith("run2")) | .where')"
+git -C "$T" init -q proj2; mkdir -p "$T/proj2/.git/wanjang/run1"; cp "$R/.git/wanjang/run1/log.md" "$T/proj2/.git/wanjang/run1/"
+hook wanjang:pm "$T/proj2"; ok F2 1 "$("$L" show --repo proj2 | wc -l | tr -d ' ')"
+ok F3-goal "lists overflow" "$("$L" show --repo proj2 --json | jq -r '.[0].why')"
+mkdir -p "$HOME/.claude/wanjang/runs/h1"; printf 'Status: done\n- Shipped: H | where: none\n' > "$HOME/.claude/wanjang/runs/h1/log.md"
+hook wanjang:pm "$N"; ok F4 1 "$("$L" show --json | jq '[.[] | select(.shipped == "H")] | length')"
+"$L" show --repo 2>/dev/null; ok F5-repo 2 $?; "$L" show --since 2>/dev/null; ok F5-since 2 $?
 [ $fail = 0 ] && echo "ledger: all cases pass"
 exit $fail

@@ -16,17 +16,18 @@ hook() {
   dir=$(git -C "${cwd:-.}" rev-parse --path-format=absolute --git-common-dir 2>/dev/null) && repo=$(basename "$(dirname "$dir")") || { dir=; repo=-; }
   mkdir -p "$home/wanjang"
   { [ -n "$dir" ] && find "$dir/wanjang" -maxdepth 2 -name log.md -mmin -360 2>/dev/null
-    find "$home/wanjang/runs" -maxdepth 2 -name log.md -mmin -360 2>/dev/null; } | while IFS= read -r log; do
+    find "$home/wanjang/runs" -maxdepth 2 -name log.md -mmin -360 2>/dev/null
+    [ "$home" != "$HOME/.claude" ] && find "$HOME/.claude/wanjang/runs" -maxdepth 2 -name log.md -mmin -360 2>/dev/null; } | while IFS= read -r log; do
     head -n 1 "$log" | grep -q '^Status: done' || continue
-    text=$(grep -m1 '^Shipped:' "$log") || continue
+    text=$(grep -m1 -E '^[-* ]*Shipped:' "$log") || continue
     run=$(dirname "$log")
-    case "$run" in "$home"/wanjang/runs/*) r=-; folder="${run/#$HOME/\~}" ;; *) r=$repo; folder=".git/wanjang/$(basename "$run")" ;; esac
-    [ -f "$file" ] && awk -v f=" · $folder" 'substr($0, length($0) - length(f) + 1) == f { found = 1 } END { exit !found }' "$file" && continue
-    text=${text#Shipped:}; shipped=${text%% | where:*}; where=none
+    case "$run" in "$home"/wanjang/runs/*|"$HOME"/.claude/wanjang/runs/*) r=-; folder="${run/#$HOME/\~}" ;; *) r=$repo; folder=".git/wanjang/$(basename "$run")" ;; esac
+    [ -f "$file" ] && awk -F' · ' -v r="$r" -v f="$folder" '$2 == r && $NF == f { found = 1 } END { exit !found }' "$file" && continue
+    text=${text#*Shipped:}; shipped=${text%% | where:*}; where=none
     case "$text" in *" | where:"*) where=${text#* | where:} ;; esac
     # Goal: the text after "Goal:" on its line, else the first non-empty line below a Goal heading; newlines collapsed.
-    why=$(awk '/^(#+ *|\*\*)?Goal/ { sub(/^[^:]*:?\**/, ""); if ($0 ~ /[^ ]/) { print; exit } g=1; next } g && /[^ ]/ { print; exit }' "$log")
-    clean() { printf '%s' "$1" | tr '\n\t' '  ' | sed 's/^ *//;s/ *$//;s/  */ /g' | cut -c1-"$2"; }
+    why=$(awk '/^[-* ]*(#+ *|\*\*)?Goal/ { sub(/^[^:]*:?\**/, ""); if ($0 ~ /[^ ]/) { print; exit } g=1; next } g && /[^ ]/ { print; exit }' "$log")
+    clean() { printf '%s' "$1" | tr '\n\t' '  ' | sed 's/ · / - /g' | sed 's/^ *//;s/ *$//;s/  */ /g' | cut -c1-"$2"; }
     line="- $(date +%F) · $r · $(clean "$shipped" 100) · why: $(clean "$why" 120) · $(clean "$where" 200) · $folder"
     printf '%s\n' "$line" >> "$file"  # ponytail: single >> append; add flock if two PMs ever interleave
   done
@@ -38,8 +39,8 @@ show() {
   while [ $# -gt 0 ]; do
     case "$1" in
       --week) since=7d ;;
-      --since) since=${2:-}; shift ;;
-      --repo) repo=${2:-}; shift ;;
+      --since) [ $# -ge 2 ] || { echo "ledger show: --since needs a value" >&2; return 2; }; since=$2; shift ;;
+      --repo) [ $# -ge 2 ] || { echo "ledger show: --repo needs a value" >&2; return 2; }; repo=$2; shift ;;
       --here) repo=$(repo_of .) || repo=- ;;
       --json) json=1 ;;
       *) echo "ledger show: unknown option $1" >&2; return 2 ;;
