@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# SubagentStop hook: the PM may not report while a run log it wrote is still "in progress".
+# SubagentStop hook: the PM may not report while a run log it wrote is still "in progress"; it may end a turn
+# to wait while a worker is marked running in that log's Tasks table.
 # It is sent back once to close the log (Status: done, or stopped with why); the second stop
 # goes through (stop_hook_active), so it can never loop.
 set -u
@@ -11,5 +12,7 @@ dir=$(git -C "${cwd:-.}" rev-parse --path-format=absolute --git-common-dir 2>/de
 # Logs this run could have written: touched in the last six hours.
 open=$(find "$dir/wanjang" -maxdepth 2 -name log.md -mmin -360 2>/dev/null | xargs grep -l '^Status: in progress' 2>/dev/null | head -n 1)
 [ -n "$open" ] || exit 0
+# A worker marked running in its Tasks table: the PM is ending its turn to wait for hand-backs, not reporting.
+grep -qiE '^\|.*\|[[:space:]]*running[[:space:]]*\|' "$open" && exit 0
 jq -n --arg log "$open" '{decision: "block",
-  reason: ("Your run log still says Status: in progress (" + $log + "). Set its first line to Status: done, or Status: stopped with why, then give your completion report.")}'
+  reason: ("Your run log still says Status: in progress (" + $log + "). Set its first line to Status: done, or Status: stopped with why, then give your completion report. If you are waiting for workers, mark them running in its Tasks table instead.")}'

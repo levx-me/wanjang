@@ -14,6 +14,10 @@ check block wanjang:pm false   # still open: sent back once
 check pass  wanjang:pm true    # the second stop goes through
 check pass  wanjang:builder false   # not the PM
 check block wanjang:wanjang false   # old name: still the PM
+printf 'Status: in progress\n| task | worker | status |\n| t1 | builder | running |\n' > "$T/.git/wanjang/run1/log.md"
+check pass  wanjang:pm false   # waiting for a running worker
+printf 'Status: in progress\n| task | worker | status |\n| t1 | builder | done |\n' > "$T/.git/wanjang/run1/log.md"
+check block wanjang:pm false   # every worker back: report only once the log is closed
 printf 'Status: done\n' > "$T/.git/wanjang/run1/log.md"
 check pass  wanjang:pm false   # closed
 printf 'Status: in progress\n' > "$T/.git/wanjang/run1/log.md"; touch -t 202601010000 "$T/.git/wanjang/run1/log.md"
