@@ -449,8 +449,8 @@ def promise_cmd(a, now):
         at = when_ts(a.at, now) if a.at else None
         at = int(at) if at else at
         ev, fo = dur(a.every), dur(a.__dict__["for"])
-        if not (a.at or a.when) or (a.at and at is None) or ev is None or fo is None or not a.what.strip():
-            print('usage: next promise add "WHAT" (--at T | --when CMD) [--every 30m] [--for 14d] [--words W] [--why Y] '
+        if not (a.at or a.when) or (a.at and at is None) or ev is None or ev < 60 or fo is None or not a.what.strip():
+            print('usage: next promise add "WHAT" (--at T | --when CMD) [--every 30m, at least 1m] [--for 14d] [--words W] [--why Y] '
                   '[--fp E] [--by user|agent] [--cwd DIR]  (T: ISO 8601 or +30m|+2h|+3d)', file=sys.stderr)
             sys.exit(2)
         proj = project(a.cwd)
@@ -493,7 +493,8 @@ def promise_cmd(a, now):
             hit = [(p, w) for p, (k, w) in hit if k]
             if hit:
                 print("Promises due here. After you handle the user's first message, ask about the first one with the "
-                      "wanjang:next check's promise question (run `next ask promise:ID FP` first; `next scan` gives the FP):")
+                      "wanjang:next check's promise question (run `\"{0}\" ask promise:ID FP` first; `\"{0}\" scan` gives the FP; "
+                      "this is wanjang's bin/next, not a `next` on PATH, which may be Next.js):".format(os.path.realpath(__file__)))
                 for p, w in hit[:3]:
                     print(f"- {p['id']}: {pline(p, w)}")
                 if len(hit) > 3:
@@ -537,14 +538,46 @@ def promise_cmd(a, now):
 
 # ---- trust ladder: a kind of work the user keeps saying yes to is done without asking, then reported
 PROMOTE = ("verify", "test", "docs", "commit", "relay")
-# never auto, whatever the key: matched on the key and --what (the skill's outward rule is primary)
-OUTWARD = re.compile(r"push|deploy|publish|release|migrat|delete|drop|\brm\s|install|upgrade|send|email|post|comment|pay", re.I)
+# never auto, whatever the key: matched on the key and --what (the skill's outward rule is primary). A denylist is
+# never complete, so `auto` also needs SAFE below: anything unrecognised is asked.
+OUTWARD = re.compile(
+    r"push|deploy|publish|release|\bship|\blive\b|roll ?out|promot|\bprod\b|production|migrat|alter table|schema|"
+    r"\bdelet|\bdrop|\brm\b|rmdir|unlink|\bremov|truncat|purge|\bwipe|\beras|\bclean|"
+    r"install|upgrad|depend|\b(npm|pnpm|bun|pip3?|pipx|gem|cargo|composer|poetry|uv) (i|add|install|update|upgrade|up|get)\b|"
+    r"\b(yarn|brew|apt|apt get|go get)\b|terraform|kubectl|\bhelm\b|\bapply\b|"
+    r"\bsync|remote|origin|\breset|merge|rebase|\bpr\b|pull request|\bgh\b|\bissue|"
+    r"upload|\bscp\b|rsync|\bftp|\bcurl\b|wget|"
+    r"\bsend|messag|notif|\bping|\btell|\bmail|\bemail|slack|tweet|\bdm\b|\btext|\brepl(y|ies)\b|\bpost|comment on|"
+    r"\bcall\b|invit|\bpay|\bpaid|\bbuy|purchas|\bcharg|\bbill|subscri|transfer|\bfund|invoice|refund")
+# the same text with every separator dropped, so "p-u-s-h it" or "pu sh" is still seen; only stems long enough
+# not to turn up across word joins
+JOINED = re.compile(r"push|deploy|publish|release|migrat|delet|install|upgrad|upload|rollout|truncat|purge|rmdir|unlink|"
+                    r"terraform|kubectl|production|email|tweet|subscri|transfer|invoice|rebase|rsync|payment")
+TESTS = r"(re ?)?run( \w+){0,3} (tests?|test suite|specs?|lint|linters?|typecheck|type check|build check)\b|(lint|typecheck)\b"
+# a kind is `auto` only when --what starts with its own safe wording
+SAFE = {k: re.compile(v) for k, v in (
+    ("test", TESTS),
+    ("verify", TESTS + r"|(verify|check|confirm|review|recheck)\b"),
+    ("docs", r"(update|fix|edit|correct|tidy|reword|rewrite|write|clarify|add to)( \w+){0,3} "
+             r"(readme|docs?|documentation|comments?|docstrings?|changelog|notes|\w+ md)\b"),
+    ("commit", r"commit\b"),
+    ("relay", r"(relay|hand|pass|report back)\b"))}
 YES_N, YES_AGE, YES_WIN, YES_KEEP, AUTO_KEEP, STRETCH, DAYMAX = 3, 86400, 14 * 86400, 10, 20, 2, 6
 STALE = 3600  # ponytail: a running auto action never closed by `did` stops blocking after an hour
 
 
+def words(s):
+    """lowercase words, one space apart: what the guard reads"""
+    return " ".join(re.findall(r"[a-z0-9]+", str(s or "").lower()))
+
+
+def outward(s):
+    w = words(s)
+    return bool(OUTWARD.search(w) or JOINED.search(w.replace(" ", "")))
+
+
 def kind_of(key, what=""):
-    if OUTWARD.search(key) or OUTWARD.search(what or ""):
+    if outward(key) or outward(what):
         return "outward"
     if key == "uncommitted":
         return "commit"
@@ -630,7 +663,8 @@ def ask_level(d, sid, a, k, now):
     changed, v = dropped(t, a.cwd, now), "ask"
     au = t["auto"]
     done = [e for e in au if e.get("state") != "asked"]
-    if d.get("on") is True and (a.what or "").strip() and level(t, k, now) == "auto" \
+    if d.get("on") is True and k in SAFE and SAFE[k].match(words(a.what)) and not outward(a.what) \
+            and level(t, k, now) == "auto" \
             and not any(e.get("state") == "running" and now - num(e.get("at")) < STALE for e in au) \
             and sum(1 for e in done if e.get("session") == sid and num(e.get("at")) > num(d.get("last_prompt"))) < STRETCH \
             and sum(1 for e in done if now - num(e.get("at")) < 86400) < DAYMAX:

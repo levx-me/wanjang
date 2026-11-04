@@ -256,6 +256,8 @@ for i in 3 4 5 6; do "$N" promise add "t$i" --at +1m --cwd "$RB" >/dev/null; don
 clk 100; out=$("$N" promise due --cwd "$RB")
 { [ "$(grep -c '^- p' <<<"$out")" = 3 ] && grep -q 'and 2 more' <<<"$out" && [ ! -e "$Z" ]; } || bad "due: $out"
 [ -z "$("$N" promise due --cwd "$R")" ] || bad "due printed for a project without promises"
+grep -qF "run \`\"$N\" ask promise:ID FP\` first" <<<"$out" && grep -q 'not a `next` on PATH, which may be Next.js' <<<"$out" || bad "due: should name bin/next by path: $out"
+for e in 0m 30s; do "$N" promise add "fast $e" --when true --every "$e" --cwd "$R" >/dev/null 2>&1; [ $? = 2 ] || bad "--every $e should be refused (at least 1m)"; done
 # 18
 reset; echo '{"promises":[' > "$PF"; echo one > "$R/a.txt"; git -C "$R" add a.txt
 "$N" scan --cwd "$R" | grep -q '^uncommitted' || bad "corrupt promises.json broke scan"
@@ -351,6 +353,77 @@ jq --argjson y "$yl" '.kinds += {resume:{yes:$y},other:{yes:$y},promise:{yes:$y}
 for k in task:1 run:r1 promise:p1 foo:bar todo; do [ "$(ak "$k" "$RANDOM" "look at it")" = ask ] || bad "5: $k came back auto"; done
 [ "$(ak commit:ok o1 "commit the verified work")" = auto ] || bad "5: commit itself should still be auto"
 "$N" did commit:ok o1 ask --cwd "$L"
+# 5b: auto needs the kind's own wording and nothing outward, spelled any way; a denylist is never complete
+lreset; three test >/dev/null; three docs >/dev/null; three commit >/dev/null; clk $((3*D))
+while IFS= read -r w; do
+  for kp in "commit:g=" "test:g=run the tests, then " "docs:g=update the README, then " "commit:g=commit the files, then "; do
+    [ "$(ak "${kp%%=*}" "$RANDOM$RANDOM" "${kp#*=}$w")" = ask ] || bad "5b: '${kp#*=}$w' came back auto"
+  done
+done <<'EOP'
+remove old build dirs
+rmdir build
+unlink the cache file
+truncate the log table
+purge the cache
+wipe the tmp dir
+erase the old builds
+rm build
+npm i x
+pip add requests
+brew install jq
+apt-get install jq
+yarn
+go get example.com/x
+update the dependencies
+terraform apply
+kubectl apply -f x.yaml
+ship it to production
+go live
+rollout the new version
+promote to prod
+sync with remote
+git remote update
+git reset --hard origin/main
+merge to main
+open a PR
+gh pr create
+gh pr merge 12
+upload the build
+scp build host:
+rsync dist/ host:
+message Alice
+notify the team
+ping Bob
+tell the customer
+mail the report
+e-mail the report
+post it on slack
+tweet the release
+DM Carol
+text Dan
+reply to the thread
+buy a paid plan
+charge the card
+bill the customer
+subscribe to the pro plan
+transfer funds
+alter table users
+schema change
+p-u-s-h it
+pu sh it
+EOP
+for w in "look at the tests" "please run the tests" "tidy up" "do the usual"; do
+  [ "$(ak test:g "$RANDOM" "$w")" = ask ] || bad "5b: unrecognised '$w' came back auto"
+done
+while IFS='=' read -r k w; do
+  fp="c$RANDOM"; r=$(ak "$k" "$fp" "$w"); [ "$r" = auto ] || bad "5b: control '$w' ($k) should be auto: $r"
+  "$N" did "$k" "$fp" ask --cwd "$L"
+done <<'EOC'
+test:g=run the unit tests
+test:g=run tests
+docs:g=update the README
+commit:g=commit the files I changed
+EOC
 # 6: pin and reset
 "$N" trust commit ask --cwd "$L" >/dev/null; clk $((3*D + 1)); [ "$(ak commit:x p1 "commit it")" = ask ] || bad "6: pinned should be ask"
 "$N" trust --cwd "$L" | grep -q $'^commit\task\t3/3\tpinned' || bad "6: table should show the pin"
