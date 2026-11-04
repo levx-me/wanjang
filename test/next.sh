@@ -13,7 +13,7 @@ bad() { echo "FAIL $*"; fail=1; }
 TR=$T/tr.jsonl
 user() { jq -nc --arg t "$1" --arg ts "$2" '{type:"user",timestamp:$ts,message:{role:"user",content:$t}}' >> "$TR"; }
 tool() { jq -nc --arg n "$1" '{type:"assistant",timestamp:"2026-11-04T10:00:05Z",message:{role:"assistant",content:[{type:"tool_use",id:"x",name:$n,input:{}}]}}' >> "$TR"; }
-at() { date -u -r $(($(date +%s) + $1)) +%Y-%m-%dT%H:%M:%SZ; }  # offset seconds from now
+at() { date -u -r $(($(date +%s) + $1)) +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -d "$1 sec" +%Y-%m-%dT%H:%M:%SZ; }  # offset seconds from now
 CRONS='[{"id":"c","schedule":"*/30 * * * *","recurring":true,"prompt":"/wanjang:next check"}]'
 stop() {  # want(fire|none) label [jq filter over the input]
   out=$(jq -nc --arg t "$TR" --argjson c "$CRONS" '{session_id:"s1",transcript_path:$t,stop_hook_active:false,session_crons:$c,background_tasks:[]}' \
@@ -47,6 +47,15 @@ stop fire "sidechain and bad lines skipped"
 out=$(echo 'garbage' | "$N" stop 2>&1); [ -z "$out" ] || bad "garbage stdin printed: $out"
 out=$(echo '{"session_crons":"x","background_tasks":5}' | "$N" stop 2>&1); [ -z "$out" ] || bad "odd fields printed: $out"
 
+# no timestamp on the prompt: skip
+rm -f "$T"/cfg/wanjang/next/*; : > "$TR"
+jq -nc '{type:"user",message:{role:"user",content:"go"}}' >> "$TR"; tool Bash
+stop none "prompt without timestamp"
+# HOME unset, odd input: nothing on stderr, exit 0
+err=$(echo '{"session_crons":[{"prompt":"/wanjang:next check"}],"transcript_path":"/nonexistent","session_id":"s1"}' | env -u HOME "$N" stop 2>&1 >/dev/null); rc=$?
+{ [ -z "$err" ] && [ $rc = 0 ]; } || bad "HOME unset / odd input: rc=$rc stderr=$err"
+err=$(echo 'garbage' | env -u HOME "$N" stop 2>&1 >/dev/null); [ -z "$err" ] || bad "garbage stderr: $err"
+
 # ---- scan
 fp() { "$N" scan --cwd "$R" | awk -F'\t' -v k="$1" '$1==k{print $2}'; }
 [ -z "$(fp uncommitted)" ] || bad "clean repo shows uncommitted"
@@ -68,6 +77,19 @@ touch -t 202601010000 "$R/.git/wanjang/r1/log.md"
 "$N" scan --periodic --cwd "$R" >/dev/null; rc=$?; [ $rc = 3 ] || bad "periodic after scan: exit $rc"
 [ -z "$("$N" scan --periodic --cwd "$R")" ] || bad "periodic printed output"
 env -u CLAUDE_CODE_SESSION_ID "$N" scan 2>/dev/null; [ $? = 2 ] || bad "no session should exit 2"
+
+# corrupt numbers in the state file
+mkdir -p "$T/cfg/wanjang/next"; echo '{"last_check":"abc","last_hook":"x","asked":"y"}' > "$T/cfg/wanjang/next/s1.json"
+"$N" scan --periodic --cwd "$R" >/dev/null 2>&1; [ $? = 0 ] || bad "corrupt last_check crashed scan"
+"$N" status >/dev/null 2>&1 || bad "status crashed on corrupt state"
+echo '{"last_hook":"x"}' > "$T/cfg/wanjang/next/s1.json"; : > "$TR"; user "go" "$(at -50)"; tool Bash
+stop fire "corrupt last_hook"
+# read-only state dir: scan still prints, one line on stderr, exit 0
+RO=$T/ro; mkdir -p "$RO/wanjang/next"; chmod 555 "$RO/wanjang/next"
+out=$(CLAUDE_CONFIG_DIR=$RO "$N" scan --cwd "$R" 2>"$T/err"); rc=$?
+{ [ $rc = 0 ] && grep -q '^uncommitted' <<<"$out" && grep -q '^next: cannot save state' "$T/err" && [ "$(wc -l <"$T/err")" -eq 1 ]; } || bad "read-only state dir: rc=$rc out=$out err=$(cat "$T/err")"
+chmod 755 "$RO/wanjang/next"
+rm -f "$T"/cfg/wanjang/next/*
 
 # ---- asked
 "$N" asked k1 v1; [ $? = 1 ] || bad "asked before ask should be 1"

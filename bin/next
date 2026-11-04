@@ -36,6 +36,13 @@ def sha(s):
     return hashlib.sha1(str(s).encode()).hexdigest()[:8]
 
 
+def num(v):
+    try:
+        return float(v)
+    except (TypeError, ValueError):
+        return 0.0
+
+
 def sdir():
     return os.path.join(os.environ.get("CLAUDE_CONFIG_DIR") or os.path.expanduser("~/.claude"), "wanjang", "next")
 
@@ -55,11 +62,15 @@ def load(sid):
 def save(sid, d):
     d["asked"] = d["asked"][-ASKED_MAX:]
     p = sdir()
-    os.makedirs(p, exist_ok=True)
-    fd, tmp = tempfile.mkstemp(dir=p, suffix=".tmp")
-    with os.fdopen(fd, "w") as f:
-        json.dump(d, f)
-    os.replace(tmp, os.path.join(p, f"{sid}.json"))
+    try:
+        os.makedirs(p, exist_ok=True)
+        fd, tmp = tempfile.mkstemp(dir=p, suffix=".tmp")
+        with os.fdopen(fd, "w") as f:
+            json.dump(d, f)
+        os.replace(tmp, os.path.join(p, f"{sid}.json"))
+    except OSError as e:
+        print(f"next: cannot save state ({p}): {e}", file=sys.stderr)
+        return
     me = f"{sid}.json"
     for f in glob.glob(p + "/*.json"):
         try:
@@ -136,7 +147,7 @@ def stop_hook():
             return
         d = load(sid)
         pt = ts(prompt[1]) if isinstance(prompt[1], str) else None
-        if pt is not None and float(d.get("last_hook") or 0) >= pt:
+        if pt is None or num(d.get("last_hook")) >= pt:
             return
         d["last_hook"] = time.time()
         save(sid, d)
@@ -236,7 +247,7 @@ def main():
     d, now = load(sid), time.time()
     asked = {(x.get("key"), x.get("fp")) for x in d["asked"] if isinstance(x, dict)}
     if a.cmd == "scan":
-        if a.periodic and now - float(d.get("last_check") or 0) < PERIOD:
+        if a.periodic and now - num(d.get("last_check")) < PERIOD:
             sys.exit(3)
         d["last_check"] = now
         save(sid, d)
@@ -250,7 +261,7 @@ def main():
     elif a.cmd == "asked":
         sys.exit(0 if (a.key, sha(a.fp)) in asked else 1)
     else:
-        age = lambda t: round(now - float(t)) if t else None
+        age = lambda t: round(now - num(t)) if num(t) else None
         o = dict(last_check_age=age(d.get("last_check")), last_hook_age=age(d.get("last_hook")), asked=len(d["asked"]))
         if a.json:
             print(json.dumps(o))

@@ -5,7 +5,7 @@ argument-hint: "on | off | status | check"
 ---
 Main session only: if you are a subagent, stop at once.
 
-`next` is a plugin `bin/` script, so on PATH; if not found, use `${CLAUDE_PLUGIN_ROOT}/bin/next`.
+Below, `next` means `"<this skill's base directory>/../../bin/next"` (not a `next` on PATH, which may be Next.js).
 
 Run the part of `$ARGUMENTS` that matches:
 
