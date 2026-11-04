@@ -46,7 +46,8 @@ prices are never done by the crew: they come back as steps for you.
   `Bad news (run 2026-11-04-auth): login tests failed twice after two fixes. Doing: fresh opus builder. You can: nothing needed.`
   The line reaches the main session through SendMessage to `main` (tested). It never asks and never stops the run. At most 3 per run; the final report repeats every one.
 - **Can't move the goalposts.** The plan fixes the test that defines done. `bin/guard` blocks workers from editing it or any run log
-  in the usual ways, and the checker runs it itself and compares the file's blob as the backstop. If the test is wrong the PM unlocks it, writes
+  in the usual ways (it reads the command line, so a `cd` then a write, a symlink, `>|` or a path built at run time can
+  slip past), and the checker runs it itself and compares the file's blob as the backstop. If the test is wrong the PM unlocks it, writes
   why under Decisions and sends you a bad-news line; the run goes on.
 - **Keeps the record for you.** Each finished run adds one line (what you can use now, why, commits, PR) to a ledger,
   one per user across repos. `/wanjang:now --week` (or `--since 2026-10-28`, `--repo X`) prints it: your weekly "what shipped".
