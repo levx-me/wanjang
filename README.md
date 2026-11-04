@@ -144,6 +144,7 @@ field: know-how for a field comes from playbooks.
 | `/wanjang:wanjang resume [run]` | Pick up a run that stopped (a crash, a lost connection, a restart) |
 | `/wanjang:docs <query> [dir]` | Find a section in .md/.txt/.html docs with `docindex` and answer from only those lines |
 | `/wanjang:now` | What each running agent is doing now, for how long, what is done and what looks stuck (`bin/status`, read-only) |
+| `/wanjang:next on\|off\|status` | A quiet look-ahead: when idle, asks once whether to do the most likely next piece of work (off by default, this session only) |
 | `/wanjang:slim` | Move rules only the main session needs out of what every subagent loads (see below) |
 | `/wanjang:relay <session> <request>` · `status` | Hand work to the Claude session that owns another repo on this machine (Claude Code's ListAgents/SendMessage) and track its report |
 | `/wanjang:optimize` | See where this session's tokens go and fix what applies, with agents still running |
@@ -182,6 +183,14 @@ directly. The choice is saved (no secrets) in `~/.config/wanjang/provider.json` 
 settings file but keeps the saved choices. The `/model` picker keeps showing Opus, Sonnet and Haiku: Claude Code's
 gateway model discovery (`CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY`) lists only IDs that contain `claude` or `anthropic`
 and runs only at startup, so it cannot surface other OpenRouter models; the picked models answer under those three names.
+
+### Next work: `/wanjang:next`
+
+`/wanjang:next on` turns on a quiet look-ahead for this session only; it is off by default (`off` stops it, `status` shows it). When the main session is idle it looks for the single most likely next useful piece of work and asks you with one wizard question ("Do X? why now / what it costs"; Do it (Recommended) / Not now). It does the work only on a yes, handled exactly as if you had asked, through the normal routing; push, deploy and irreversible steps are still asked separately.
+
+It looks once right after a piece of work finishes (a Stop hook, main session only, never in subagents; not after a plain question-and-answer turn, not while its own background work runs), and every 30 minutes while the session is idle (a session cron Claude Code runs between turns, which survives `--resume`; Claude Code ends recurring schedules after 7 days, so turn it on again then). It reads this conversation and its task list (follow-ups such as verification, docs or a commit, stalled pending tasks, subagent results not yet reported), the repository (uncommitted changes, TODO/FIXME on changed lines, the "next" section of `MEMORY.md`, unfinished wanjang runs, failing tests or lint already seen; it never runs your tests just to look) and other sessions (relay requests with no report back, a session waiting on this one). Not GitHub.
+
+Nothing found means no question and no message. One question per check, and no further check while one is open. A candidate you declined or left unanswered is not asked again until its evidence changes (a new commit, a new failure, a new message). `bin/next` keeps that record in `~/.claude/wanjang/next/<session id>.json` (honours `CLAUDE_CONFIG_DIR`), pruned after 7 days. The check is one shell scan in the main session; no subagent is spawned to look.
 
 ## Main-session rules and `/wanjang:slim`
 
@@ -282,11 +291,12 @@ and leaving browser testing to QA.
 | `bin/main-rules` | SessionStart hook: injects `main-rules/*.md` into the main session only |
 | `bin/close` | SubagentStop hook: sends the PM back once if it tries to report with its run log still open |
 | `bin/status` | The snapshot behind `/wanjang:now`: agents (nested, waiting tool call, stuck), run logs, open tasks |
+| `bin/next` | Stop hook and the scan/record behind `/wanjang:next` |
 | `bin/usage` | The token report behind `/wanjang:optimize` |
 | `bin/provider`, `bin/openrouter-key`, `bin/provider-hook`, `bin/provider-fail` | `/wanjang:provider`, its key helper, the hook that runs it with no model, and the one that switches back on a billing error |
 | `bin/docindex` | The local doc index behind `/wanjang:docs` |
-| `skills/` | `/wanjang:wanjang`, `/wanjang:optimize`, `/wanjang:now`, `/wanjang:docs`, `/wanjang:slim`, `/wanjang:relay` and `/wanjang:provider` |
-| `test/` | `guard.sh`, `read-warn.sh`, `deliverables.sh`, `docindex.sh`, `main-rules.sh`, `route.sh`, `close.sh`, `usage.sh`, `status.sh`, `provider.sh` and `playbooks.sh` |
+| `skills/` | `/wanjang:wanjang`, `/wanjang:optimize`, `/wanjang:now`, `/wanjang:next`, `/wanjang:docs`, `/wanjang:slim`, `/wanjang:relay` and `/wanjang:provider` |
+| `test/` | `guard.sh`, `read-warn.sh`, `deliverables.sh`, `docindex.sh`, `main-rules.sh`, `route.sh`, `close.sh`, `usage.sh`, `status.sh`, `provider.sh`, `next.sh` and `playbooks.sh` |
 
 ```sh
 for t in test/*.sh; do "$t"; done   # each prints its own pass summary

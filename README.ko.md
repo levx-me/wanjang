@@ -141,6 +141,7 @@ Claude 세션에서는 PATH에 있어요. `/wanjang:docs <query> [dir]`가 이�
 | `/wanjang:wanjang resume [run]` | 멈춘 run을 이어 해요(충돌, 연결 끊김, 재시작) |
 | `/wanjang:docs <query> [dir]` | .md/.txt/.html 문서에서 `docindex`로 섹션을 찾고, 찾은 줄만으로 답해요 |
 | `/wanjang:now` | 돌아가는 에이전트가 지금 무엇을, 얼마나 오래 하는지, 끝난 것과 막힌 것 같은 것을 알려줘요(`bin/status`, 읽기 전용) |
+| `/wanjang:next on\|off\|status` | 조용한 앞서 보기: 쉬는 동안 다음에 할 가장 그럴듯한 작업을 할지 한 번 물어봐요(기본 꺼짐, 이 세션만) |
 | `/wanjang:slim` | 메인 세션에만 필요한 규칙을 모든 서브에이전트가 읽는 곳에서 빼내요(아래 참고) |
 | `/wanjang:relay <세션> <요청>` · `status` | 이 컴퓨터에서 다른 저장소를 맡은 Claude 세션에 일을 넘기고 보고를 추적해요(Claude Code의 ListAgents/SendMessage) |
 | `/wanjang:optimize` | 에이전트를 멈추지 않은 채로, 이 세션의 토큰이 어디에 쓰이는지 보고 해당하는 것만 고쳐요 |
@@ -178,6 +179,14 @@ OpenRouter 모델을 가격대별로 보여 주고 자리마다 하나씩 물어
 그대로 머물러요. 그래도 OpenRouter에서 결제나 인증 오류로 턴이 실패하면 `bin/provider-fail`이 구독으로 되돌리고 데스크톱
 알림으로 알려 줘요. `default`, `subscription`, `anthropic`은 `claude`와 같아요. 모델이 있든 없든 언제나 통하는 비상구는
 `! <플러그인 폴더>/bin/provider claude`예요.
+
+### 다음 작업: `/wanjang:next`
+
+`/wanjang:next on`은 이 세션에서만 조용한 앞서 보기를 켜요. 기본값은 꺼짐이고, `off`로 끄고 `status`로 상태를 봐요. 메인 세션이 쉬고 있으면 다음에 가장 쓸모 있을 작업 하나를 찾아 위저드 질문 하나로 물어봐요("X를 할까요? 왜 지금 / 무엇이 드는지", 선택지는 Do it (Recommended) / Not now). 승인했을 때만 실행하고, 직접 시킨 것과 똑같이 평소 라우팅으로 처리해요. push, 배포, 되돌릴 수 없는 단계는 따로 물어봐요.
+
+살펴보는 때는 작업 하나가 끝난 직후 한 번(Stop 훅, 메인 세션 전용이고 서브에이전트에서는 돌지 않아요. 단순 질의응답 턴 뒤나 자체 백그라운드 작업이 도는 동안은 건너뛰어요), 그리고 세션이 쉬는 동안 30분마다예요(Claude Code가 턴 사이에 돌리는 세션 cron이라 `--resume`해도 이어져요. Claude Code는 반복 일정을 7일 뒤에 끝내므로 그때 다시 켜 주세요). 보는 대상은 이 대화와 작업 목록(검증, 문서, 커밋 같은 후속 작업, 멈춘 대기 작업, 아직 보고하지 않은 서브에이전트 결과), 저장소(커밋하지 않은 변경, 바뀐 줄의 TODO/FIXME, `MEMORY.md`의 "next" 섹션, 끝나지 않은 wanjang run, 이미 본 실패한 테스트나 린트. 보려고 테스트를 돌리지는 않아요), 그리고 다른 세션(보고가 안 온 relay 요청, 이 세션을 기다리는 세션)이에요. GitHub는 보지 않아요.
+
+찾은 것이 없으면 질문도 메시지도 없어요. 한 번의 점검에 질문은 하나이고, 질문이 열려 있는 동안은 다음 점검이 돌지 않아요. 거절했거나 답하지 않은 후보는 근거가 바뀔 때까지(새 커밋, 새 실패, 새 메시지) 다시 묻지 않아요. `bin/next`가 그 기록을 `~/.claude/wanjang/next/<세션 id>.json`에 두고(`CLAUDE_CONFIG_DIR`를 따라요) 7일 뒤 지워요. 점검은 메인 세션의 셸 스캔 한 번이고, 살펴보려고 서브에이전트를 띄우지 않아요.
 
 ## 메인 세션 전용 규칙과 `/wanjang:slim`
 
@@ -277,11 +286,12 @@ Sonnet, 오래 일한 워커를 이어 쓰는 대신 새로 띄우기, 브라우
 | `bin/main-rules` | SessionStart 훅: `main-rules/*.md`를 메인 세션에만 넣어요 |
 | `bin/close` | SubagentStop 훅: run 기록이 열린 채로 보고하려 하면 PM을 한 번 돌려보내요 |
 | `bin/status` | `/wanjang:now`의 스냅샷: 에이전트(중첩, 기다리는 도구 호출, 막힘), run 로그, 열린 작업 |
+| `bin/next` | `/wanjang:next`의 Stop 훅과 그 스캔·기록 |
 | `bin/usage` | `/wanjang:optimize`의 토큰 보고서 |
 | `bin/provider`, `bin/openrouter-key`, `bin/provider-hook`, `bin/provider-fail` | `/wanjang:provider`, 키 도우미, 모델 없이 실행하는 훅, 결제 오류 때 되돌리는 훅 |
 | `bin/docindex` | `/wanjang:docs`가 쓰는 로컬 문서 색인 |
-| `skills/` | `/wanjang:wanjang`, `/wanjang:optimize`, `/wanjang:now`, `/wanjang:docs`, `/wanjang:slim`, `/wanjang:relay`, `/wanjang:provider` |
-| `test/` | `guard.sh`, `read-warn.sh`, `deliverables.sh`, `docindex.sh`, `main-rules.sh`, `route.sh`, `close.sh`, `usage.sh`, `status.sh`, `provider.sh`, `playbooks.sh` |
+| `skills/` | `/wanjang:wanjang`, `/wanjang:optimize`, `/wanjang:now`, `/wanjang:next`, `/wanjang:docs`, `/wanjang:slim`, `/wanjang:relay`, `/wanjang:provider` |
+| `test/` | `guard.sh`, `read-warn.sh`, `deliverables.sh`, `docindex.sh`, `main-rules.sh`, `route.sh`, `close.sh`, `usage.sh`, `status.sh`, `provider.sh`, `next.sh`, `playbooks.sh` |
 
 ```sh
 for t in test/*.sh; do "$t"; done   # 테스트마다 통과 요약을 출력해요
