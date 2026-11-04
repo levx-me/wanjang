@@ -48,3 +48,11 @@ The repository is MIT. Exceptions and sources are below.
 | launch-plan | coreyhaines31/marketingskills launch, emails (MIT); anthropics/knowledge-work-plugins marketing campaign-plan, email-sequence (Apache-2.0) |
 | pricing-packaging | coreyhaines31/marketingskills pricing (MIT); wondelai/skills monetizing-innovation (MIT); phuryn/pm-skills pricing-strategy, monetization-strategy (MIT) |
 | seo-basics | coreyhaines31/marketingskills seo-audit, ai-seo (MIT); structure only from anthropics/knowledge-work-plugins marketing seo-audit (Apache-2.0, not used otherwise) |
+
+## Skills
+
+The `brief` skill (`skills/brief/`) is written in our own words; these sources shaped its ideas, and no text is copied.
+
+| Skill | Sources and licences |
+|---|---|
+| brief | nicobailon/visual-explainer (https://github.com/nicobailon/visual-explainer, MIT): in-page ask and options, build receipt, verdict first; olivervvvv/plain-language-skill (https://github.com/olivervvvv/plain-language-skill, MIT): top block that stands alone, content headings, "source doesn't say", tables to bullets; blader/humanizer (https://github.com/blader/humanizer, MIT): a separate pass for tells, "added or dropped a fact?" check; anthropics/knowledge-work-plugins stakeholder-update, write-spec, status-report and anthropics/skills internal-comms (Apache-2.0): decision line, risk sentence, non-goals, open questions by owner; anthropics/skills doc-coauthoring (licence not confirmed, idea only): reader test with a context-free agent; plain-language guidance (GOV.UK, digital.gov, NN/G, ADR practice, BLUF; cited, ideas only) |

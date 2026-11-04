@@ -8,7 +8,7 @@ Hand Claude Code a multi-step job: a PM splits it across a crew, a second agent 
 and you review the choices it made in one list at the end.
 
 [![Claude Code plugin](https://img.shields.io/badge/Claude_Code-plugin-d97757)](https://code.claude.com/docs/en/plugins)
-[![version](https://img.shields.io/badge/version-0.11.0-blue)](.claude-plugin/plugin.json)
+[![version](https://img.shields.io/badge/version-0.12.0-blue)](.claude-plugin/plugin.json)
 [![license](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
 English | [한국어](README.ko.md)
@@ -152,6 +152,15 @@ URL and a verified / snippet / unverified flag). Builders then write the parts i
 conclusion and recomputes every derived number, and the checker verifies the key numbers and quotes. You get
 `research.md` and its source notes (plus `dataset.json` when you ask for data).
 
+### Pages and briefs
+
+Two skills turn work into something you read. `/wanjang:visual-doc` builds a report, a dashboard or an explainer as one
+styled HTML page (a left table of contents, light and dark, small charts). `/wanjang:brief` writes a brief for
+non-developers: a short document in plain words whose top block alone says what was done and what is asked, with each
+decision a non-developer has to approve written as its own block and paired with an `AskUserQuestion`, so the
+answer is a click. Use `visual-doc` when the reader wants to look at numbers or understand how something works; use
+`brief` when someone has to decide or sign off and does not read code.
+
 ## The crew
 
 | Agent | Model | Effort | Edits the project | Does |
@@ -174,6 +183,8 @@ field: know-how for a field comes from playbooks.
 | `/wanjang:wanjang <work>` | Hand the work to the PM instead of doing it in this session |
 | `/wanjang:wanjang resume [run]` | Pick up a run that stopped (a crash, a lost connection, a restart) |
 | `/wanjang:docs <query> [dir]` | Find a section in .md/.txt/.html docs with `docindex` and answer from only those lines |
+| `/wanjang:visual-doc` | Turn a report, dashboard or explanation into one HTML page in a fixed style |
+| `/wanjang:brief` | Write a brief for non-developers: plain words, the decisions to approve, each paired with a question |
 | `/wanjang:now` | What each running agent is doing now, for how long, what is done and what looks stuck (`bin/status`, read-only) |
 | `/wanjang:now --week\|--since DATE\|--repo X` | What finished runs shipped, one line each, from the ledger at `~/.claude/wanjang/ledger.md` (honours `CLAUDE_CONFIG_DIR`; `bin/ledger`) |
 | `/wanjang:next on\|off\|status` | A quiet look-ahead: when idle, asks once whether to do the most likely next piece of work (off by default, this session only) |
@@ -366,8 +377,8 @@ and leaving browser testing to QA.
 | `bin/usage` | The token report behind `/wanjang:optimize` |
 | `bin/provider`, `bin/openrouter-key`, `bin/provider-hook`, `bin/provider-fail` | `/wanjang:provider`, its key helper, the hook that runs it with no model, and the one that switches back on a billing error |
 | `bin/docindex` | The local doc index behind `/wanjang:docs` |
-| `skills/` | `/wanjang:wanjang`, `/wanjang:optimize`, `/wanjang:now`, `/wanjang:next`, `/wanjang:docs`, `/wanjang:slim`, `/wanjang:relay` and `/wanjang:provider` |
-| `test/` | `guard.sh`, `read-warn.sh`, `deliverables.sh`, `docindex.sh`, `main-rules.sh`, `route.sh`, `close.sh`, `ledger.sh`, `usage.sh`, `status.sh`, `provider.sh`, `next.sh` and `playbooks.sh` |
+| `skills/` | `/wanjang:wanjang`, `/wanjang:optimize`, `/wanjang:now`, `/wanjang:next`, `/wanjang:docs`, `/wanjang:slim`, `/wanjang:relay`, `/wanjang:provider`, `/wanjang:visual-doc` and `/wanjang:brief` |
+| `test/` | `guard.sh`, `read-warn.sh`, `deliverables.sh`, `docindex.sh`, `main-rules.sh`, `route.sh`, `close.sh`, `ledger.sh`, `usage.sh`, `status.sh`, `provider.sh`, `next.sh`, `playbooks.sh` and `skills.sh` |
 
 ```sh
 for t in test/*.sh; do "$t"; done   # each prints its own pass summary

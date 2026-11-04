@@ -8,7 +8,7 @@
 대신 정한 것들은 끝에 목록 하나로 검토하면 돼요.
 
 [![Claude Code plugin](https://img.shields.io/badge/Claude_Code-plugin-d97757)](https://code.claude.com/docs/en/plugins)
-[![version](https://img.shields.io/badge/version-0.11.0-blue)](.claude-plugin/plugin.json)
+[![version](https://img.shields.io/badge/version-0.12.0-blue)](.claude-plugin/plugin.json)
 [![license](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
 [English](README.md) | 한국어
@@ -148,6 +148,15 @@ Claude 세션에서는 PATH에 있어요. `/wanjang:docs <query> [dir]`가 이�
 계산한 숫자를 모두 다시 계산해요. checker는 핵심 숫자와 인용을 확인해요. 결과로 `research.md`와 출처 노트를
 받아요(데이터를 요청하면 `dataset.json`도요).
 
+### 페이지와 브리프
+
+일한 내용을 읽을 수 있는 문서로 바꿔 주는 스킬이 둘 있어요. `/wanjang:visual-doc`은 보고서, 대시보드, 설명 자료를
+스타일이 정해진 HTML 페이지 하나로 만들어요(왼쪽 목차, 라이트/다크, 작은 차트). `/wanjang:brief`는 개발자가 아닌
+분을 위한 브리프를 써요. 쉬운 말로 쓴 짧은 문서이고, 맨 위 블록만 읽어도 무엇을 했고 무엇을 정해 달라는지 알 수
+있어요. 승인이 필요한 결정은 블록 하나씩 따로 쓰고 `AskUserQuestion`을 하나씩 붙여서, 클릭으로 답할 수 있어요.
+숫자를 보거나 어떻게 돌아가는지 이해하려면 `visual-doc`을, 코드를 안 읽는 사람이 결정하거나 승인해야 하면 `brief`를
+쓰세요.
+
 ## 크루
 
 | 에이전트 | 모델 | effort | 프로젝트 수정 | 하는 일 |
@@ -170,6 +179,8 @@ Claude 세션에서는 PATH에 있어요. `/wanjang:docs <query> [dir]`가 이�
 | `/wanjang:wanjang <work>` | 이 세션에서 하지 않고 PM에게 일을 넘겨요 |
 | `/wanjang:wanjang resume [run]` | 멈춘 run을 이어 해요(충돌, 연결 끊김, 재시작) |
 | `/wanjang:docs <query> [dir]` | .md/.txt/.html 문서에서 `docindex`로 섹션을 찾고, 찾은 줄만으로 답해요 |
+| `/wanjang:visual-doc` | 보고서, 대시보드, 설명을 정해진 스타일의 HTML 페이지 하나로 만들어요 |
+| `/wanjang:brief` | 개발자가 아닌 분을 위한 브리프를 써요: 쉬운 말, 승인할 결정, 결정마다 질문 하나 |
 | `/wanjang:now` | 돌아가는 에이전트가 지금 무엇을, 얼마나 오래 하는지, 끝난 것과 막힌 것 같은 것을 알려줘요(`bin/status`, 읽기 전용) |
 | `/wanjang:now --week\|--since DATE\|--repo X` | 끝난 run이 만든 것을 장부(`~/.claude/wanjang/ledger.md`, `CLAUDE_CONFIG_DIR` 따라감, `bin/ledger`)에서 한 줄씩 보여줘요 |
 | `/wanjang:next on\|off\|status` | 조용한 앞서 보기: 쉬는 동안 다음에 할 가장 그럴듯한 작업을 할지 한 번 물어봐요(기본 꺼짐, 이 세션만) |
@@ -358,8 +369,8 @@ Sonnet, 오래 일한 워커를 이어 쓰는 대신 새로 띄우기, 브라우
 | `bin/usage` | `/wanjang:optimize`의 토큰 보고서 |
 | `bin/provider`, `bin/openrouter-key`, `bin/provider-hook`, `bin/provider-fail` | `/wanjang:provider`, 키 도우미, 모델 없이 실행하는 훅, 결제 오류 때 되돌리는 훅 |
 | `bin/docindex` | `/wanjang:docs`가 쓰는 로컬 문서 색인 |
-| `skills/` | `/wanjang:wanjang`, `/wanjang:optimize`, `/wanjang:now`, `/wanjang:next`, `/wanjang:docs`, `/wanjang:slim`, `/wanjang:relay`, `/wanjang:provider` |
-| `test/` | `guard.sh`, `read-warn.sh`, `deliverables.sh`, `docindex.sh`, `main-rules.sh`, `route.sh`, `close.sh`, `ledger.sh`, `usage.sh`, `status.sh`, `provider.sh`, `next.sh`, `playbooks.sh` |
+| `skills/` | `/wanjang:wanjang`, `/wanjang:optimize`, `/wanjang:now`, `/wanjang:next`, `/wanjang:docs`, `/wanjang:slim`, `/wanjang:relay`, `/wanjang:provider`, `/wanjang:visual-doc`, `/wanjang:brief` |
+| `test/` | `guard.sh`, `read-warn.sh`, `deliverables.sh`, `docindex.sh`, `main-rules.sh`, `route.sh`, `close.sh`, `ledger.sh`, `usage.sh`, `status.sh`, `provider.sh`, `next.sh`, `playbooks.sh`, `skills.sh` |
 
 ```sh
 for t in test/*.sh; do "$t"; done   # 테스트마다 통과 요약을 출력해요
