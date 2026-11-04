@@ -15,5 +15,6 @@ export WANJANG_NOW=1800000100
 b=$(run "$T/home" "$T/projB")
 { grep -q '^Promises due here' <<<"$b" && grep -q 'check the release; due: time passed' <<<"$b"; } || { echo "FAIL no due notice: $b"; fail=1; }
 [ "$(run "$T/home" "$T/proj")" = "$base" ] || { echo "FAIL due notice in a project without promises"; fail=1; }
+grep -q "^- A PM message starting \`Bad news\`" <<<"$base" || { echo "FAIL no Bad news relay line"; fail=1; }
 [ $fail = 0 ] && echo "route: all passed"
 exit $fail

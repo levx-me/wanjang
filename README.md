@@ -8,7 +8,7 @@ Hand Claude Code a multi-step job: a PM splits it across a crew, a second agent 
 and you review the choices it made in one list at the end.
 
 [![Claude Code plugin](https://img.shields.io/badge/Claude_Code-plugin-d97757)](https://code.claude.com/docs/en/plugins)
-[![version](https://img.shields.io/badge/version-0.10.0-blue)](.claude-plugin/plugin.json)
+[![version](https://img.shields.io/badge/version-0.11.0-blue)](.claude-plugin/plugin.json)
 [![license](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
 English | [한국어](README.ko.md)
@@ -41,6 +41,15 @@ prices are never done by the crew: they come back as steps for you.
 - **Earns your trust.** Say yes to the same kind of action three times (the first at least 24 hours old,
   all within 14 days) and it stops asking for that kind: it does it and tells you in one line. A local commit can earn
   this; push, deploy, migrations, deletes, installs, paid services and messages to people are always asked.
+- **Tells you bad news first.** When a run hits trouble (the advisor cannot settle a blocker, the same task fails twice,
+  the scope grows, the goal check cannot pass), the PM sends you one line right then, not at the end:
+  `Bad news (run 2026-11-04-auth): login tests failed twice after two fixes. Doing: fresh opus builder. You can: nothing needed.`
+  It never asks and never stops the run. At most 3 per run; the final report repeats every one.
+- **Can't move the goalposts.** The plan fixes the test that defines done. Workers cannot edit it or any run log
+  (`bin/guard`), and the checker runs it itself and compares its hash. If the test is wrong the PM unlocks it, writes
+  why under Decisions and sends you a bad-news line; the run goes on.
+- **Keeps the record for you.** Each finished run adds one line (what you can use now, why, commits, PR) to a ledger,
+  one per user across repos. `/wanjang:now --week` (or `--since 2026-10-28`, `--repo X`) prints it: your weekly "what shipped".
 - **Gets its work checked.** A fresh checker runs the build and the tests itself and goes through every requirement,
   with a security review for auth, payments and permissions; QA uses the product as a user would.
 - **Saves its questions for the end.** Defaults are decided and logged; when the run ends you keep or change each one
@@ -165,6 +174,7 @@ field: know-how for a field comes from playbooks.
 | `/wanjang:wanjang resume [run]` | Pick up a run that stopped (a crash, a lost connection, a restart) |
 | `/wanjang:docs <query> [dir]` | Find a section in .md/.txt/.html docs with `docindex` and answer from only those lines |
 | `/wanjang:now` | What each running agent is doing now, for how long, what is done and what looks stuck (`bin/status`, read-only) |
+| `/wanjang:now --week\|--since DATE\|--repo X` | What finished runs shipped, one line each, from the ledger at `~/.claude/wanjang/ledger.md` (honours `CLAUDE_CONFIG_DIR`; `bin/ledger`) |
 | `/wanjang:next on\|off\|status` | A quiet look-ahead: when idle, asks once whether to do the most likely next piece of work (off by default, this session only) |
 | `/wanjang:next promises` | The promises written down for this project: id, when due, its condition, what was asked (see below) |
 | `/wanjang:next trust [off\|on\|<kind> ask\|<kind> reset]` | Which kinds of action are done without asking; `off` asks for everything again (see below) |
@@ -342,20 +352,21 @@ and leaving browser testing to QA.
 | Path | What |
 |---|---|
 | `agents/` | The seven agents |
-| `ROUTING.md` | The routing rule a session-start hook adds to every session |
+| `ROUTING.md` | The routing rule a session-start hook adds to every session, including relaying a PM's `Bad news` line to you at once |
 | `bin/route` | That hook; it also names unfinished runs in the repository |
-| `bin/guard` | PreToolUse hook: the PM and the read-only crew write only into run folders |
+| `bin/guard` | PreToolUse hook: the PM and the read-only crew write only into run folders; workers cannot write a run's locked goal-check files or any run log |
 | `bin/read-warn` | PreToolUse hook: warns (main session and subagents, never blocks) when `Read`, `cat`, `less` or a huge `sed` range takes a whole file over 200 lines, and points to `docindex search`/`outline` (`bin/docindex`, a local FTS5 doc index for .md/.txt/.html) and `/wanjang:docs` |
 | `bin/deliverables` | If a finished subagent's brief (or prompt) has a `Deliverables: <path>, <path>` line and a file is missing or empty: PostToolUse on `Agent` tells the parent at once; SubagentStop sends the worker back once |
 | `bin/main-rules` | SessionStart hook: injects `main-rules/*.md` into the main session only |
 | `bin/close` | SubagentStop hook: sends the PM back once if it tries to report with its run log still open |
 | `bin/status` | The snapshot behind `/wanjang:now`: agents (nested, waiting tool call, stuck), run logs, open tasks |
+| `bin/ledger` | SubagentStop hook: adds a finished PM run's `Shipped:` line to the per-user ledger; `ledger show` prints it |
 | `bin/next` | Stop hook and the scan/record behind `/wanjang:next` |
 | `bin/usage` | The token report behind `/wanjang:optimize` |
 | `bin/provider`, `bin/openrouter-key`, `bin/provider-hook`, `bin/provider-fail` | `/wanjang:provider`, its key helper, the hook that runs it with no model, and the one that switches back on a billing error |
 | `bin/docindex` | The local doc index behind `/wanjang:docs` |
 | `skills/` | `/wanjang:wanjang`, `/wanjang:optimize`, `/wanjang:now`, `/wanjang:next`, `/wanjang:docs`, `/wanjang:slim`, `/wanjang:relay` and `/wanjang:provider` |
-| `test/` | `guard.sh`, `read-warn.sh`, `deliverables.sh`, `docindex.sh`, `main-rules.sh`, `route.sh`, `close.sh`, `usage.sh`, `status.sh`, `provider.sh`, `next.sh` and `playbooks.sh` |
+| `test/` | `guard.sh`, `read-warn.sh`, `deliverables.sh`, `docindex.sh`, `main-rules.sh`, `route.sh`, `close.sh`, `ledger.sh`, `usage.sh`, `status.sh`, `provider.sh`, `next.sh` and `playbooks.sh` |
 
 ```sh
 for t in test/*.sh; do "$t"; done   # each prints its own pass summary

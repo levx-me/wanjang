@@ -8,7 +8,7 @@
 대신 정한 것들은 끝에 목록 하나로 검토하면 돼요.
 
 [![Claude Code plugin](https://img.shields.io/badge/Claude_Code-plugin-d97757)](https://code.claude.com/docs/en/plugins)
-[![version](https://img.shields.io/badge/version-0.10.0-blue)](.claude-plugin/plugin.json)
+[![version](https://img.shields.io/badge/version-0.11.0-blue)](.claude-plugin/plugin.json)
 [![license](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
 [English](README.md) | 한국어
@@ -37,6 +37,15 @@ designer는 페이지를 만들어요. checker는 주장을 playbook 기준표�
 - **약속을 기억해요.** "CI 끝나면 배포 확인해 줘", "사흘 뒤에 다시 알려줘" 같은 말을 시각이나 조건과 함께
   적어 두고, 때가 되면 다음 점검에서 한 번 물어봐요. 지금 할지, 나중에 할지, 없던 일로 할지요. 조건은 그 점검
   안에서만 돌려요(하나에 10초, 한 번에 최대 3개). 훅에서는 돌리지 않아요.
+- **나쁜 소식부터 알려줘요.** run이 곤란해지면(advisor도 막힌 문제를 못 풀 때, 같은 작업이 두 번 실패할 때,
+  범위가 커질 때, 목표 검사를 통과할 수 없을 때) PM이 끝날 때가 아니라 그 즉시 한 줄을 보내요:
+  `Bad news (run 2026-11-04-auth): login tests failed twice after two fixes. Doing: fresh opus builder. You can: nothing needed.`
+  질문하지 않고 run을 멈추지도 않아요. run마다 최대 3번이고, 최종 보고서가 보낸 줄을 모두 다시 적어요.
+- **골대를 옮기지 않아요.** 계획이 "끝났다"를 정하는 테스트를 고정해요. 작업자는 그 테스트도, run 로그도 고칠 수
+  없고(`bin/guard`), checker가 직접 돌려 해시까지 비교해요. 테스트가 틀렸으면 PM이 잠금을 풀고 이유를 Decisions에
+  적고 나쁜 소식 한 줄을 보내요. run은 계속돼요.
+- **기록을 대신 남겨요.** 끝난 run마다 한 줄(지금 쓸 수 있는 것, 이유, 커밋, PR)이 사용자별로 저장소를 가로지르는
+  장부에 쌓여요. `/wanjang:now --week`(또는 `--since 2026-10-28`, `--repo X`)로 보면 주간 "뭘 배포했나"가 바로 나와요.
 - **믿을 만해지면 알아서 해요.** 같은 종류의 일에 세 번 "Do it"을 고르면(처음 답이 24시간 이상
   지났고 모두 14일 안이면) 그 종류는 더 묻지 않고 처리한 뒤 한 줄로 알려줘요. 로컬 커밋도 여기에 들어가요.
   push, 배포, 마이그레이션, 삭제, 설치, 유료 서비스, 사람에게 보내는 메시지는 언제나 먼저 물어봐요.
@@ -161,6 +170,7 @@ Claude 세션에서는 PATH에 있어요. `/wanjang:docs <query> [dir]`가 이�
 | `/wanjang:wanjang resume [run]` | 멈춘 run을 이어 해요(충돌, 연결 끊김, 재시작) |
 | `/wanjang:docs <query> [dir]` | .md/.txt/.html 문서에서 `docindex`로 섹션을 찾고, 찾은 줄만으로 답해요 |
 | `/wanjang:now` | 돌아가는 에이전트가 지금 무엇을, 얼마나 오래 하는지, 끝난 것과 막힌 것 같은 것을 알려줘요(`bin/status`, 읽기 전용) |
+| `/wanjang:now --week\|--since DATE\|--repo X` | 끝난 run이 만든 것을 장부(`~/.claude/wanjang/ledger.md`, `CLAUDE_CONFIG_DIR` 따라감, `bin/ledger`)에서 한 줄씩 보여줘요 |
 | `/wanjang:next on\|off\|status` | 조용한 앞서 보기: 쉬는 동안 다음에 할 가장 그럴듯한 작업을 할지 한 번 물어봐요(기본 꺼짐, 이 세션만) |
 | `/wanjang:next promises` | 이 프로젝트에 적어 둔 약속: id, 언제인지, 조건, 부탁한 내용(아래 참고) |
 | `/wanjang:next trust [off\|on\|<종류> ask\|<종류> reset]` | 묻지 않고 처리하는 일의 종류를 봐요. `off`로 끄면 다시 전부 물어봐요(아래 참고) |
@@ -334,20 +344,21 @@ Sonnet, 오래 일한 워커를 이어 쓰는 대신 새로 띄우기, 브라우
 | 경로 | 내용 |
 |---|---|
 | `agents/` | 일곱 에이전트 |
-| `ROUTING.md` | 세션 시작 훅이 모든 세션에 넣는 라우팅 규칙 |
+| `ROUTING.md` | 세션 시작 훅이 모든 세션에 넣는 라우팅 규칙(PM의 `Bad news` 줄을 바로 전달하는 것 포함) |
 | `bin/route` | 그 훅. 저장소에 끝나지 않은 run이 있으면 알려 줘요 |
-| `bin/guard` | PreToolUse 훅: PM과 읽기 전용 크루는 run 폴더에만 쓸 수 있어요 |
+| `bin/guard` | PreToolUse 훅: PM과 읽기 전용 크루는 run 폴더에만 쓸 수 있고, 작업자는 잠긴 목표 검사 파일과 run 로그를 쓸 수 없어요 |
 | `bin/read-warn` | PreToolUse 훅: 메인 세션과 서브에이전트가 `Read`, `cat`, `less`, 큰 `sed` 범위로 200줄 넘는 파일을 통째로 읽으면 경고해요(막지 않아요). `docindex search`/`outline`(`bin/docindex`, .md/.txt/.html용 로컬 FTS5 문서 색인)과 `/wanjang:docs`도 알려줘요 |
 | `bin/deliverables` | 끝난 서브에이전트의 브리프(또는 프롬프트)에 `Deliverables: <경로>, <경로>` 줄이 있는데 파일이 없거나 비어 있으면, PostToolUse(`Agent`)는 부모에게 바로 알리고 SubagentStop은 워커를 한 번 돌려보내요 |
 | `bin/main-rules` | SessionStart 훅: `main-rules/*.md`를 메인 세션에만 넣어요 |
 | `bin/close` | SubagentStop 훅: run 기록이 열린 채로 보고하려 하면 PM을 한 번 돌려보내요 |
 | `bin/status` | `/wanjang:now`의 스냅샷: 에이전트(중첩, 기다리는 도구 호출, 막힘), run 로그, 열린 작업 |
+| `bin/ledger` | SubagentStop 훅: 끝난 PM run의 `Shipped:` 줄을 사용자별 장부에 더하고, `ledger show`로 보여줘요 |
 | `bin/next` | `/wanjang:next`의 Stop 훅과 그 스캔·기록 |
 | `bin/usage` | `/wanjang:optimize`의 토큰 보고서 |
 | `bin/provider`, `bin/openrouter-key`, `bin/provider-hook`, `bin/provider-fail` | `/wanjang:provider`, 키 도우미, 모델 없이 실행하는 훅, 결제 오류 때 되돌리는 훅 |
 | `bin/docindex` | `/wanjang:docs`가 쓰는 로컬 문서 색인 |
 | `skills/` | `/wanjang:wanjang`, `/wanjang:optimize`, `/wanjang:now`, `/wanjang:next`, `/wanjang:docs`, `/wanjang:slim`, `/wanjang:relay`, `/wanjang:provider` |
-| `test/` | `guard.sh`, `read-warn.sh`, `deliverables.sh`, `docindex.sh`, `main-rules.sh`, `route.sh`, `close.sh`, `usage.sh`, `status.sh`, `provider.sh`, `next.sh`, `playbooks.sh` |
+| `test/` | `guard.sh`, `read-warn.sh`, `deliverables.sh`, `docindex.sh`, `main-rules.sh`, `route.sh`, `close.sh`, `ledger.sh`, `usage.sh`, `status.sh`, `provider.sh`, `next.sh`, `playbooks.sh` |
 
 ```sh
 for t in test/*.sh; do "$t"; done   # 테스트마다 통과 요약을 출력해요
