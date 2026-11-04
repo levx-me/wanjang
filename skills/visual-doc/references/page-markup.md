@@ -29,8 +29,9 @@ whole page once.
 
 - Start from `assets/skeleton.html`. Order: `<title>` first, Google Fonts `<link>`, then a
   `<style>` containing **all of `assets/base.css` verbatim**, then an optional page-only
-  `<style>` that uses tokens only. No `<html>`, `<head>` or `<body>` tags (publish wraps a
-  skeleton).
+  `<style>` that uses tokens only. No `<html>`, `<head>` or `<body>` tags only for a fragment
+  published through the Artifact tool (publish wraps it). A local `.html` file needs the full
+  page: doctype, `<html>`, `<head>` with charset and viewport meta, `<body>`.
 - Keep the **table of contents** (`nav.toc-side` + `details.toc-top`), the **top row with
   the theme toggle**, and all skeleton scripts as they are. Only change text. Every section
   has an `id`, an `.eyebrow` noun label with its number, an h2 question or claim and, when

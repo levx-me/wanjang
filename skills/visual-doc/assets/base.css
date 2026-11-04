@@ -596,7 +596,7 @@ section.decide { display: grid; gap: 12px; padding: 20px; border-radius: 16px; b
 .opt-facts dt { font: 500 11px/1.6 var(--font-mono); letter-spacing: .08em; text-transform: uppercase; color: var(--mid); padding-top: 2px; white-space: nowrap; }
 .opt-facts dd { margin: 0; min-width: 0; }
 @media (max-width: 420px) {
-  section.decide { padding: 14px; margin-inline: -4px; }
+  section.decide { padding: 14px; }
   .opt { padding: 14px; }
   .opt-facts { grid-template-columns: 1fr; gap: 0; }
   .opt-facts dd + dt { margin-top: 8px; }
