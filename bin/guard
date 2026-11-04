@@ -5,6 +5,9 @@
 # - The read-only crew (planner, scout, checker, qa) write only scratch files and notes
 #   files: into a run folder or a temp directory, never into the project.
 # Writes into a temp directory (scratch notes, logs) stay allowed.
+# - Every other wanjang agent (builder, designer, ...) may not write a path the run's log locks
+#   (`Goal check: <cmd> | locked: <path>@<blob>, ...` under Goal) nor any run log (only the PM edits it).
+#   Fails safe: only listed paths are denied; no git, no open log or a malformed line allows.
 # ponytail: pattern match on the command line, so a determined write can slip past;
 # it catches the usual ways (redirects, heredoc scripts, sed -i, tee, git commits).
 set -u
@@ -13,14 +16,46 @@ type=$(printf '%s' "$input" | jq -r '.agent_type // empty')
 case "$type" in
   wanjang:pm|pm|wanjang:wanjang|wanjang) role=wanjang ;;  # old name kept for sessions started before the rename
   wanjang:planner|wanjang:scout|wanjang:checker|wanjang:qa) role=reader ;;
+  wanjang:*) role=worker ;;
   *) exit 0 ;;
 esac
 
 deny() { jq -n --arg r "$1" '{hookSpecificOutput: {hookEventName: "PreToolUse", permissionDecision: "deny", permissionDecisionReason: $r}}'; }
 
+# "<run>TAB<path>" for each path locked by a fresh (6 h), open run log under git common dir $1.
+locks() {
+  find "$1/wanjang" -maxdepth 2 -name log.md -mmin -360 2>/dev/null | while IFS= read -r log; do
+    grep -q '^Status: in progress' "$log" || continue
+    sed -nE 's/^[-* ]*Goal check:.*\| locked:[[:space:]]*//p' "$log" | head -n 1 | tr ',' '\n' | while read -r item; do
+      path=${item%@*}
+      [ -n "$path" ] && [ "$path" != "$item" ] && printf '%s' "${item##*@}" | grep -Eq '^[0-9a-f]{7,64}$' \
+        && printf '%s\t%s\n' "$(basename "$(dirname "$log")")" "$path"
+    done
+  done
+}
+lockdeny() {  # path run
+  deny "Locked goal check: $1 defines done for run $2. Make the code pass it; if the check is wrong, say so in your reply to the PM."
+  exit 0
+}
+logdeny() { deny "Only the PM edits a run log (a worker cannot change the locked goal check). Say it in your reply to the PM instead."; exit 0; }
+tool=$(printf '%s' "$input" | jq -r '.tool_name // empty')
+
 # Write and Edit: a run folder (briefs, reports, the run log), or for the read-only crew a temp dir.
-case "$(printf '%s' "$input" | jq -r '.tool_name // empty')" in Write|Edit)
+case "$tool" in Write|Edit)
   file=$(printf '%s' "$input" | jq -r '.tool_input.file_path // empty')
+  if [ "$role" != wanjang ]; then
+    case "$file" in */.git/wanjang/*/log.md) logdeny ;; esac
+    case "$file" in /*)
+      d=$(dirname "$file"); while [ ! -d "$d" ] && [ "$d" != / ]; do d=$(dirname "$d"); done
+      phys=$(cd "$d" 2>/dev/null && pwd -P) &&
+      info=$(git -C "$phys" rev-parse --path-format=absolute --show-toplevel --git-common-dir 2>/dev/null) && {
+        rel=${phys}/${file#"$d"/}; rel=${rel#"$(printf '%s' "$info" | sed -n 1p)"/}
+        hit=$(locks "$(printf '%s' "$info" | sed -n 2p)" | while IFS=$'\t' read -r run p; do [ "$p" = "$rel" ] && { echo "$run"; break; }; done)
+        [ -n "$hit" ] && lockdeny "$rel" "$hit"
+      } ;;
+    esac
+    [ "$role" = worker ] && exit 0
+  fi
   case "$file" in
     */.git/wanjang/*|"$HOME"/.claude/wanjang/runs/*) ;;
     /tmp/*|/private/tmp/*|/var/folders/*|/private/var/folders/*) [ "$role" = reader ] || deny "The PM writes only into its run folder (<git common dir>/wanjang/<run>/). Send this change to wanjang:builder or to the worker who owns that part." ;;
@@ -32,15 +67,21 @@ case "$(printf '%s' "$input" | jq -r '.tool_name // empty')" in Write|Edit)
   esac
   exit 0 ;;
 esac
-[ "$role" = wanjang ] || exit 0  # the read-only crew may run what it needs in Bash
-
 cmd=$(printf '%s' "$input" | jq -r '.tool_input.command // empty')
 
 # Drop redirects that go nowhere or into temp dirs, then look for what is left.
 probe=$(printf '%s' "$cmd" | sed -E \
   -e 's#[0-9]?>>?[[:space:]]*/dev/null##g' -e 's#[0-9]?>&[0-9]##g' \
   -e 's#>>?[[:space:]]*"?(/tmp|/private/tmp|/var/folders|\$TMPDIR|\$\{TMPDIR[^}]*\}|\$S|\$SP)[^[:space:];|&]*##g')
-writes='(^|[^<>=-])>>?[[:space:]]*[^[:space:]&|=]|(^|[;&|[:space:]])(tee|truncate|install|patch)[[:space:]]|sed[[:space:]]+(-[a-zA-Z]*i|--in-place)|perl[[:space:]]+-[a-zA-Z]*i|(^|[;&|[:space:]])(rm|mv|cp|mkdir|touch|ln)[[:space:]]|git[[:space:]]+(-C[[:space:]]+[^[:space:]]+[[:space:]]+)?(commit|add|rm|mv|reset|checkout|restore|apply|am|merge|rebase|cherry-pick|stash|push|tag)|\.write_text|\.write\(|open\([^)]*["'"'"'][wa]\+?["'"'"']'
+writes='(^|[^<>=-])>>?[[:space:]]*[^[:space:]&|=]|(^|[;&|[:space:]])(tee|truncate|install|patch)[[:space:]]|sed[[:space:]]+(-[a-zA-Z]*i|--in-place)|perl[[:space:]]+-[a-zA-Z]*i|(^|[;&|[:space:]])(rm|mv|cp|mkdir|touch|ln)[[:space:]]|git[[:space:]]+(-C[[:space:]]+[^[:space:]]+[[:space:]]+)?(commit|add|rm|mv|reset|checkout|restore|apply|am|merge|rebase|cherry-pick|stash|push|tag)|(^|[;&|[:space:]])dd[[:space:]]|writeFileSync|appendFileSync|\.write_text|\.write\(|open\([^)]*["'"'"'][wa]\+?["'"'"']'
+
+if [ "$role" != wanjang ] && printf '%s' "$probe" | grep -Eq "$writes"; then
+  printf '%s' "$cmd" | grep -Eq 'wanjang/[^[:space:]]*/log\.md' && logdeny
+  info=$(git -C "$(printf '%s' "$input" | jq -r '.cwd // "."')" rev-parse --path-format=absolute --git-common-dir 2>/dev/null) &&
+  hit=$(locks "$info" | while IFS=$'\t' read -r run p; do printf '%s' "$cmd" | grep -qF -- "$p" && { printf '%s\t%s\n' "$run" "$p"; break; }; done) &&
+  [ -n "$hit" ] && lockdeny "${hit#*$'\t'}" "${hit%%$'\t'*}"
+fi
+[ "$role" = wanjang ] || exit 0  # the read-only crew and the workers may run what they need in Bash
 
 if printf '%s' "$probe" | grep -Eq "$writes"; then
   deny "The PM does not change files itself. Send this change to wanjang:builder (model haiku for a mechanical fix) or to the worker who owns that part. Bash is for looking: reading, running tests and builds, checking git state."
