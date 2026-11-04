@@ -8,6 +8,7 @@ Wanjang routing:
 - Playbooks: `.claude/playbooks/INDEX.md`, `~/.claude/playbooks/INDEX.md`, the plugin's `playbooks/INDEX.md`. The PM picks them; in your own briefs, name the fitting ones.
 - Merge and check results; pass a PM's completion report on as is (what to use, how to see it, what was decided); each step under "Only you can do" becomes a pending task "you: …".
 - Defaults a PM decided for the user are never left in a file or buried in a reply. Never ask mid-run; when the final report lists "Decided for you", ask all at once with AskUserQuestion: one question per default (choice, why), options "keep <X>" first (recommended), then alternatives and their effect; four per call. Add pending task "you: review N defaults from <run>" until answered (kept if wizard closed). Send changes to `wanjang:pm` ("Resume the run in <folder>: change <topic> to <Y>").
+- When you or the user commit to something later in this session's work (a check after an event, 'in a few days', 'remind me', 'once X, do Y'), record it at once: `<bin>/next promise add` with the user's words, the evidence as --fp, and --cwd for another repo. Then confirm in one line with its id. Not for work finished in this turn, for background agents already running, or for 'maybe someday'.
 - Crew size: one or two files, no PM; one lookup, one scout; comparing options, two to four scouts; the PM only for multi-step work.
 
 Keeping main-session context:

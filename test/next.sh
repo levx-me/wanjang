@@ -134,7 +134,7 @@ fp() { "$N" scan --cwd "$R" | awk -F'\t' -v k="$1" '$1==k{print $2}'; }
 [ -z "$(fp uncommitted)" ] || bad "clean repo shows uncommitted"
 echo one > "$R/a.txt"; git -C "$R" add a.txt
 f1=$(fp uncommitted); [ -n "$f1" ] || bad "dirty repo: no uncommitted line"
-"$N" ask uncommitted "$f1"
+"$N" ask uncommitted "$f1" >/dev/null
 [ -z "$(fp uncommitted)" ] || bad "asked candidate still shown"
 echo two >> "$R/a.txt"
 f2=$(fp uncommitted); { [ -n "$f2" ] && [ "$f2" != "$f1" ]; } || bad "edit did not give a new fp ($f1 -> $f2)"
@@ -166,9 +166,9 @@ rm -f "$T"/cfg/wanjang/next/*
 
 # ---- asked
 "$N" asked k1 v1; [ $? = 1 ] || bad "asked before ask should be 1"
-"$N" ask k1 v1; "$N" ask k1 v1
+"$N" ask k1 v1 >/dev/null; "$N" ask k1 v1 >/dev/null
 "$N" asked k1 v1 || bad "asked after ask should be 0"
-for i in $(seq 1 60); do "$N" ask cap "$i"; done
+for i in $(seq 1 60); do "$N" ask cap "$i" >/dev/null; done
 n=$(jq '.asked|length' "$T/cfg/wanjang/next/s1.json"); [ "$n" = 50 ] || bad "asked cap: $n"
 "$N" status | grep -q "50 asked" || bad "status line"
 "$N" status --json | jq -e '.asked==50' >/dev/null || bad "status --json"
@@ -202,7 +202,7 @@ echo one > "$R/a.txt"; git -C "$R" add a.txt
 [ "$("$N" scan --cwd "$R" | head -1 | cut -f1)" = "promise:$id" ] || bad "promise not first"
 git -C "$R" rm -q -f a.txt
 # 9
-fp9=$(pl | grep "^promise:$id" | cut -f2); "$N" ask "promise:$id" "$fp9"
+fp9=$(pl | grep "^promise:$id" | cut -f2); "$N" ask "promise:$id" "$fp9" >/dev/null
 [ -z "$(pl | grep "^promise:$id")" ] || bad "asked promise shown again the same day"
 clk $((7300 + 86400)); [ -n "$(pl | grep "^promise:$id")" ] || bad "asked promise not shown on a later day"
 # 10
@@ -267,12 +267,140 @@ CLAUDE_CONFIG_DIR=$RO "$N" promise add "ro" --at +1m --cwd "$R" 2>"$T/err" >/dev
 chmod 755 "$RO/wanjang"; git -C "$R" rm -q -f a.txt
 # 19
 reset; for i in 1 2 3; do "$N" promise add "q$i" --at +1m --cwd "$R" >/dev/null; done
-clk 100; for k in $(pl | cut -f1 | head -2); do "$N" ask "$k" "$("$N" scan --cwd "$R" | awk -F'\t' -v k="$k" '$1==k{print $2}')"; done
+clk 100; for k in $(pl | cut -f1 | head -2); do "$N" ask "$k" "$("$N" scan --cwd "$R" | awk -F'\t' -v k="$k" '$1==k{print $2}')" >/dev/null; done
 [ -z "$(pl)" ] || bad "third promise question offered in one idle stretch"
 jq -nc '{session_id:"s1",prompt:"carry on"}' | "$N" prompt; clk 101
 [ "$(pl | wc -l | tr -d " ")" = 1 ] || bad "a real prompt should reset the cap: $(pl | wc -l | tr -d ' ')"
 jq -nc '{session_id:"s1",prompt:"/wanjang:next check"}' | "$N" prompt; clk 102
 [ "$(pl | wc -l | tr -d " ")" = 1 ] || bad "a check prompt should not reset anything"
+unset WANJANG_NOW
+
+# ---- trust ladder (WANJANG_NOW clock: yeses are answers given at earlier fake times)
+L=$T/lad; mkdir "$L"; gl() { git -C "$L" -c user.email=a@b -c user.name=t "$@"; }; gl init -q; gl commit -q --allow-empty -m init
+H=3600; D=86400; SF=$T/cfg/wanjang/next/s1.json
+lreset() { rm -rf "$T"/cfg/wanjang/next; clk 0; "$N" on; }
+tf() { ls "$T"/cfg/wanjang/next/trust/*.json; }
+ak() { "$N" ask "$1" "$2" --what "${3:-run the tests}" --cwd "$L"; }  # KEY FP [WHAT]: prints ask|auto
+yes_at() { clk "$1"; ak "$2" "y$1" >/dev/null; "$N" answer "$2" "y$1" yes --cwd "$L"; }  # SECONDS KEY
+yeses() { "$N" trust --json --cwd "$L" | jq -r --arg k "$1" '.kinds[]|select(.kind==$k)|.yeses'; }
+three() { yes_at 0 "$1:a" >/dev/null; yes_at $D "$1:b" >/dev/null; yes_at $((2*D)) "$1:c"; }  # over 2 days
+# kind mapping, kept on each asked entry
+lreset
+for kv in verify:a=verify test:a=test docs:a=docs commit:a=commit uncommitted=commit relay:s=relay task:1=resume \
+          run:r1=resume promise:p1=promise todo=other memory-next=other foo:bar=other verify=other; do
+  ak "${kv%%=*}" m1 "update the notes" >/dev/null
+  [ "$(jq -r '.asked[-1].kind' "$SF")" = "${kv#*=}" ] || bad "kind of ${kv%%=*}: $(jq -r '.asked[-1].kind' "$SF")"
+done
+for w in "git push origin main" "Deploy to prod" "publish 1.2" "run the migration" "delete old logs" "rm -rf build" \
+         "npm install x" "send the summary by email" "post a PR comment" "pay the invoice"; do
+  ak commit:o "$RANDOM" "$w" >/dev/null; [ "$(jq -r '.asked[-1].kind' "$SF")" = outward ] || bad "outward not forced for: $w"
+done
+for w in "confirm the fix works" "update the form docs"; do
+  ak commit:o "$RANDOM" "$w" >/dev/null; [ "$(jq -r '.asked[-1].kind' "$SF")" = commit ] || bad "not outward: $w"
+done
+# 1: 3 yeses over 2 days -> auto, with a notice on promotion
+lreset; out=$(three commit); grep -q '^commit is trusted now (3 yeses): from now' <<<"$out" || bad "1: promotion notice: $out"
+[ -f "$(tf)" ] && [ "$(dirname "$(tf)")" = "$T/cfg/wanjang/next/trust" ] || bad "1: trust file path"
+clk $((2*D + 60)); [ "$(ak commit:x c1 "commit the verified work")" = auto ] || bad "1: 3 yeses over 2 days should be auto"
+echo a > "$L/f1"; gl add f1; gl commit -qm "auto c"
+out=$("$N" did commit:x c1 ok --commit HEAD --note 'abc "auto c" (1 file)' --cwd "$L")
+grep -q '^Done without asking (commit, trusted after 3 yeses): commit the verified work, abc "auto c" (1 file). Undo: /wanjang:next undo · always ask: /wanjang:next trust commit ask$' <<<"$out" || bad "1: report: $out"
+"$N" did commit:x c1 ok --commit HEAD --cwd "$L" 2>/dev/null; [ $? = 1 ] || bad "did twice should exit 1"
+# 10: undo the auto commit (HEAD, unpushed): soft reset, commit reset
+out=$("$N" undo --cwd "$L"); rc=$?
+{ [ $rc = 0 ] && [ "$(gl log -1 --format=%s)" = init ] && [ "$(gl diff --cached --name-only)" = f1 ] && [ "$(yeses commit)" = 0 ]; } || bad "10: undo commit: rc=$rc $out"
+grep -q 'commit is asked again' <<<"$out" || bad "10: undo line: $out"
+[ "$("$N" undo --cwd "$L")" ] && [ "$(gl diff --cached --name-only)" = f1 ] || bad "10: second undo should do nothing"
+gl commit -qm "user c"
+undo_refused() {  # label setup: an auto commit, then the setup; undo must exit 4 and change nothing
+  lreset; three commit >/dev/null; clk $((2*D + 60)); ak commit:y c2 "commit the verified work" >/dev/null
+  echo "$RANDOM" >> "$L/f1"; gl commit -qam "auto"; "$N" did commit:y c2 ok --commit HEAD --cwd "$L" >/dev/null
+  eval "$2"; h=$(gl rev-parse HEAD)
+  out=$("$N" undo --cwd "$L"); rc=$?
+  { [ $rc = 4 ] && [ "$(gl rev-parse HEAD)" = "$h" ] && [ "$(yeses commit)" = 3 ]; } || bad "10: $1: rc=$rc $out"
+}
+undo_refused "HEAD moved" 'echo b >> "$L/f1"; gl commit -qam user'
+undo_refused "pushed" 'gl update-ref refs/remotes/origin/main HEAD'
+gl update-ref -d refs/remotes/origin/main
+# 12: an auto commit the user dropped resets commit at the next ask
+lreset; three commit >/dev/null; clk $((2*D + 60)); ak commit:z c3 "commit it" >/dev/null
+echo z >> "$L/f1"; gl commit -qam "auto z"; "$N" did commit:z c3 ok --commit HEAD --cwd "$L" >/dev/null
+gl reset -q --hard HEAD^; clk $((2*D + 120)); "$N" answer x x yes --cwd "$L" >/dev/null
+[ "$(yeses commit)" = 3 ] || bad "12: answer should not check for dropped commits"
+[ "$(ak commit:w c4 "commit it")" = ask ] && [ "$(yeses commit)" = 0 ] || bad "12: dropped auto commit should reset commit"
+# 2, 4: 3 yeses within 24 h, or 2 yeses, stay ask
+lreset; yes_at 0 test:a >/dev/null; yes_at $H test:b >/dev/null; out=$(yes_at $((2*H)) test:c)
+grep -q "from $(date -r $((B0 + D)) '+%a %d %H:%M')" <<<"$out" || bad "2: notice should name when: $out"
+clk $((3*H)); [ "$(ak test:x t1)" = ask ] || bad "2: 3 yeses within 24 h should be ask"
+"$N" trust --cwd "$L" | grep -q $'^test\tauto from' || bad "2: table should say auto from"
+clk $((D + 1)); [ "$(ak test:x t2)" = auto ] || bad "2: once the first yes is 24 h old it should be auto"
+lreset; yes_at 0 test:a >/dev/null; yes_at $D test:b >/dev/null; clk $((3*D)); [ "$(ak test:x t1)" = ask ] || bad "4: 2 yeses should be ask"
+# 14 days: yeses older than that no longer count
+lreset; three test >/dev/null; clk $((15*D)); [ "$(ak test:x t1)" = ask ] || bad "yeses older than 14 days should not count"
+# 3: a Not now resets
+lreset; three test >/dev/null; clk $((2*D + 60)); "$N" answer test:n n1 no --cwd "$L"
+[ "$(ak test:x t1)" = ask ] && [ "$(yeses test)" = 0 ] || bad "3: not now should reset"
+# 5: never auto, whatever the count (outward checked in code)
+lreset; three commit >/dev/null; clk $((3*D))
+for w in "commit and git push" "deploy the build" "commit, then post a comment"; do
+  [ "$(ak commit:p "$RANDOM" "$w")" = ask ] || bad "5: outward '$w' came back auto"
+done
+[ "$("$N" ask commit:q q1 --what "" --cwd "$L")" = ask ] || bad "5: no --what should be ask"
+yl=$(jq -c '.kinds.commit.yes' "$(tf)")
+jq --argjson y "$yl" '.kinds += {resume:{yes:$y},other:{yes:$y},promise:{yes:$y},outward:{yes:$y}}' "$(tf)" > "$T/tf" && mv "$T/tf" "$(tf)"
+for k in task:1 run:r1 promise:p1 foo:bar todo; do [ "$(ak "$k" "$RANDOM" "look at it")" = ask ] || bad "5: $k came back auto"; done
+[ "$(ak commit:ok o1 "commit the verified work")" = auto ] || bad "5: commit itself should still be auto"
+"$N" did commit:ok o1 ask --cwd "$L"
+# 6: pin and reset
+"$N" trust commit ask --cwd "$L" >/dev/null; clk $((3*D + 1)); [ "$(ak commit:x p1 "commit it")" = ask ] || bad "6: pinned should be ask"
+"$N" trust --cwd "$L" | grep -q $'^commit\task\t3/3\tpinned' || bad "6: table should show the pin"
+"$N" trust commit reset --cwd "$L" >/dev/null
+[ "$(yeses commit)" = 0 ] && [ "$("$N" trust --json --cwd "$L" | jq '.kinds[]|select(.kind=="commit")|.pin')" = false ] || bad "6: reset should unpin and zero"
+"$N" trust bogus ask --cwd "$L" 2>/dev/null; [ $? = 2 ] || bad "trust with a bad kind should exit 2"
+# 7: trust off keeps counts; on restores
+lreset; three test >/dev/null; clk $((3*D)); "$N" trust off --cwd "$L" >/dev/null
+[ "$(ak test:x o1)" = ask ] && [ "$(yeses test)" = 3 ] || bad "7: off should ask and keep counts"
+"$N" trust on --cwd "$L" >/dev/null; [ "$(ak test:x o2)" = auto ] || bad "7: on should restore auto"
+"$N" did test:x o2 ok --cwd "$L" >/dev/null
+"$N" off; clk $((3*D + 5)); [ "$(ak test:x o3)" = ask ] || bad "next off should mean ask"
+# 8: one at a time, 2 per idle stretch, 6 per 24 h; a real prompt starts a new stretch
+lreset; three test >/dev/null; s=$((3*D)); got=""
+step() { s=$((s + 10)); clk $s; r=$(ak test:x "s$s"); got="$got$r "; [ "$r" = auto ] && [ "$1" != keep ] && "$N" did test:x "s$s" ok --cwd "$L" >/dev/null; }
+prompt() { s=$((s + 10)); clk $s; jq -nc '{session_id:"s1",prompt:"carry on"}' | "$N" prompt; }
+step keep; step; [ "$got" = "auto ask " ] || bad "8: a running auto action should block another: $got"
+"$N" did test:x "s$((s - 10))" ask --cwd "$L"; got=""
+step; step; step; prompt; step; step; step; prompt; step; step; prompt; step
+[ "$got" = "auto auto ask auto auto ask auto auto ask " ] || bad "8: limits: $got"
+"$N" status --cwd "$L" | grep -q ', 6 auto today$' || bad "15: status should count auto today: $("$N" status --cwd "$L")"
+clk $((5*D)); jq -nc '{session_id:"s1",prompt:"next day"}' | "$N" prompt; clk $((5*D + 1))
+[ "$(ak test:x nd)" = auto ] || bad "8: next day should be auto again"
+# 9: a failed auto action resets its kind and says so
+out=$("$N" did test:x nd failed --note "tests timed out" --cwd "$L")
+[ "$out" = "Tried run the tests without asking; it failed: tests timed out. test is asked again from now." ] && [ "$(yeses test)" = 0 ] || bad "9: failed: $out"
+# 11: undo an auto docs edit; a file edited since is restored by none
+printf 'v1\n' > "$L/doc.md"; gl add doc.md; gl commit -qm doc
+docs_auto() { lreset; three docs >/dev/null; clk $((3*D)); ak "docs:$1" d1 "update doc.md" >/dev/null; printf 'v2\n' > "$L/doc.md"; "$N" did "docs:$1" d1 ok --files doc.md --cwd "$L" >/dev/null; }
+docs_auto a; out=$("$N" undo --cwd "$L"); rc=$?
+{ [ $rc = 0 ] && [ "$(cat "$L/doc.md")" = v1 ] && [ "$(yeses docs)" = 0 ]; } || bad "11: docs undo: rc=$rc $out"
+docs_auto b; printf 'v3\n' > "$L/doc.md"; out=$("$N" undo --cwd "$L"); rc=$?
+{ [ $rc = 4 ] && [ "$(cat "$L/doc.md")" = v3 ] && grep -q 'doc.md' <<<"$out"; } || bad "11: edited since: rc=$rc $out"
+gl checkout -q -- doc.md
+"$N" did docs:c zz ok --cwd "$L" 2>/dev/null; [ $? = 1 ] || bad "did without a running action should exit 1"
+# 15: table lists every kind
+lreset; out=$("$N" trust --cwd "$L"); [ "$(grep -c $'\t[0-9]/3\t' <<<"$out")" = 5 ] && grep -q '^trust ladder on' <<<"$out" || bad "15: table: $out"
+# 13: survives a new session and the 7-day prune; worktrees share it
+lreset; three relay >/dev/null; echo '{}' > "$T/cfg/wanjang/next/old.json"; touch -t 202001010000 "$T/cfg/wanjang/next/old.json"
+clk $((3*D)); CLAUDE_CODE_SESSION_ID=s2 "$N" on
+[ ! -e "$T/cfg/wanjang/next/old.json" ] && [ -f "$(tf)" ] || bad "13: prune should drop old sessions and keep trust/"
+[ "$(CLAUDE_CODE_SESSION_ID=s2 "$N" ask relay:x r1 --what "report back to s9" --cwd "$L")" = auto ] || bad "13: new session should see the trust"
+gl worktree add -q "$T/wtL" -b wtl 2>/dev/null
+[ "$("$N" trust --json --cwd "$T/wtL" | jq '.kinds[]|select(.kind=="relay")|.yeses')" = 3 ] || bad "13: worktree should share the counts"
+# 14: corrupt trust file asks, no stderr; read-only trust dir asks with one line
+echo '{"kinds":' > "$(tf)"; clk $((3*D + 99))
+out=$(ak relay:y r2 "report back" 2>"$T/err"); [ "$out" = ask ] && [ ! -s "$T/err" ] || bad "14: corrupt: $out $(cat "$T/err")"
+lreset; three test >/dev/null; clk $((3*D)); chmod 555 "$(dirname "$(tf)")"
+out=$(ak test:x ro 2>"$T/err"); [ "$out" = ask ] && [ "$(wc -l <"$T/err")" -le 1 ] || bad "14: read-only: $out $(cat "$T/err")"
+chmod 755 "$(dirname "$(tf)")"
 unset WANJANG_NOW
 
 [ $fail = 0 ] && echo "next: all passed"

@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
 # SessionStart hook: puts the Wanjang routing rule into every session's context, and a note
-# about any Wanjang run in this repository that stopped before it finished.
+# about any Wanjang run in this repository that stopped before it finished, and any promise due here.
 set -u
 input=$(cat)
 cwd=$(printf '%s' "$input" | jq -r '.cwd // empty')
-text=$(cat "$(dirname "$0")/../ROUTING.md")
+bin=$(cd "$(dirname "$0")" && pwd)
+text=$(sed "s|<bin>|$bin|g" "$bin/../ROUTING.md")
 if dir=$(git -C "${cwd:-.}" rev-parse --path-format=absolute --git-common-dir 2>/dev/null); then
   # Only logs touched in the last week: an older one was abandoned, not interrupted.
   open=$(find "$dir/wanjang" -maxdepth 2 -name '*.md' -mtime -7 2>/dev/null | xargs grep -l '^Status: in progress' 2>/dev/null)
@@ -13,4 +14,7 @@ if dir=$(git -C "${cwd:-.}" rev-parse --path-format=absolute --git-common-dir 2>
     text+=$(printf '%s\n' "$open" | sed 's/^/- /')
   fi
 fi
+# Promises due in this project (read-only: runs no stored condition).
+due=$("$bin/next" promise due --cwd "${cwd:-.}" 2>/dev/null)
+[ -n "$due" ] && text+=$'\n\n'"$due"
 jq -n --arg t "$text" '{hookSpecificOutput: {hookEventName: "SessionStart", additionalContext: $t}}'

@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""next stop | prompt | on | off | cron [--exists yes|no] | scan [--cwd DIR] [--periodic] | ask KEY FP | asked KEY FP | status [--json]
+"""next stop | prompt | on | off | cron [--exists yes|no] | scan [--cwd DIR] [--periodic] | ask KEY FP | asked KEY FP
+        | answer | did | undo | trust | promise | status [--json]
         [--session ID]: find the next useful piece of work for /wanjang:next.
 
   stop    Stop hook (JSON on stdin). When /wanjang:next is on (state `on`, or for older sessions a
@@ -17,7 +18,19 @@
           without an offset) or +30m|+2h|+3d. Prints id<TAB>due<TAB>where it comes up. Exit 4 = duplicate (id printed).
           list [--all] [--json] | set ID [--at T] [--when CMD] [--what W] | done ID [--note N] | drop ID
           | due [--cwd DIR]  (read-only, runs no condition: the SessionStart notice)
-  ask     record that KEY with fingerprint FP was asked (idempotent); asked: exit 0 if recorded.
+  ask KEY FP [--what W] [--cwd DIR]: record that KEY with fingerprint FP was asked (idempotent) and print one
+          word, `ask` or `auto` (do it without asking: the trust ladder below). A repeat prints `ask`.
+          asked: exit 0 if recorded.
+  answer KEY FP yes|no   the user's answer to an asked question: yes counts toward the kind, no resets it.
+          Prints one line when the kind is newly trusted.
+  did KEY FP ok|failed|ask [--commit HASH] [--files F...] [--note N]: the outcome of an `auto` action (ask: it
+          was not done after all and is being asked). Prints the one-line report. Exit 1 = no such running action.
+  undo    undo the last auto action and reset its kind. Exit 4 = refused, nothing changed.
+  trust [off | on | KIND ask | KIND reset] [--json]: the ladder table, or switch it, pin a kind, zero a kind.
+          A kind (verify, test, docs, commit, relay) is `auto` after 3 yeses within 14 days, the first of them
+          24 h old; at most 2 auto actions per idle stretch and 6 per project per 24 h, one at a time.
+          resume (task:, run:), promise:, other keys and anything outward (push, deploy, publish, migrations,
+          deletes, installs, messages, payments; checked on KEY and --what) are always asked.
   on/off  record that /wanjang:next is on (the cron was just created) or off.
   cron    print one word: off | create | recreate | keep, for the 30-minute cron [--exists yes|no].
   status  on/off, schedule age, last check age, last hook age, number asked.
@@ -25,6 +38,7 @@
 State: ${CLAUDE_CONFIG_DIR:-~/.claude}/wanjang/next/<session>.json; session = --session, else
 $CLAUDE_CODE_SESSION_ID (stop: session_id from the input).
 Promises: ${CLAUDE_CONFIG_DIR:-~/.claude}/wanjang/promises.json (one per user, locked by promises.lock).
+Trust: ${CLAUDE_CONFIG_DIR:-~/.claude}/wanjang/next/trust/<sha8 of the project>.json (per project; worktrees share it).
 Clock: env WANJANG_NOW (epoch seconds) replaces the current time, for tests.
 
 Examples:
@@ -33,7 +47,8 @@ Examples:
   next ask uncommitted 3fa9c1d2 # hide that candidate until its fp changes
   next asked uncommitted 3fa9c1d2 && echo already asked
 
-Exit codes: 0 ok, 1 not asked (asked) or unknown promise, 2 bad arguments or no session, 3 periodic check skipped, 4 duplicate promise."""
+Exit codes: 0 ok, 1 not asked (asked), unknown promise or no running auto action, 2 bad arguments or no session,
+3 periodic check skipped, 4 duplicate promise or undo refused."""
 import argparse, contextlib, fcntl, glob, hashlib, json, os, random, re, signal, subprocess, sys, tempfile, time
 from datetime import datetime
 
@@ -101,7 +116,7 @@ def save(sid, d):
     me = f"{sid}.json"
     for f in glob.glob(p + "/*.json"):
         try:
-            if os.path.basename(f) != me and time.time() - os.path.getmtime(f) > KEEP:
+            if os.path.basename(f) != me and clock() - os.path.getmtime(f) > KEEP:
                 os.remove(f)
         except OSError:
             pass
@@ -177,9 +192,9 @@ def stop_hook():
         pt = ts(prompt[1]) if isinstance(prompt[1], str) else None
         if pt is None or num(d.get("last_hook")) >= pt:
             return
-        d["last_hook"] = time.time()
+        d["last_hook"] = clock()
         save(sid, d)
-        v = verdict(d, exists, time.time())
+        v = verdict(d, exists, clock())
         text = TEXT if v == "keep" else f"{TEXT} First renew the schedule: the verdict is `{v}`; follow the check's renew step."
         print(json.dumps({"hookSpecificOutput": {"hookEventName": "Stop", "additionalContext": text}}))
     except Exception:
@@ -520,6 +535,248 @@ def promise_cmd(a, now):
             sys.exit(1)
 
 
+# ---- trust ladder: a kind of work the user keeps saying yes to is done without asking, then reported
+PROMOTE = ("verify", "test", "docs", "commit", "relay")
+# never auto, whatever the key: matched on the key and --what (the skill's outward rule is primary)
+OUTWARD = re.compile(r"push|deploy|publish|release|migrat|delete|drop|\brm\s|install|upgrade|send|email|post|comment|pay", re.I)
+YES_N, YES_AGE, YES_WIN, YES_KEEP, AUTO_KEEP, STRETCH, DAYMAX = 3, 86400, 14 * 86400, 10, 20, 2, 6
+STALE = 3600  # ponytail: a running auto action never closed by `did` stops blocking after an hour
+
+
+def kind_of(key, what=""):
+    if OUTWARD.search(key) or OUTWARD.search(what or ""):
+        return "outward"
+    if key == "uncommitted":
+        return "commit"
+    p, colon, _ = key.partition(":")
+    if p in PROMOTE and colon:
+        return p
+    return {"task": "resume", "run": "resume", "promise": "promise"}.get(p, "other")
+
+
+def tload(cwd):
+    """(trust state, path); a missing, corrupt or unreadable file reads as empty: everything is asked"""
+    proj = project(cwd)
+    p = os.path.join(sdir(), "trust", f"{sha(proj)}.json")
+    try:
+        t = json.load(open(p))
+        if not isinstance(t, dict):
+            raise ValueError
+    except (OSError, ValueError):
+        t = {}
+    ks = t.get("kinds") if isinstance(t.get("kinds"), dict) else {}
+    lst = lambda v: v if isinstance(v, list) else []
+    kinds = {k: {"yes": [num(y) for y in lst(v.get("yes")) if num(y)], "since": num(v.get("since")), "pin": v.get("pin") is True}
+             for k, v in ks.items() if k in PROMOTE and isinstance(v, dict)}
+    return {"v": 1, "root": proj, "off": t.get("off") is True, "kinds": kinds,
+            "auto": [e for e in lst(t.get("auto")) if isinstance(e, dict)]}, p
+
+
+def tsave(t, p):
+    for k in t["kinds"].values():
+        k["yes"] = k["yes"][-YES_KEEP:]
+    t["auto"] = t["auto"][-AUTO_KEEP:]
+    try:
+        os.makedirs(os.path.dirname(p), exist_ok=True)
+        fd, tmp = tempfile.mkstemp(dir=os.path.dirname(p), suffix=".tmp")
+        with os.fdopen(fd, "w") as f:
+            json.dump(t, f)
+        os.replace(tmp, p)
+        return True
+    except OSError as e:
+        print(f"next: cannot save trust ({os.path.dirname(p)}): {e}", file=sys.stderr)
+        return False
+
+
+def kd(t, k):
+    return t["kinds"].setdefault(k, {"yes": [], "since": 0.0, "pin": False})
+
+
+def demote(t, k, now, unpin=False):
+    if k in PROMOTE:
+        e = kd(t, k)
+        e["yes"], e["since"] = [], now
+        e["pin"] = e["pin"] and not unpin
+
+
+def yeses(t, k, now):
+    """(yeses that count, when the kind turns auto or None)"""
+    ys = sorted(y for y in (t["kinds"].get(k) or {}).get("yes", []) if now - y <= YES_WIN)
+    return len(ys), (ys[0] + YES_AGE if len(ys) >= YES_N else None)
+
+
+def level(t, k, now):
+    if t["off"] or k not in PROMOTE or (t["kinds"].get(k) or {}).get("pin"):
+        return "ask"
+    w = yeses(t, k, now)[1]
+    return "auto" if w and w <= now else "ask"
+
+
+def dropped(t, cwd, now):
+    """an auto commit no branch or HEAD contains any more (the user dropped it) resets commit"""
+    if not git(cwd, "rev-parse", "--git-dir").strip():
+        return False
+    for e in t["auto"]:
+        if e.get("kind") == "commit" and e.get("state") == "ok" and e.get("commit") and now - num(e.get("at")) < YES_WIN \
+                and not git(e.get("cwd") or cwd, "branch", "--contains", e["commit"]).strip():
+            e["state"] = "dropped"
+            demote(t, "commit", now)
+            return True
+    return False
+
+
+def ask_level(d, sid, a, k, now):
+    t, p = tload(a.cwd)
+    changed, v = dropped(t, a.cwd, now), "ask"
+    au = t["auto"]
+    done = [e for e in au if e.get("state") != "asked"]
+    if d.get("on") is True and (a.what or "").strip() and level(t, k, now) == "auto" \
+            and not any(e.get("state") == "running" and now - num(e.get("at")) < STALE for e in au) \
+            and sum(1 for e in done if e.get("session") == sid and num(e.get("at")) > num(d.get("last_prompt"))) < STRETCH \
+            and sum(1 for e in done if now - num(e.get("at")) < 86400) < DAYMAX:
+        au.append(dict(kind=k, key=a.key, fp=sha(a.fp), what=one(a.what), at=now, state="running", session=sid,
+                       cwd=os.path.realpath(a.cwd), commit="", files={}, yeses=yeses(t, k, now)[0]))
+        changed, v = True, "auto"
+    if changed and not tsave(t, p):
+        v = "ask"  # an auto action that cannot be recorded cannot be undone
+    return v
+
+
+def fhash(f):
+    try:
+        return hashlib.sha1(open(f, "rb").read()).hexdigest()
+    except OSError:
+        return "-"
+
+
+def trust_cmd(a, d, sid, now):
+    t, p = tload(a.cwd)
+    c = a.cmd
+    if c == "answer":
+        k = next((x.get("kind") for x in reversed(d["asked"]) if isinstance(x, dict) and x.get("key") == a.key
+                  and x.get("fp") == sha(a.fp) and x.get("kind")), None) or kind_of(a.key)
+        ch = False
+        for e in t["auto"]:  # an `auto` the skill turned into a question
+            if e.get("key") == a.key and e.get("fp") == sha(a.fp) and e.get("state") == "running":
+                e["state"], ch = "asked", True
+        if k not in PROMOTE:
+            return ch and tsave(t, p)
+        if a.reply == "no":
+            demote(t, k, now)
+            return tsave(t, p)
+        n0 = yeses(t, k, now)[0]
+        kd(t, k)["yes"].append(now)
+        n, w = yeses(t, k, now)
+        if tsave(t, p) and n0 < YES_N <= n and not t["off"] and not kd(t, k)["pin"]:
+            print(f"{k} is trusted now ({n} yeses): from {'now' if w <= now else lt(w)} it is done without asking and "
+                  f"reported. Always ask: /wanjang:next trust {k} ask")
+    elif c == "did":
+        e = next((e for e in reversed(t["auto"]) if e.get("key") == a.key and e.get("fp") == sha(a.fp)
+                  and e.get("state") == "running"), None)
+        if e is None:
+            print(f"next: no running auto action for {a.key}", file=sys.stderr)
+            sys.exit(1)
+        k, cwd = e.get("kind"), e.get("cwd") or a.cwd
+        if a.outcome == "ask":
+            t["auto"].remove(e)
+            return tsave(t, p)
+        if a.outcome == "ok":
+            if k == "commit":
+                full = git(cwd, "rev-parse", "--verify", "--quiet", f"{a.commit}^{{commit}}").strip() if a.commit else ""
+                if not full:
+                    print("next: did ok for commit needs --commit HASH of the commit made", file=sys.stderr)
+                    sys.exit(2)
+                e["commit"] = full
+            if k == "docs":
+                if not a.files:
+                    print("next: did ok for docs needs --files with the files written", file=sys.stderr)
+                    sys.exit(2)
+                e["files"] = {os.path.realpath(os.path.join(cwd, f)): fhash(os.path.join(cwd, f)) for f in a.files}
+            e["state"] = "ok"
+            tsave(t, p)
+            print(f"Done without asking ({k}, trusted after {int(num(e.get('yeses')))} yeses): {e.get('what')}"
+                  + (f", {a.note}" if a.note else "") + f". Undo: /wanjang:next undo · always ask: /wanjang:next trust {k} ask")
+        else:
+            e["state"] = "failed"
+            demote(t, k, now)
+            tsave(t, p)
+            print(f"Tried {e.get('what')} without asking; it failed: {a.note or 'no reason given'}. {k} is asked again from now.")
+    elif c == "undo":
+        e = next((e for e in reversed(t["auto"]) if e.get("state") != "asked"), None)
+        if not e or e.get("state") != "ok":
+            print("Nothing to undo: the last action done without asking here is already closed or there is none.")
+            return
+        k, cwd = e.get("kind"), e.get("cwd") or a.cwd
+        if k == "commit":
+            h = e.get("commit", "")
+            head = git(cwd, "rev-parse", "HEAD").strip()
+            if head != h:
+                print(f"Not undone: HEAD is {head[:7] or 'unknown'}, not the auto commit {h[:7]}; nothing changed.")
+                sys.exit(4)
+            if git(cwd, "branch", "-r", "--contains", h).strip():
+                print(f"Not undone: {h[:7]} is on a remote branch already; nothing changed.")
+                sys.exit(4)
+            if not git(cwd, "rev-parse", "--verify", "--quiet", f"{h}^").strip() or \
+                    subprocess.run(["git", "-C", cwd, "reset", "-q", "--soft", f"{h}^"], capture_output=True).returncode:
+                print(f"Not undone: cannot reset {h[:7]} (first commit?); nothing changed.")
+                sys.exit(4)
+            msg = f"Undone: commit {h[:7]} reset softly; its changes stay staged."
+        elif k == "docs":
+            fs = e.get("files") or {}
+            moved = [f for f, hs in fs.items() if fhash(f) != hs]
+            if moved:
+                print("Not undone: changed since the auto edit: " + ", ".join(os.path.relpath(f, cwd) for f in moved)
+                      + "; restored none.")
+                sys.exit(4)
+            r = subprocess.run(["git", "-C", cwd, "restore", "--", *fs], capture_output=True, text=True, errors="replace")
+            if r.returncode:
+                print(f"Not undone: git restore failed: {one(r.stderr)}; nothing changed.")
+                sys.exit(4)
+            msg = "Undone: restored " + ", ".join(os.path.relpath(f, cwd) for f in fs) + "."
+        else:
+            msg = f"Nothing to undo for {k} ({e.get('what')})."
+        e["state"] = "undone"
+        demote(t, k, now)
+        tsave(t, p)
+        print(f"{msg} {k} is asked again from now.")
+    else:  # trust
+        w = a.args
+        if w in (["off"], ["on"]):
+            t["off"] = w == ["off"]
+            if tsave(t, p):
+                print(f"Trust ladder {w[0]}" + (" (counts kept): everything is asked." if t["off"] else "."))
+            return
+        if len(w) == 2 and w[0] in PROMOTE and w[1] in ("ask", "reset"):
+            if w[1] == "ask":
+                kd(t, w[0])["pin"] = True
+            else:
+                demote(t, w[0], now, unpin=True)
+            if tsave(t, p):
+                print(f"{w[0]}: always asked." if w[1] == "ask" else f"{w[0]}: reset to 0 yeses, asked until trusted again.")
+            return
+        if w:
+            print(f"usage: next trust [off | on | KIND ask | KIND reset]  (KIND: {', '.join(PROMOTE)})", file=sys.stderr)
+            sys.exit(2)
+        last = {}
+        for e in t["auto"]:
+            last[e.get("kind")] = e
+        rows = []
+        for k in PROMOTE:
+            n, wh = yeses(t, k, now)
+            lv = level(t, k, now)
+            if lv == "ask" and wh and not t["off"] and not kd(t, k)["pin"]:
+                lv = f"auto from {lt(wh)}"
+            e = last.get(k)
+            rows.append(dict(kind=k, level=lv, yeses=n, pin=kd(t, k)["pin"],
+                             last=f"{lt(num(e.get('at')))} {e.get('state')}: {e.get('what')}" if e else ""))
+        if a.json:
+            print(json.dumps({"on": not t["off"], "kinds": rows}))
+            return
+        print(f"trust ladder {'off' if t['off'] else 'on'} for {t['root']}")
+        for r in rows:
+            print("\t".join([r["kind"], r["level"], f"{r['yeses']}/{YES_N}", "pinned" if r["pin"] else "-", r["last"] or "-"]))
+
+
 def main():
     if len(sys.argv) > 1 and sys.argv[1] == "stop":
         return stop_hook()
@@ -532,16 +789,29 @@ def main():
     s = sub.add_parser("scan", parents=[com])
     s.add_argument("--cwd", default=os.getcwd())
     s.add_argument("--periodic", action="store_true")
-    for n in ("ask", "asked"):
+    for n in ("ask", "asked", "answer", "did"):
         p = sub.add_parser(n, parents=[com])
         p.add_argument("key")
         p.add_argument("fp")
+    sub.choices["ask"].add_argument("--what", default="")
+    sub.choices["answer"].add_argument("reply", choices=("yes", "no"))
+    s = sub.choices["did"]
+    s.add_argument("outcome", choices=("ok", "failed", "ask"))
+    s.add_argument("--commit", default="")
+    s.add_argument("--files", nargs="+", default=[])
+    s.add_argument("--note", default="")
+    sub.add_parser("undo", parents=[com])
+    s = sub.add_parser("trust", parents=[com])
+    s.add_argument("args", nargs="*")
+    s.add_argument("--json", action="store_true")
     for n in ("on", "off"):
         sub.add_parser(n, parents=[com])
     s = sub.add_parser("cron", parents=[com])
     s.add_argument("--exists", choices=("yes", "no"), default="yes")
     s = sub.add_parser("status", parents=[com])
     s.add_argument("--json", action="store_true")
+    for n in ("ask", "answer", "did", "undo", "trust", "status"):
+        sub.choices[n].add_argument("--cwd", default=os.getcwd())
     pp = sub.add_parser("promise", parents=[com]).add_subparsers(dest="pcmd", required=True)
     s = pp.add_parser("add")
     s.add_argument("what")
@@ -568,6 +838,8 @@ def main():
     if a.cmd == "promise":
         return promise_cmd(a, clock())
     sid = a.session
+    if a.cmd in ("answer", "did", "undo", "trust"):  # no session needed: the state is the project's
+        return trust_cmd(a, load(sid) if sid and "/" not in sid else load(""), sid, clock())
     if not sid or "/" in sid:
         print("next: no session id (set --session or CLAUDE_CODE_SESSION_ID)", file=sys.stderr)
         sys.exit(2)
@@ -584,9 +856,13 @@ def main():
             if (k, sha(fp)) not in asked:
                 print(f"{k}\t{fp}\t{summ}")
     elif a.cmd == "ask":
-        if (a.key, sha(a.fp)) not in asked:
-            d["asked"].append({"key": a.key, "fp": sha(a.fp), "at": now})
+        if (a.key, sha(a.fp)) in asked:
+            print("ask")
+        else:
+            k = kind_of(a.key, a.what)
+            d["asked"].append({"key": a.key, "fp": sha(a.fp), "at": now, "kind": k})
             save(sid, d)
+            print(ask_level(d, sid, a, k, now))
     elif a.cmd == "on":
         d["on"], d["cron_created"], d["swept"] = True, now, False
         save(sid, d)
@@ -600,12 +876,13 @@ def main():
     else:
         age = lambda t: round(now - num(t)) if num(t) else None
         o = dict(last_check_age=age(d.get("last_check")), last_hook_age=age(d.get("last_hook")), asked=len(d["asked"]),
-                 on=d.get("on") is True, cron_age=age(d.get("cron_created")))
+                 on=d.get("on") is True, cron_age=age(d.get("cron_created")),
+                 auto_today=sum(1 for e in tload(a.cwd)[0]["auto"] if now - num(e.get("at")) < 86400 and e.get("state") != "asked"))
         if a.json:
             print(json.dumps(o))
         else:
             f = lambda v: "never" if v is None else f"{v}s ago"
-            print(f"{'on, schedule made ' + f(o['cron_age']) if o['on'] else 'off'}, last check {f(o['last_check_age'])}, last hook {f(o['last_hook_age'])}, {o['asked']} asked")
+            print(f"{'on, schedule made ' + f(o['cron_age']) if o['on'] else 'off'}, last check {f(o['last_check_age'])}, last hook {f(o['last_hook_age'])}, {o['asked']} asked, {o['auto_today']} auto today")
 
 
 main()
