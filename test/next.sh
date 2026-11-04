@@ -18,7 +18,7 @@ CRONS='[{"id":"c","schedule":"*/30 * * * *","recurring":true,"prompt":"/wanjang:
 stop() {  # want(fire|none) label [jq filter over the input]
   out=$(jq -nc --arg t "$TR" --argjson c "$CRONS" '{session_id:"s1",transcript_path:$t,stop_hook_active:false,session_crons:$c,background_tasks:[]}' \
         | jq -c "${3:-.}" | "$N" stop); rc=$?
-  got=none; [ -n "$out" ] && got=fire
+  OUT=$out; got=none; [ -n "$out" ] && got=fire
   [ $rc = 0 ] || bad "$2: exit $rc"
   [ "$got" = "$1" ] || bad "$2: want $1 got $got"
   if [ "$got" = fire ]; then
@@ -47,8 +47,45 @@ stop fire "sidechain and bad lines skipped"
 out=$(echo 'garbage' | "$N" stop 2>&1); [ -z "$out" ] || bad "garbage stdin printed: $out"
 out=$(echo '{"session_crons":"x","background_tasks":5}' | "$N" stop 2>&1); [ -z "$out" ] || bad "odd fields printed: $out"
 
+# on-switch in state
+st() { echo "$1" > "$T/cfg/wanjang/next/s1.json"; }
+fresh() { rm -f "$T"/cfg/wanjang/next/*; : > "$TR"; user "go" "$(at -50)"; tool Bash; }
+text() { jq -r .hookSpecificOutput.additionalContext <<<"$OUT"; }
+mkdir -p "$T/cfg/wanjang/next"
+fresh; CRONS='[]'; "$N" on
+stop fire "on in state, no cron in list"
+text | grep -q '`create`' || bad "hook text should name create"
+fresh; CRONS='[{"prompt":"/wanjang:next check"}]'; "$N" on
+stop fire "on, cron present"
+text | grep -q 'verdict' && bad "keep should add no renew sentence"
+fresh; "$N" on; "$N" off
+stop none "off in state, cron present"
+fresh; st '{"on":true,"cron_created":1}'
+stop fire "on, old cron"; text | grep -q '`recreate`' || bad "hook text should name recreate"
+fresh
+stop fire "legacy: no on key, cron present"
+# cron verdicts
+rm -f "$T"/cfg/wanjang/next/*
+cron() { "$N" cron "$@"; }
+[ "$(cron)" = recreate ] || bad "cron: no state, cron present is legacy (recreate)"
+[ "$(cron --exists no)" = off ] || bad "cron: off with exists=no"
+st '{"asked":[]}'; [ "$(cron)" = recreate ] || bad "cron: legacy should be recreate"
+[ "$(cron --exists no)" = off ] || bad "cron: legacy exists=no should be off"
+"$N" on
+[ "$(cron --exists no)" = create ] || bad "cron: on, no cron should be create"
+[ "$(cron)" = keep ] || bad "cron: on, fresh should be keep"
+st "{\"on\":true,\"cron_created\":$(( $(date +%s) - 561600 ))}"; [ "$(cron)" = recreate ] || bad "cron: 6.5 days old should be recreate"
+st "{\"on\":true,\"cron_created\":$(( $(date +%s) - 500000 ))}"; [ "$(cron)" = keep ] || bad "cron: 5.8 days old should be keep"
+st '{"on":true}'; [ "$(cron)" = recreate ] || bad "cron: missing cron_created should be recreate"
+st '{"on":true,"cron_created":"x"}'; [ "$(cron)" = recreate ] || bad "cron: bad cron_created should be recreate"
+"$N" on; "$N" off
+[ "$(cron)" = off ] && [ "$(cron --exists no)" = off ] || bad "cron: after off should be off"
+"$N" on; "$N" status | grep -q '^on, schedule made' || bad "status should show on"
+"$N" off; "$N" status | grep -q '^off' || bad "status should show off"
+env -u CLAUDE_CODE_SESSION_ID "$N" on 2>/dev/null; [ $? = 2 ] || bad "on without session should exit 2"
+
 # no timestamp on the prompt: skip
-rm -f "$T"/cfg/wanjang/next/*; : > "$TR"
+rm -f "$T"/cfg/wanjang/next/*; : > "$TR"; CRONS='[{"prompt":"/wanjang:next check"}]'
 jq -nc '{type:"user",message:{role:"user",content:"go"}}' >> "$TR"; tool Bash
 stop none "prompt without timestamp"
 # HOME unset, odd input: nothing on stderr, exit 0
