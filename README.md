@@ -38,8 +38,8 @@ prices are never done by the crew: they come back as steps for you.
 - **Remembers what it promised.** "Check the deploy once CI is green", "remind me in three days": it writes the
   promise down with a time or a condition, and when it comes due the next check asks you once: do it, later, or drop
   it. The conditions run only inside that check (10-second limit, at most 3 per check), never from a hook.
-- **Earns your trust.** Say yes to the same kind of action three times (first to last at least 24 hours apart,
-  within 14 days) and it stops asking for that kind: it does it and tells you in one line. A local commit can earn
+- **Earns your trust.** Say yes to the same kind of action three times (the first at least 24 hours old,
+  all within 14 days) and it stops asking for that kind: it does it and tells you in one line. A local commit can earn
   this; push, deploy, migrations, deletes, installs, paid services and messages to people are always asked.
 - **Gets its work checked.** A fresh checker runs the build and the tests itself and goes through every requirement,
   with a security review for auth, payments and permissions; QA uses the product as a user would.
@@ -167,7 +167,8 @@ field: know-how for a field comes from playbooks.
 | `/wanjang:now` | What each running agent is doing now, for how long, what is done and what looks stuck (`bin/status`, read-only) |
 | `/wanjang:next on\|off\|status` | A quiet look-ahead: when idle, asks once whether to do the most likely next piece of work (off by default, this session only) |
 | `/wanjang:next promises` | The promises written down for this project: id, when due, its condition, what was asked (see below) |
-| `/wanjang:next trust [off\|on]` | Which kinds of action are done without asking; `off` asks for everything again (see below) |
+| `/wanjang:next trust [off\|on\|<kind> ask\|<kind> reset]` | Which kinds of action are done without asking; `off` asks for everything again (see below) |
+| `/wanjang:next undo` | Takes back the last thing done without asking (a local commit), if it can |
 | `/wanjang:slim` | Move rules only the main session needs out of what every subagent loads (see below) |
 | `/wanjang:relay <session> <request>` · `status` | Hand work to the Claude session that owns another repo on this machine (Claude Code's ListAgents/SendMessage) and track its report |
 | `/wanjang:optimize` | See where this session's tokens go and fix what applies, with agents still running |
@@ -242,13 +243,13 @@ three answers: Do it, Later (tomorrow 09:00, or a time you type) and Drop it. Pr
 #### Trust
 
 While `next` is on, the kinds of action you keep saying yes to stop being asked. After 3 yeses for one kind, the
-first and last at least 24 hours apart and all within 14 days, that kind is done without asking and reported in one
+first at least 24 hours old and all within 14 days, that kind is done without asking and reported in one
 line, and the first time it says it was promoted. A local commit can be promoted: only the files this session
 changed, after they are verified, never pushed, and the last one can be undone. At most 2 such actions per idle
-stretch and 6 a day. One "Not now" for a kind puts it back to asking. Push, deploy, migrations, deletes, installs,
+stretch and 6 a day. One "Not now" for a kind, or an action of that kind that failed, puts it back to asking from 0 of 3. The kinds that can be promoted are verify, test, docs, commit and relay. Push, deploy, migrations, deletes, installs,
 paid services and messages to people are never done without asking, and promise questions are always asked.
 `/wanjang:next trust` shows each kind and whether it is asked; `/wanjang:next trust off` turns this off and asks for
-everything (`on` turns it back on).
+everything (`on` turns it back on); `<kind> ask` always asks for one kind, `<kind> reset` zeroes it, and `/wanjang:next undo` takes back the last action done without asking.
 
 ## Main-session rules and `/wanjang:slim`
 
