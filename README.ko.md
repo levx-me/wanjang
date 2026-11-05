@@ -197,7 +197,7 @@ Claude 세션에서는 PATH에 있어요. `/wanjang:docs <query> [dir]`가 이�
 | `/wanjang:slim` | 메인 세션에만 필요한 규칙을 모든 서브에이전트가 읽는 곳에서 빼내요(아래 참고) |
 | `/wanjang:relay <세션> <요청>` · `status` | 이 컴퓨터에서 다른 저장소를 맡은 Claude 세션에 일을 넘기고 보고를 추적해요(Claude Code의 ListAgents/SendMessage) |
 | `/wanjang:optimize` | 에이전트를 멈추지 않은 채로, 이 세션의 토큰이 어디에 쓰이는지 보고 해당하는 것만 고쳐요 |
-| `/wanjang:provider openrouter\|models\|presets\|claude\|key\|status` | 재시작 없이 이 세션을 claude.ai 구독과 OpenRouter 사이에서 옮겨요 |
+| `/wanjang:provider openrouter\|console\|models\|presets\|claude\|key [console]\|status` | 재시작 없이 이 세션을 claude.ai 구독, OpenRouter, Anthropic Console API 키 사이에서 옮겨요 |
 
 `/wanjang:optimize`는 `bin/usage`를 실행해요. 디스크에 있는 세션 기록을 읽고 짧은 보고서를 보여 줘요. 메인
 컨텍스트 크기, 가장 많이 차지한 도구 결과, 여러 번 다시 읽은 파일, 최근 10분 동안 일한 에이전트와 그 사용량,
@@ -223,6 +223,12 @@ OpenRouter 모델을 가격대별로 보여 주고 자리마다 하나씩 물어
 찾기(`CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY`)는 ID에 `claude`나 `anthropic`이 들어간 모델만, 그것도 시작할 때만 목록에
 넣어서 다른 OpenRouter 모델은 띄울 수 없어요. 고른 모델은 그 세 이름으로 답해요.
 실제로 한 세션이 재시작 없이 구독 → OpenRouter → 구독 순서로 응답하는 걸 확인했어요.
+
+`/wanjang:provider console`은 구독 대신 Anthropic Console API 키로 토큰만큼 결제해요(이 프로젝트에만 적용돼요). Claude Code는
+`apiKeyHelper`를 `/login` 구독보다 먼저 쓰기 때문이에요. 키는 따로 저장해요(키체인 서비스 `anthropic-console-claude`, `secret-tool`,
+또는 `ANTHROPIC_CONSOLE_API_KEY`). 처음 `console`을 실행할 때, 또는 `/wanjang:provider key console`을 실행할 때 같은 비밀번호
+창이 떠요. 구독으로 돌아갈 때는 `claude`를 써요. Console 프로모션 크레딧은 일부 제품(API, Agent SDK, Batch)에만 쓸 수 있고
+Claude Code에는 안 될 수 있어요. 처음 한 번 호출한 뒤에 Console 사용량 페이지를 확인해 보세요.
 
 `/wanjang:provider`는 모델 없이 동작해요. 그래서 지금 쓰는 제공자가 답하지 못할 때도 바꿀 수 있어요. 입력하는 순간
 훅(`bin/provider-hook`)이 바로 실행하고 결과를 보여 줘요. 모델 호출이 없어요(질문을 해야 하는 `models`만 모델을 거쳐요).
@@ -375,7 +381,7 @@ Sonnet, 오래 일한 워커를 이어 쓰는 대신 새로 띄우기, 브라우
 | `bin/manager`, `bin/manager-page` | `/wanjang:manager`의 스캔, 장부, 전달, 프롬프트 훅과 페이지 렌더러 |
 | `bin/next` | 매니저가 쓰는 스캔과 약속·믿고 맡기기 기록 |
 | `bin/usage` | `/wanjang:optimize`의 토큰 보고서 |
-| `bin/provider`, `bin/openrouter-key`, `bin/provider-hook`, `bin/provider-fail` | `/wanjang:provider`, 키 도우미, 모델 없이 실행하는 훅, 결제 오류 때 되돌리는 훅 |
+| `bin/provider`, `bin/openrouter-key`, `bin/console-key`, `bin/provider-hook`, `bin/provider-fail` | `/wanjang:provider`, 키 도우미, 모델 없이 실행하는 훅, 결제 오류 때 되돌리는 훅 |
 | `bin/docindex` | `/wanjang:docs`가 쓰는 로컬 문서 색인 |
 | `skills/` | `/wanjang:wanjang`, `/wanjang:optimize`, `/wanjang:now`, `/wanjang:wen`, `/wanjang:manager`, `/wanjang:next`(껍데기), `/wanjang:docs`, `/wanjang:slim`, `/wanjang:relay`, `/wanjang:provider`, `/wanjang:visual-doc`, `/wanjang:brief` |
 | `test/` | `guard.sh`, `read-warn.sh`, `deliverables.sh`, `docindex.sh`, `main-rules.sh`, `route.sh`, `close.sh`, `ledger.sh`, `usage.sh`, `status.sh`, `provider.sh`, `next.sh`, `manager.sh`, `manager-page.sh`, `playbooks.sh`, `skills.sh` |

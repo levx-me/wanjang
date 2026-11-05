@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# provider openrouter|claude|key|status|models|presets [--user] [--file PATH]
+# provider openrouter|console|claude|key [console]|status|models|presets [--user] [--file PATH]
 #          [--opus M] [--sonnet M] [--haiku M] [--preset NAME] [--save NAME] [--slot S] [--search TEXT]
 # Switches Claude Code between the claude.ai login and OpenRouter by rewriting the `env` and
 # `apiKeyHelper` of one settings file; a running session reloads that file when it changes.
@@ -15,11 +15,18 @@
 # the result as `last` (and as --save NAME). `models` lists OpenRouter models to pick from.
 # Before switching, `openrouter` checks the OpenRouter balance and refuses (exit 6) below
 # $PROVIDER_MIN_CREDIT (default 0.50): with no credit every request fails, this command included.
+# `console` bills an Anthropic Console API key (pay as you go) the same way: its own keychain item
+# (anthropic-console-claude), `key console` to enter it, no model slots, Anthropic's own endpoint.
 # `default`, `subscription` and `anthropic` mean `claude`.
 set -euo pipefail
 here=$(cd "$(dirname "$0")" && pwd -P)
 
 mode=${1:-status}; shift || true
+kp=openrouter  # whose key `key` and the dialog handle
+{ [ "$mode" = console ] || { [ "$mode" = key ] && [ "${1:-}" = console ]; }; } && kp=console
+[ "$mode" = key ] && [ "${1:-}" = console ] && shift
+if [ $kp = console ]; then svc=anthropic-console-claude label="Anthropic Console" name="Anthropic Console" envvar=ANTHROPIC_CONSOLE_API_KEY
+else svc=openrouter-claude label=OpenRouter name=OpenRouter envvar=OPENROUTER_API_KEY; fi
 case "$mode" in default|subscription|anthropic) mode=claude ;; esac
 root=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
 file="$root/.claude/settings.local.json"
@@ -63,9 +70,9 @@ if [ -z "$ask_cmd" ] && [ -z "$home_ok" ]; then
   ask_cmd=fake-home
 elif [ -z "$ask_cmd" ]; then
   if command -v osascript >/dev/null && [ -z "${SSH_CONNECTION:-}" ]; then
-    ask_cmd='osascript -e "text returned of (display dialog \"OpenRouter API key (stored in your keychain)\" default answer \"\" with hidden answer with title \"wanjang provider\")"'
+    ask_cmd='osascript -e "text returned of (display dialog \"'"$name"' API key (stored in your keychain)\" default answer \"\" with hidden answer with title \"wanjang provider\")"'
   elif command -v zenity >/dev/null && [ -n "${DISPLAY:-}${WAYLAND_DISPLAY:-}" ]; then
-    ask_cmd='zenity --password --title="OpenRouter API key (wanjang provider)"'
+    ask_cmd="zenity --password --title=\"$name API key (wanjang provider)\""
   else
     ask_cmd=none
   fi
@@ -76,17 +83,17 @@ store() {  # the key on stdin -> the OS secret store
   elif [ -z "$home_ok" ]; then refuse_fake_home
   elif command -v security >/dev/null; then
     # security -i reads its command from stdin, so the key never appears in any process's argv.
-    { read -r k; printf 'add-generic-password -U -s openrouter-claude -a "%s" -w "%s"\n' "$USER" "$k"; } |
-      security -i >/dev/null 2>&1 && security find-generic-password -s openrouter-claude -a "$USER" >/dev/null 2>&1
-  else read -r k; printf '%s' "$k" | secret-tool store --label=OpenRouter service openrouter-claude  # no trailing newline
+    { read -r k; printf 'add-generic-password -U -s %s -a "%s" -w "%s"\n' "$svc" "$USER" "$k"; } |
+      security -i >/dev/null 2>&1 && security find-generic-password -s "$svc" -a "$USER" >/dev/null 2>&1
+  else read -r k; printf '%s' "$k" | secret-tool store --label="$label" service "$svc"  # no trailing newline
   fi
 }
 
 manual() {
   echo 'provider: no password dialog here. Store the key once yourself, then run this again:' >&2
-  echo '  macOS: security add-generic-password -s openrouter-claude -a "$USER" -w' >&2
-  echo '  Linux: secret-tool store --label=OpenRouter service openrouter-claude' >&2
-  echo '  or set OPENROUTER_API_KEY in the environment Claude Code starts from' >&2
+  echo "  macOS: security add-generic-password -s $svc -a \"\$USER\" -w" >&2
+  echo "  Linux: secret-tool store --label=\"$label\" service $svc" >&2
+  echo "  or set $envvar in the environment Claude Code starts from" >&2
   exit 3
 }
 
@@ -148,6 +155,17 @@ models() {  # list OpenRouter models that take tools, by slot; no key is sent
 
 case "$mode" in
   key) ask_and_store; exit 0 ;;
+  console)
+    # Under a fake HOME only the env key counts, as for openrouter.
+    if [ -n "$home_ok" ]; then "$here/console-key" >/dev/null 2>&1; else [ -n "${ANTHROPIC_CONSOLE_API_KEY:-}" ]; fi || ask_and_store
+    # Anthropic's own endpoint and names; blank credentials so a shell-exported value cannot win.
+    write --arg k "$here/console-key" '
+      .apiKeyHelper = $k
+      | .env.ANTHROPIC_BASE_URL = "https://api.anthropic.com"
+      | .env.ANTHROPIC_AUTH_TOKEN = ""
+      | .env.ANTHROPIC_API_KEY = ""
+      | .env.CLAUDE_CODE_API_KEY_HELPER_TTL_MS = "5000"
+      | reduce ("OPUS","SONNET","HAIKU") as $m (.; if .env["ANTHROPIC_DEFAULT_\($m)_MODEL"] then .env["ANTHROPIC_DEFAULT_\($m)_MODEL"] = "" else . end)' ;;
   models) models; exit 0 ;;
   presets)
     jq -r '(.presets // {} | to_entries[] | "\(.key): \(.value | to_entries | map("\(.key)=\(.value)") | join(" "))"),
@@ -176,7 +194,7 @@ case "$mode" in
       | if $s != "" then .env.ANTHROPIC_DEFAULT_SONNET_MODEL = $s else . end
       | if $h != "" then .env.ANTHROPIC_DEFAULT_HAIKU_MODEL = $h else . end' ;;
   claude)
-    # Back to the subscription: no helper, empty credentials, Anthropic's own endpoint and model names.
+    # Back to the subscription (also undoes console): no helper, empty credentials, Anthropic's own endpoint and model names.
     write '
       del(.apiKeyHelper)
       | .env.ANTHROPIC_BASE_URL = "https://api.anthropic.com"
@@ -184,11 +202,12 @@ case "$mode" in
       | .env.ANTHROPIC_API_KEY = ""
       | reduce ("OPUS","SONNET","HAIKU") as $m (.; if .env["ANTHROPIC_DEFAULT_\($m)_MODEL"] then .env["ANTHROPIC_DEFAULT_\($m)_MODEL"] = "" else . end)' ;;
   status) ;;
-  *) echo "usage: provider openrouter|claude(=default)|key|status|models|presets [--user] [--file PATH] [--opus M] [--sonnet M] [--haiku M] [--preset NAME] [--save NAME] [--slot opus|sonnet|haiku] [--search TEXT]" >&2; exit 2 ;;
+  *) echo "usage: provider openrouter|console|claude(=default)|key [console]|status|models|presets [--user] [--file PATH] [--opus M] [--sonnet M] [--haiku M] [--preset NAME] [--save NAME] [--slot opus|sonnet|haiku] [--search TEXT]" >&2; exit 2 ;;
 esac
 
 now=claude
 [ "$(jq -r '.env.ANTHROPIC_BASE_URL // ""' "$file" 2>/dev/null)" = "https://openrouter.ai/api" ] && now=openrouter
+[ "$(jq -r '.apiKeyHelper // "" | split("/") | last' "$file" 2>/dev/null)" = console-key ] && now=console
 if [ $now = openrouter ]; then
   m=$(jq -r '[("opus","sonnet","haiku") as $s | .env["ANTHROPIC_DEFAULT_\($s | ascii_upcase)_MODEL"] // "" | select(. != "")] | join(", ")' "$file" 2>/dev/null)
   echo "provider: $now${m:+, models $m} ($file)"
