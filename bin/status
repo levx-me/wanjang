@@ -348,10 +348,11 @@ if a.eta:
             except (StopIteration, OSError):
                 rows = []
             if rows:
-                done = sum(r.get("status", "").lower() == "done" for r in rows)
+                first = lambda r: (r.get("status", "").lower().split() or [""])[0]  # "done f71b50a; 1.77s" counts as done
+                done = sum(first(r) == "done" for r in rows)
                 left, todo = [], 0
                 for r in rows:
-                    s = r.get("status", "").lower()
+                    s = first(r)
                     if s not in ("running", "todo"):
                         continue
                     ws = stat(*worker(r.get("worker", ""))) or stat("wanjang:builder", "sonnet")

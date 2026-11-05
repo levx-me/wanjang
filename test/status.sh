@@ -146,4 +146,11 @@ echo "$bars" | grep -q '^Slow build *█████████████▒ 
 echo "$bars" | grep -q '^Look around *░* *no estimate$' || { echo "FAIL bars no estimate"; fail=1; }
 echo "$bars" | grep -q '└ 1/3 tasks done' || { echo "FAIL bars tasks"; fail=1; }
 unset WANJANG_NOW
+# status cell counted by its first word: "done f71b50a; cold 1.77s" is done, "running ..." is running
+R5=$U/repo/.git/wanjang/run5; mkdir -p "$R5"
+printf '## Tasks\n| task | worker | status |\n| T1 x | builder | done f71b50a; cold 1.77s |\n| T2 y | designer | Running (pmz) |\n| T3 | todo |\n| T4 z | builder | todo |\n' > "$R5/log.md"
+echo "{\"type\":\"user\",\"cwd\":\"$U/repo\",\"timestamp\":\"$(isoN 9000)\"}" > "$Q/s5.jsonl"
+E3=$Q/s5/subagents; mkdir -p "$E3"; pmrun pmD Write "{\"file_path\":\"$R5/log.md\",\"content\":\"x\"}"
+json=$(CLAUDE_CONFIG_DIR=$U WANJANG_NOW=$NOW bin/status --session s5 --cwd "$U/repo" --json --eta)
+want '.agents[] | select(.id=="pmD") | .eta | [.tasks_done, .tasks_total] | @csv' '1,4'   # the short T3 row has no status cell: counted as a row, neither done nor running
 [ $fail = 0 ] && echo "status.sh ok"; exit $fail
