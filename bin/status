@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""status [--session ID|PATH] [--cwd DIR] [--json]: a compact snapshot of what this Claude Code
+"""status [--session ID|PATH] [--cwd DIR] [--json] [--eta]: a compact snapshot of what this Claude Code
 session's agents are doing now, read from transcripts on disk (only the last 200 KB of each).
 
   agents  subagents written to in the last 2 hours, nested under their parent: type, task, age,
@@ -7,10 +7,17 @@ session's agents are doing now, read from transcripts on disk (only the last 200
   stuck   running, silent for over 10 minutes and not waiting on a tool result
   runs    Wanjang run folders touched in the last 2 hours: status line and last 5 log lines
   tasks   the main session's open tasks, if on disk
+  --eta   when each running agent should finish, from how long past finished agents of the same
+          type and model took (median = likely, 80th percentile = latest; needs 5 samples, else
+          the type alone, else no estimate). A wanjang:pm with a `## Tasks` table in its run log is
+          refined by that table (k of n done, running and todo rows). Ends with when all top-level
+          running work should be done. In --json each agent gets eta {likely, latest, left_min,
+          basis_n, basis, over} (epoch seconds, null when none) and the top level eta_all.
+          Clock: env WANJANG_NOW (epoch seconds) replaces the current time, for tests.
 
 Session: --session, else $CLAUDE_CODE_SESSION_ID, else the newest transcript for the cwd.
 Exit codes: 0 snapshot printed, 2 bad arguments or no transcript."""
-import argparse, glob, json, os, subprocess, sys, time
+import argparse, glob, json, os, re, statistics, subprocess, sys, time
 from datetime import datetime
 
 TAIL, WINDOW, STUCK = 200_000, 7200, 600
@@ -18,9 +25,10 @@ ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
 ap.add_argument("--session", default=os.environ.get("CLAUDE_CODE_SESSION_ID", ""))
 ap.add_argument("--cwd", default=os.getcwd())
 ap.add_argument("--json", action="store_true")
+ap.add_argument("--eta", action="store_true")
 a = ap.parse_args()
 home = os.environ.get("CLAUDE_CONFIG_DIR") or os.path.expanduser("~/.claude")
-now = time.time()
+now = float(os.environ.get("WANJANG_NOW") or time.time())
 
 # --- find the session transcript
 how, main = "", ""
@@ -48,13 +56,13 @@ def ts(s):
         return None
 
 
-def tail_rows(path):
+def tail_rows(path, tail=TAIL):
     with open(path, "rb") as f:
         size = f.seek(0, 2)
-        f.seek(max(0, size - TAIL))
+        f.seek(max(0, size - tail))
         data = f.read()
     lines = data.split(b"\n")
-    if size > TAIL:
+    if size > tail:
         lines = lines[1:]  # first line is cut
     for l in lines:
         try:
@@ -120,7 +128,7 @@ def digest(path):
 
 
 # --- agents
-agents = []
+agents, models = [], {}
 for mp in glob.glob(f"{os.path.splitext(main)[0]}/subagents/agent-*.meta.json"):
     jp = mp[: -len(".meta.json")] + ".jsonl"
     try:
@@ -141,6 +149,7 @@ for mp in glob.glob(f"{os.path.splitext(main)[0]}/subagents/agent-*.meta.json"):
               last_tool=d["last_tool"] and f"{d['last_tool'][0]} {d['last_tool'][1]}".strip(),
               waiting=w and dict(tool=w[0], what=w[1], secs=int(now - (w[2] or last))),
               text=d["text"], stuck=False)
+    models[aid] = None if meta.get("model") in (None, "inherit") else meta["model"]
     ag["stuck"] = running and not w and now - mt > STUCK
     agents.append(ag)
 agents.sort(key=lambda g: g["started"])
@@ -173,7 +182,7 @@ try:
         dirs.append(g + "/wanjang")
 except Exception:
     pass
-runs = []
+runs, rlogs = [], []
 for d in dirs:
     for lp in glob.glob(f"{d}/*/log.md"):
         try:
@@ -185,6 +194,7 @@ for d in dirs:
             lines = [l for l in open(lp, errors="replace").read().splitlines()[-40:] if l.strip()][-5:]
         except OSError:
             continue
+        rlogs.append((mt, lp))
         runs.append(dict(run=os.path.basename(os.path.dirname(lp)), status=first, updated=mt,
                          tail=[short(l, 110) for l in lines]))
 runs.sort(key=lambda r: -r["updated"])
@@ -200,8 +210,109 @@ for tp in glob.glob(f"{home}/tasks/session-{sid[:8]}/*.json"):
         pass
 tasks.sort(key=lambda t: (str(t["id"]).zfill(6)))
 
+# --- eta
+eta, eta_all, tasks_of = {}, None, {}
+if a.eta:
+    hist = {}
+    # ponytail: no cache; ~2700 agents read in 1.6 s. Add a cache file once this takes over ~5 s.
+    for mp in glob.glob(f"{home}/projects/*/*/subagents/agent-*.meta.json"):
+        try:
+            m = json.load(open(mp))
+            if not m.get("finished"):
+                continue
+            jp = mp[: -len(".meta.json")] + ".jsonl"
+            t0 = first_ts(jp)
+            t1 = max((t for t in (ts(r.get("timestamp", "")) for r in tail_rows(jp, 20_000)
+                                  if isinstance(r.get("timestamp"), str)) if t), default=None)
+        except (OSError, ValueError, AttributeError):
+            continue
+        if t0 and t1 and t1 > t0:
+            mod = None if m.get("model") == "inherit" else m.get("model")
+            for k in ((m.get("agentType"), mod), (m.get("agentType"), "*")):
+                hist.setdefault(k, []).append((t1 - t0) / 60)
+
+    def stat(typ, model):
+        """(median min, p80 min, n, basis) for the model group, else the type alone, else None"""
+        for k, label in (((typ, model), f"{typ} {model}" if model else typ), ((typ, "*"), typ)):
+            v = sorted(hist.get(k, ()))
+            if len(v) >= 5:
+                return statistics.median(v), v[min(len(v) - 1, int(0.8 * len(v)))], len(v), label
+        return None
+
+    def worker(cell):
+        """'builder opus' -> ('wanjang:builder', 'opus'); unknown -> builder sonnet"""
+        w = cell.lower().split()
+        typ = next((x for x in w if x in ("builder", "qa", "checker", "scout", "planner", "pm")), "builder")
+        return "wanjang:" + typ, next((x for x in w if x in ("opus", "sonnet", "haiku")), "sonnet")
+
+    def table(lp):
+        """rows of the run log's `## Tasks` table as dicts keyed by lowercase header"""
+        rows, head, on = [], None, False
+        for l in open(lp, errors="replace").read().splitlines():
+            if l.startswith("#"):
+                on = l.strip().lower() == "## tasks"
+            elif on and l.startswith("|"):
+                c = [x.strip() for x in l.strip().strip("|").split("|")]
+                if head is None:
+                    head = [x.lower() for x in c]
+                elif not set("".join(c)) <= set("-: "):
+                    rows.append(dict(zip(head, c), _line=l))
+        return rows
+
+    p80s = {}
+    for g in sorted(tree, key=lambda g: g["type"] == "wanjang:pm"):  # PMs last: rows read their workers' eta
+        if not g["running"]:
+            continue
+        st = stat(g["type"], models.get(g["id"]))
+        e = dict(likely=None, latest=None, left_min=None, basis_n=None, basis=None, over=False)
+        if st:
+            med, p80, e["basis_n"], e["basis"] = st
+            p80s[g["id"]] = p80
+            e["likely"], e["latest"] = g["started"] + med * 60, g["started"] + p80 * 60
+            e["over"] = now > e["latest"]
+        if g["type"] == "wanjang:pm" and rlogs:
+            try:
+                # ponytail: newest run log with a Tasks table; two PMs at once share it
+                rows = next(r for r in (table(lp) for _, lp in sorted(rlogs, reverse=True)) if r)
+            except (StopIteration, OSError):
+                rows = []
+            if rows:
+                done = sum(r.get("status", "").lower() == "done" for r in rows)
+                left, todo = [], 0
+                for r in rows:
+                    s = r.get("status", "").lower()
+                    if s not in ("running", "todo"):
+                        continue
+                    ws = stat(*worker(r.get("worker", "")))
+                    mine = [x for x in tree if x["running"] and x["id"] != g["id"] and x["id"] in eta
+                            and re.search(rf"\b{re.escape(x['id'])}\b", r["_line"])]
+                    if s == "running" and mine and eta[mine[0]["id"]]["likely"]:
+                        left.append(max(0, eta[mine[0]["id"]]["likely"] - now) / 60)
+                    elif s == "running":
+                        left.append(ws[0] if ws else 0)
+                    else:
+                        todo += ws[0] if ws else 0
+                end = now + (max(left, default=0) + todo) * 60
+                e["likely"] = max(e["likely"] or 0, end)
+                e["latest"] = max(e["latest"] or 0, e["likely"])
+                e["over"] = False
+                e["basis"] = f"{e['basis'] or 'run log'}; {done} of {len(rows)} tasks done"
+                e["tasks_done"], e["tasks_total"] = done, len(rows)
+        if e["likely"]:
+            e["left_min"] = max(0, round((e["likely"] - now) / 60))
+        if e["over"] or g["stuck"]:
+            e["likely"] = e["latest"] = e["left_min"] = None
+        eta[g["id"]] = e
+    top = [eta[g["id"]]["likely"] for g in tree
+           if g["running"] and not (g["parent"] in byid and byid[g["parent"]]["running"]) and eta[g["id"]]["likely"]]
+    eta_all = max(top, default=None)
+    for g in tree:
+        g["eta"] = eta.get(g["id"])
+
 if a.json:
     out = dict(session=sid, transcript=main, found_by=how, agents=tree, runs=runs, tasks=tasks)
+    if a.eta:
+        out["eta_all"] = eta_all
     print(json.dumps(out, indent=1))
     sys.exit(0)
 
@@ -214,10 +325,34 @@ def ago(t):
 L = [f"session {sid[:8]} ({how})"]
 n_run = sum(g["running"] for g in tree)
 L.append(f"agents: {n_run} running, {len(tree) - n_run} finished in the last 2h")
+
+
+def clock(t):
+    d = datetime.fromtimestamp(t)
+    return d.strftime("%H:%M" if d.date() == datetime.fromtimestamp(now).date() else "%m-%d %H:%M")
+
+
+def eta_line(g):
+    e = g["eta"]
+    if g["stuck"]:
+        return "eta: MAY BE STUCK, no estimate"
+    if e["over"]:
+        return f"eta: taking longer than usual (most finish within {round(p80s[g['id']])} min), from {e['basis_n']} past {e['basis']}"
+    if not e["likely"]:
+        return "eta: no estimate (fewer than 5 past runs of this type)"
+    return (f"eta: likely {clock(e['likely'])} (~{e['left_min']} min left), latest {clock(e['latest'])} "
+            f"(~{max(0, round((e['latest'] - now) / 60))} min), from {str(e['basis_n']) + ' past ' if e['basis_n'] else ''}{e['basis']}")
+
+
+if a.eta:
+    L.append(f"all running work should be done by {clock(eta_all)} (~{max(0, round((eta_all - now) / 60))} min left), an estimate"
+             if eta_all else "nothing running" if not n_run else "running work: no estimate")
 for g in tree:
     ind = "  " * (1 + (g["depth"] - 1 if g["parent"] in byid else 0))
     st = "RUNNING" if g["running"] else "done"
     L.append(f"{ind}[{st}] {g['type']} - {short(g['desc'], 60)} (started {ago(g['started'])} ago, last write {ago(g['last_write'])} ago)")
+    if a.eta and g["running"]:
+        L.append(f"{ind}    {eta_line(g)}")
     if g["waiting"]:
         w = g["waiting"]
         L.append(f"{ind}    running `{short(w['what'] or w['tool'], 50)}` ({w['tool']}) for {ago(now - w['secs'])}")

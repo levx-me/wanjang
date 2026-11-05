@@ -31,4 +31,55 @@ want '.agents[] | select(.id=="stk") | .stuck' true
 want '[.agents[].id] | index("w1") - index("pm")' 1   # nested worker follows its parent
 CLAUDE_CONFIG_DIR=$T bin/status --session $S --cwd /nonexistent | grep -q 'MAY BE STUCK' || { echo "FAIL text output"; fail=1; }
 CLAUDE_CONFIG_DIR=$T bin/status --bogus 2>/dev/null; [ $? = 2 ] || { echo "FAIL bad args exit"; fail=1; }
+
+# --- --eta: fixed clock, history of finished agents, running agents, a PM with a run log
+NOW=$(date +%s); export WANJANG_NOW=$NOW
+isoN() { date -u -r "$(( NOW - $1 ))" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -d "@$(( NOW - $1 ))" +%Y-%m-%dT%H:%M:%SZ; }
+span() { printf '{"type":"assistant","timestamp":"%s","message":{"content":[{"type":"text","text":"a"}]}}\n{"type":"assistant","timestamp":"%s","message":{"content":[{"type":"text","text":"b"}]}}\n' "$(isoN "$1")" "$(isoN "$2")"; }
+U=$(mktemp -d); trap 'rm -rf "${T:?}" "${U:?}"' EXIT
+git init -q "$U/repo"; RL=$U/repo/.git/wanjang/run1; mkdir -p "$RL"
+Q=$U/projects/-y; E=$Q/s2/subagents; H=$Q/s0/subagents; mkdir -p "$E" "$H"
+echo "{\"type\":\"user\",\"cwd\":\"$U/repo\",\"timestamp\":\"$(isoN 9000)\"}" > "$Q/s2.jsonl"
+hist() { # type model minutes...: finished agents, each took that many minutes
+  local ty=$1 mo=$2; shift 2; local m i=0
+  for m in "$@"; do i=$((i+1)); local id=h-${ty#wanjang:}-${mo//\"/}-$i
+    echo "{\"agentType\":\"$ty\",\"model\":$mo,\"finished\":true,\"spawnDepth\":1}" > "$H/agent-$id.meta.json"
+    span $((20000 - i)) $((20000 - i - m * 60)) > "$H/agent-$id.jsonl"
+  done; }
+hist wanjang:builder '"sonnet"' 4 5 6 7 8 9     # median 6.5, p80 8
+hist wanjang:pm null 10 10 10 10 10
+hist wanjang:checker '"opus"' 2 3; hist wanjang:checker '"sonnet"' 1 2 3   # 5 by type, 2 and 3 by model
+hist wanjang:scout '"sonnet"' 2 3
+run() { echo "{\"agentType\":\"$2\",\"model\":$3,\"description\":\"$4\",\"spawnDepth\":1}" > "$E/agent-$1.meta.json"
+  { printf '{"type":"assistant","timestamp":"%s","message":{"content":[{"type":"text","text":"start"}]}}\n' "$(isoN "$5")"
+    printf '{"type":"assistant","timestamp":"%s","message":{"content":[{"type":"tool_use","id":"u%s","name":"Bash","input":{"command":"ls"}}]}}\n' "$(isoN 5)" "$1"; } > "$E/agent-$1.jsonl"; }
+run bnew wanjang:builder '"sonnet"' "Fresh build" 180        # 3 min in: likely +3.5, latest +5
+run bold wanjang:builder '"sonnet"' "Slow build" 1500        # 25 min in: past p80
+run chk wanjang:checker '"opus"' "Check it" 60               # model has 2, type has 5
+run scx wanjang:scout '"sonnet"' "Look around" 60            # 2 samples only: no estimate
+run pm1 wanjang:pm null "Lead" 120                           # history +8 min, run log says more
+run pmw wanjang:builder '"sonnet"' "Task 2" 180
+sed -i.bak 's/"spawnDepth":1/"spawnDepth":2,"parentAgentId":"pm1"/' "$E/agent-pmw.meta.json"; rm -f "$E"/*.bak
+printf 'Status: in progress\n\n## Tasks\n| task | worker | files | status |\n| one | builder sonnet | a | done |\n| two pmw | builder sonnet | b | running |\n| three | builder sonnet | c | todo |\n' > "$RL/log.md"
+ej=$(CLAUDE_CONFIG_DIR=$U bin/status --session s2 --cwd "$U/repo" --json --eta)
+et=$(CLAUDE_CONFIG_DIR=$U bin/status --session s2 --cwd "$U/repo" --eta)
+json=$ej
+want '.agents[] | select(.id=="bnew") | .eta | [.likely - '"$NOW"', .latest - '"$NOW"', .left_min, .basis_n, .basis, .over] | @csv' '210,300,4,6,"wanjang:builder sonnet",false'
+want '.agents[] | select(.id=="bold") | .eta | [.likely, .latest, .over] | @csv' ',,true'
+want '.agents[] | select(.id=="chk") | .eta | [.basis_n, .basis] | @csv' '5,"wanjang:checker"'
+want '.agents[] | select(.id=="scx") | .eta | [.likely, .basis_n, .over] | @csv' ',,false'
+want '.agents[] | select(.id=="pm1") | .eta | .tasks_done' 1
+want '.agents[] | select(.id=="pm1") | .eta | .basis | endswith("1 of 3 tasks done")' true
+# pm: history gives start+10 min (8 left); the table gives the worker 3.5 left plus the todo row 6.5 = 10 left
+want '.agents[] | select(.id=="pm1") | .eta | .likely - '"$NOW" 600
+want '.eta_all' "$(printf '%s' "$ej" | jq '.agents[] | select(.id=="pm1") | .eta.likely')"   # latest likely among top-level
+echo "$et" | grep -q 'all running work should be done by' || { echo "FAIL eta overall line"; fail=1; }
+echo "$et" | grep -q 'taking longer than usual (most finish within 8 min)' || { echo "FAIL overdue wording"; fail=1; }
+echo "$et" | grep -q 'eta: no estimate' || { echo "FAIL no-estimate wording"; fail=1; }
+echo "$et" | grep -q '1 of 3 tasks done' || { echo "FAIL tasks done text"; fail=1; }
+echo "$et" | grep -q 'eta: likely [0-9: -]* (~4 min left), latest' || { echo "FAIL likely wording"; fail=1; }
+# without --eta nothing changes: no eta keys, no eta text
+CLAUDE_CONFIG_DIR=$U bin/status --session s2 --cwd "$U/repo" --json | jq -e 'has("eta_all") or ([.agents[] | has("eta")] | any)' >/dev/null && { echo "FAIL eta leaked into --json"; fail=1; }
+CLAUDE_CONFIG_DIR=$U bin/status --session s2 --cwd "$U/repo" | grep -q 'eta' && { echo "FAIL eta leaked into text"; fail=1; }
+unset WANJANG_NOW
 [ $fail = 0 ] && echo "status.sh ok"; exit $fail
