@@ -8,7 +8,7 @@ Hand Claude Code a multi-step job: a PM splits it across a crew, a second agent 
 and you review the choices it made in one list at the end.
 
 [![Claude Code plugin](https://img.shields.io/badge/Claude_Code-plugin-d97757)](https://code.claude.com/docs/en/plugins)
-[![version](https://img.shields.io/badge/version-0.12.0-blue)](.claude-plugin/plugin.json)
+[![version](https://img.shields.io/badge/version-0.13.0-blue)](.claude-plugin/plugin.json)
 [![license](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
 English | [한국어](README.ko.md)
@@ -32,11 +32,11 @@ prices are never done by the crew: they come back as steps for you.
 
 ## What it does for you
 
-- **Brings you the next job.** Turn on `/wanjang:next` and, when the session goes quiet, it offers the most likely
-  next task in one question, with why now and what it costs. A declined offer stays closed until its evidence
-  changes.
+- **Keeps an eye on your other sessions.** Give one open session the manager role with `/wanjang:manager on` and, every
+  hour, it looks at the rest, puts what you missed on one page and asks about up to four things, one at a time. What
+  you approve is sent at once to the session that owns it. A declined item stays closed until its evidence changes.
 - **Remembers what it promised.** "Check the deploy once CI is green", "remind me in three days": it writes the
-  promise down with a time or a condition, and when it comes due the next check asks you once: do it, later, or drop
+  promise down with a time or a condition, and when it comes due the manager asks you once: do it, later, or drop
   it. The conditions run only inside that check (10-second limit, at most 3 per check), never from a hook.
 - **Earns your trust.** Say yes to the same kind of action three times (the first at least 24 hours old,
   all within 14 days) and it stops asking for that kind: it does it and tells you in one line. A local commit can earn
@@ -187,10 +187,12 @@ field: know-how for a field comes from playbooks.
 | `/wanjang:brief` | Write a brief for non-developers: plain words, the decisions to approve, each paired with a question |
 | `/wanjang:now` | What each running agent is doing now, for how long, what is done and what looks stuck (`bin/status`, read-only) |
 | `/wanjang:now --week\|--since DATE\|--repo X` | What finished runs shipped, one line each, from the ledger at `~/.claude/wanjang/ledger.md` (honours `CLAUDE_CONFIG_DIR`; `bin/ledger`) |
-| `/wanjang:next on\|off\|status` | A quiet look-ahead: when idle, asks once whether to do the most likely next piece of work (off by default, this session only) |
-| `/wanjang:next promises` | The promises written down for this project: id, when due, its condition, what was asked (see below) |
-| `/wanjang:next trust [off\|on\|<kind> ask\|<kind> reset]` | Which kinds of action are done without asking; `off` asks for everything again (see below) |
-| `/wanjang:next undo` | Undoes the last action done without asking (a local commit or a docs edit), if it can |
+| `/wanjang:manager on\|off\|status` | Make this session the manager of your other open sessions: an hourly look, one page, up to 4 questions, approved items sent to their sessions (off by default, one manager per user) |
+| `/wanjang:manager` | Check now, and show the page |
+| `/wanjang:manager approve ID\|reject ID` | Answer an item from the page instead of the wizard |
+| `/wanjang:manager promises` | The promises written down for this project: id, when due, its condition, what was asked (see below) |
+| `/wanjang:manager trust [off\|on\|<kind> ask\|<kind> reset]` | Which kinds of action are done without asking; `off` asks for everything again (see below) |
+| `/wanjang:manager undo` | Undoes the last action done without asking (a local commit or a docs edit), if it can |
 | `/wanjang:slim` | Move rules only the main session needs out of what every subagent loads (see below) |
 | `/wanjang:relay <session> <request>` · `status` | Hand work to the Claude session that owns another repo on this machine (Claude Code's ListAgents/SendMessage) and track its report |
 | `/wanjang:optimize` | See where this session's tokens go and fix what applies, with agents still running |
@@ -230,13 +232,13 @@ settings file but keeps the saved choices. The `/model` picker keeps showing Opu
 gateway model discovery (`CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY`) lists only IDs that contain `claude` or `anthropic`
 and runs only at startup, so it cannot surface other OpenRouter models; the picked models answer under those three names.
 
-### Next work: `/wanjang:next`
+### Manager: `/wanjang:manager`
 
-`/wanjang:next on` turns on a quiet look-ahead for this session only; it is off by default (`off` stops it, `status` shows it). When the main session is idle it looks for the single most likely next useful piece of work and asks you with one wizard question ("Do X? why now / what it costs"; Do it (Recommended) / Not now). It does the work only on a yes, handled exactly as if you had asked, through the normal routing; push, deploy and irreversible steps are still asked separately.
+`/wanjang:manager on` makes the session you type it in the manager: use your general assistant session, not one that works in a repository. It is off by default, there is one manager per user (`on --take` moves it), and the manager never edits a repository or does the work itself. Every hour (minute 7) and whenever you type `/wanjang:manager`, it checks your other open sessions, reading Claude Code's own session list (`~/.claude/sessions`): who waits on you, who has been idle after a reply, stuck agents, uncommitted or unpushed work, code changed since the docs, open wanjang runs and due promises. A script does the looking; a small `inspector` agent (Sonnet) judges only what is new.
 
-It looks once right after a piece of work finishes (a Stop hook, main session only, never in subagents; not after a plain question-and-answer turn, not while its own background work runs), and every 30 minutes while the session is idle (a session cron Claude Code runs between turns, which survives `--resume`; each check makes sure the schedule exists and renews it a day before Claude Code's 7-day limit, so it keeps running until `/wanjang:next off` or the session ends; `off` deletes it and nothing turns it back on). It reads this conversation and its task list (follow-ups such as verification, docs or a commit, stalled pending tasks, subagent results not yet reported), the repository (uncommitted changes, TODO/FIXME on changed lines, the "next" section of `MEMORY.md`, unfinished wanjang runs, failing tests or lint already seen; it never runs your tests just to look) and other sessions (relay requests with no report back, a session waiting on this one). Not GitHub.
+What you get is one page (`~/.claude/wanjang/manager/page.html`: decisions needed, sent and waiting, done, problems, also open) and a wizard that asks one question at a time, at most four per check: Approve, Reject, or Other for a comment (a comment is not approval). An approved item is sent right away, with your words and the time, to the session that owns it (queued if that session is busy), and that session reports back with `manager reply`, which costs the manager nothing. Push, deploy, migrations, deletes and installs are still asked once more by the owning session, even though the message carries your approval. Kinds you have trusted (see Trust: verify, test, docs, commit; local only) are sent without asking; anything outward is always asked.
 
-Nothing found means no question and no message beyond a single `·` (Claude Code refuses an empty reply and would add its own line). A `UserPromptSubmit` hook also stops the schedule's `/wanjang:next check` before the model runs when it would find nothing (off, or checked within 25 minutes); Claude Code shows that block as one short `· next check skipped: ...` notice, with no model turn. The first check after `off` still reaches the model so it can delete a leftover schedule. One question per check, and no further check while one is open. A candidate you declined or left unanswered is not asked again until its evidence changes (a new commit, a new failure, a new message). `bin/next` keeps that record in `~/.claude/wanjang/next/<session id>.json` (honours `CLAUDE_CONFIG_DIR`), pruned after 7 days. It also holds whether `next` is on or off and when the schedule was made. The check is one shell scan in the main session; no subagent is spawned to look.
+The manager's context stays small. A check that finds nothing new is stopped by a `UserPromptSubmit` hook before the model runs (Claude Code shows one `·` notice); a check that finds something costs a few lines and one wizard. The hourly check is a session cron that renews itself before Claude Code's 7-day limit, and it waits if you typed in the last 10 minutes. The manager's memory is the ledger in `~/.claude/wanjang/manager/` (honours `CLAUDE_CONFIG_DIR`): `manager resume` rebuilds it after a compaction or a restart, so nothing is lost. `/wanjang:next` is now a stub that deletes its old schedule; promises and trust carry over.
 
 #### Promises
 
@@ -245,9 +247,9 @@ When you or the agent commit to something for later ("check the release once CI 
 asked in your words, and a time (`--at`, ISO 8601 or `+30m`/`+2h`/`+3d`; "tomorrow" means 09:00 local), a condition
 (`--when`, a shell test such as `gh run view ID --json status -q .status | grep -qx completed`), or both. A condition
 is rechecked every 30 minutes (`--every`) and the promise gives up after 14 days (`--for`). Writing one down does not
-turn `next` on.
+turn the manager on.
 
-Conditions run only inside `next scan` (the check), with a 10-second timeout and at most 3 per scan; never from a
+Conditions run only inside `next scan` (the manager's check), with a 10-second timeout and at most 3 per scan; never from a
 hook. A due promise comes before every other candidate, and the question names your words and why it is due, with
 three answers: Do it, Later (tomorrow 09:00, or a time you type) and Drop it. Promises are kept per user in
 `~/.claude/wanjang/promises.json` (honours `CLAUDE_CONFIG_DIR`), each tied to its project.
@@ -260,18 +262,18 @@ three answers: Do it, Later (tomorrow 09:00, or a time you type) and Drop it. Pr
 | `done ID [--note N]` · `drop ID` | Close one |
 | `due` | The promises due here, read-only (runs no condition) |
 
-`/wanjang:next promises` shows the list as a table; "drop 2" or "later 2" afterwards closes or snoozes one.
+`/wanjang:manager promises` shows the list as a table; "drop 2" or "later 2" afterwards closes or snoozes one.
 
 #### Trust
 
-While `next` is on, the kinds of action you keep saying yes to stop being asked. After 3 yeses for one kind, the
+While the manager is on, the kinds of action you keep saying yes to stop being asked. After 3 yeses for one kind, the
 first at least 24 hours old and all within 14 days, that kind is done without asking and reported in one
 line, and the first time it says it was promoted. A local commit can be promoted: only the files this session
 changed, after they are verified, never pushed, and the last one can be undone. At most 2 such actions per idle
 stretch and 6 a day. One "Not now" for a kind, or an action of that kind that failed, puts it back to asking from 0 of 3. The kinds that can be promoted are verify, test, docs, commit and relay. Push, deploy, migrations, deletes, installs,
 paid services and messages to people are never done without asking, and promise questions are always asked.
-`/wanjang:next trust` shows each kind and whether it is asked; `/wanjang:next trust off` turns this off and asks for
-everything (`on` turns it back on); `<kind> ask` always asks for one kind, `<kind> reset` zeroes it, and `/wanjang:next undo` takes back the last action done without asking.
+`/wanjang:manager trust` shows each kind and whether it is asked; `/wanjang:manager trust off` turns this off and asks for
+everything (`on` turns it back on); `<kind> ask` always asks for one kind, `<kind> reset` zeroes it, and `/wanjang:manager undo` takes back the last action done without asking.
 
 ## Main-session rules and `/wanjang:slim`
 
@@ -363,7 +365,7 @@ and leaving browser testing to QA.
 
 | Path | What |
 |---|---|
-| `agents/` | The seven agents |
+| `agents/` | The eight agents |
 | `ROUTING.md` | The routing rule a session-start hook adds to every session, including relaying a PM's `Bad news` line to you at once |
 | `bin/route` | That hook; it also names unfinished runs in the repository |
 | `bin/guard` | PreToolUse hook: the PM and the read-only crew write only into run folders; workers cannot write a run's locked goal-check files or any run log |
@@ -373,12 +375,13 @@ and leaving browser testing to QA.
 | `bin/close` | SubagentStop hook: sends the PM back once if it tries to report with its run log still open |
 | `bin/status` | The snapshot behind `/wanjang:now`: agents (nested, waiting tool call, stuck), run logs, open tasks |
 | `bin/ledger` | SubagentStop hook: adds a finished PM run's `Shipped:` line to the per-user ledger; `ledger show` prints it |
-| `bin/next` | Stop hook and the scan/record behind `/wanjang:next` |
+| `bin/manager`, `bin/manager-page` | The scan, ledger, dispatch and prompt hook behind `/wanjang:manager`, and its page renderer |
+| `bin/next` | The scan and the promise and trust records the manager uses |
 | `bin/usage` | The token report behind `/wanjang:optimize` |
 | `bin/provider`, `bin/openrouter-key`, `bin/provider-hook`, `bin/provider-fail` | `/wanjang:provider`, its key helper, the hook that runs it with no model, and the one that switches back on a billing error |
 | `bin/docindex` | The local doc index behind `/wanjang:docs` |
-| `skills/` | `/wanjang:wanjang`, `/wanjang:optimize`, `/wanjang:now`, `/wanjang:next`, `/wanjang:docs`, `/wanjang:slim`, `/wanjang:relay`, `/wanjang:provider`, `/wanjang:visual-doc` and `/wanjang:brief` |
-| `test/` | `guard.sh`, `read-warn.sh`, `deliverables.sh`, `docindex.sh`, `main-rules.sh`, `route.sh`, `close.sh`, `ledger.sh`, `usage.sh`, `status.sh`, `provider.sh`, `next.sh`, `playbooks.sh` and `skills.sh` |
+| `skills/` | `/wanjang:wanjang`, `/wanjang:optimize`, `/wanjang:now`, `/wanjang:manager`, `/wanjang:next` (a stub), `/wanjang:docs`, `/wanjang:slim`, `/wanjang:relay`, `/wanjang:provider`, `/wanjang:visual-doc` and `/wanjang:brief` |
+| `test/` | `guard.sh`, `read-warn.sh`, `deliverables.sh`, `docindex.sh`, `main-rules.sh`, `route.sh`, `close.sh`, `ledger.sh`, `usage.sh`, `status.sh`, `provider.sh`, `next.sh`, `manager.sh`, `manager-page.sh`, `playbooks.sh` and `skills.sh` |
 
 ```sh
 for t in test/*.sh; do "$t"; done   # each prints its own pass summary

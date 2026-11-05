@@ -8,7 +8,7 @@
 대신 정한 것들은 끝에 목록 하나로 검토하면 돼요.
 
 [![Claude Code plugin](https://img.shields.io/badge/Claude_Code-plugin-d97757)](https://code.claude.com/docs/en/plugins)
-[![version](https://img.shields.io/badge/version-0.12.0-blue)](.claude-plugin/plugin.json)
+[![version](https://img.shields.io/badge/version-0.13.0-blue)](.claude-plugin/plugin.json)
 [![license](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
 [English](README.md) | 한국어
@@ -31,11 +31,11 @@ designer는 페이지를 만들어요. checker는 주장을 playbook 기준표�
 
 ## 이런 동료예요
 
-- **다음 할 일을 먼저 챙겨 와요.** `/wanjang:next`를 켜 두면 세션이 조용해졌을 때 다음에 할 만한 일 하나를
-  질문 하나로 물어봐요. 왜 지금인지, 무엇이 드는지도 같이 알려줘요. 거절한 제안은 근거가 바뀔 때까지 다시 꺼내지
-  않아요.
+- **다른 세션을 대신 살펴봐요.** 열려 있는 세션 하나에 `/wanjang:manager on`으로 매니저 역할을 맡기면 한 시간마다
+  나머지 세션을 둘러보고, 놓친 일을 한 페이지에 모아 최대 네 가지를 하나씩 물어봐요. 승인한 일은 바로 그 일을
+  맡은 세션에 보내요. 거절한 항목은 근거가 바뀔 때까지 다시 꺼내지 않아요.
 - **약속을 기억해요.** "CI 끝나면 배포 확인해 줘", "사흘 뒤에 다시 알려줘" 같은 말을 시각이나 조건과 함께
-  적어 두고, 때가 되면 다음 점검에서 한 번 물어봐요. 지금 할지, 나중에 할지, 없던 일로 할지요. 조건은 그 점검
+  적어 두고, 때가 되면 매니저가 한 번 물어봐요. 지금 할지, 나중에 할지, 없던 일로 할지요. 조건은 그 점검
   안에서만 돌려요(하나에 10초, 한 번에 최대 3개). 훅에서는 돌리지 않아요.
 - **나쁜 소식부터 알려줘요.** run이 곤란해지면(advisor도 막힌 문제를 못 풀 때, 같은 작업이 두 번 실패할 때,
   범위가 커질 때, 목표 검사를 통과할 수 없을 때) PM이 끝날 때가 아니라 그 즉시 한 줄을 보내요:
@@ -183,10 +183,12 @@ Claude 세션에서는 PATH에 있어요. `/wanjang:docs <query> [dir]`가 이�
 | `/wanjang:brief` | 개발자가 아닌 분을 위한 브리프를 써요: 쉬운 말, 승인할 결정, 결정마다 질문 하나 |
 | `/wanjang:now` | 돌아가는 에이전트가 지금 무엇을, 얼마나 오래 하는지, 끝난 것과 막힌 것 같은 것을 알려줘요(`bin/status`, 읽기 전용) |
 | `/wanjang:now --week\|--since DATE\|--repo X` | 끝난 run이 만든 것을 장부(`~/.claude/wanjang/ledger.md`, `CLAUDE_CONFIG_DIR` 따라감, `bin/ledger`)에서 한 줄씩 보여줘요 |
-| `/wanjang:next on\|off\|status` | 조용한 앞서 보기: 쉬는 동안 다음에 할 가장 그럴듯한 작업을 할지 한 번 물어봐요(기본 꺼짐, 이 세션만) |
-| `/wanjang:next promises` | 이 프로젝트에 적어 둔 약속: id, 언제인지, 조건, 부탁한 내용(아래 참고) |
-| `/wanjang:next trust [off\|on\|<종류> ask\|<종류> reset]` | 묻지 않고 처리하는 일의 종류를 봐요. `off`로 끄면 다시 전부 물어봐요(아래 참고) |
-| `/wanjang:next undo` | 묻지 않고 한 마지막 일(로컬 커밋이나 문서 수정)을 되돌려요, 되돌릴 수 있을 때만요 |
+| `/wanjang:manager on\|off\|status` | 이 세션을 열려 있는 다른 세션들의 매니저로 만들어요. 한 시간마다 둘러보고, 한 페이지로 보여주고, 최대 4개를 묻고, 승인한 일은 맡은 세션에 보내요(기본 꺼짐, 사용자당 매니저 하나) |
+| `/wanjang:manager` | 지금 점검하고 페이지를 보여줘요 |
+| `/wanjang:manager approve ID\|reject ID` | 위저드 대신 페이지에서 본 항목에 답해요 |
+| `/wanjang:manager promises` | 이 프로젝트에 적어 둔 약속: id, 언제인지, 조건, 부탁한 내용(아래 참고) |
+| `/wanjang:manager trust [off\|on\|<종류> ask\|<종류> reset]` | 묻지 않고 처리하는 일의 종류를 봐요. `off`로 끄면 다시 전부 물어봐요(아래 참고) |
+| `/wanjang:manager undo` | 묻지 않고 한 마지막 일(로컬 커밋이나 문서 수정)을 되돌려요, 되돌릴 수 있을 때만요 |
 | `/wanjang:slim` | 메인 세션에만 필요한 규칙을 모든 서브에이전트가 읽는 곳에서 빼내요(아래 참고) |
 | `/wanjang:relay <세션> <요청>` · `status` | 이 컴퓨터에서 다른 저장소를 맡은 Claude 세션에 일을 넘기고 보고를 추적해요(Claude Code의 ListAgents/SendMessage) |
 | `/wanjang:optimize` | 에이전트를 멈추지 않은 채로, 이 세션의 토큰이 어디에 쓰이는지 보고 해당하는 것만 고쳐요 |
@@ -225,13 +227,13 @@ OpenRouter 모델을 가격대별로 보여 주고 자리마다 하나씩 물어
 알림으로 알려 줘요. `default`, `subscription`, `anthropic`은 `claude`와 같아요. 모델이 있든 없든 언제나 통하는 비상구는
 `! <플러그인 폴더>/bin/provider claude`예요.
 
-### 다음 작업: `/wanjang:next`
+### 매니저: `/wanjang:manager`
 
-`/wanjang:next on`은 이 세션에서만 조용한 앞서 보기를 켜요. 기본값은 꺼짐이고, `off`로 끄고 `status`로 상태를 봐요. 메인 세션이 쉬고 있으면 다음에 가장 쓸모 있을 작업 하나를 찾아 위저드 질문 하나로 물어봐요("X를 할까요? 왜 지금 / 무엇이 드는지", 선택지는 Do it (Recommended) / Not now). 승인했을 때만 실행하고, 직접 시킨 것과 똑같이 평소 라우팅으로 처리해요. push, 배포, 되돌릴 수 없는 단계는 따로 물어봐요.
+`/wanjang:manager on`은 명령을 친 세션을 매니저로 만들어요. 저장소에서 일하는 세션이 아니라 범용 비서 세션에 맡기세요. 기본값은 꺼짐이고, 사용자당 매니저는 하나예요(`on --take`로 옮겨요). 매니저는 저장소를 고치거나 일을 직접 하지 않아요. 한 시간마다(7분에) 그리고 `/wanjang:manager`를 칠 때마다 열려 있는 다른 세션을 살펴보는데, Claude Code가 가진 세션 목록(`~/.claude/sessions`)을 읽어요. 사용자를 기다리는 세션, 답한 뒤 오래 쉬는 세션, 막힌 에이전트, 커밋하지 않았거나 push하지 않은 작업, 코드는 바뀌었는데 문서는 그대로인 곳, 열려 있는 wanjang run, 때가 된 약속을 봐요. 보는 일은 스크립트가 하고, 작은 `inspector` 에이전트(Sonnet)가 새로 생긴 것만 판단해요.
 
-살펴보는 때는 작업 하나가 끝난 직후 한 번(Stop 훅, 메인 세션 전용이고 서브에이전트에서는 돌지 않아요. 단순 질의응답 턴 뒤나 자체 백그라운드 작업이 도는 동안은 건너뛰어요), 그리고 세션이 쉬는 동안 30분마다예요(Claude Code가 턴 사이에 돌리는 세션 cron이라 `--resume`해도 이어져요. 점검할 때마다 일정이 있는지 확인하고 Claude Code의 7일 한도 하루 전에 갱신하므로, `/wanjang:next off`나 세션 종료 전까지 계속 돌아요. `off`는 일정을 지우고, 그 뒤로는 아무것도 다시 켜지 않아요). 보는 대상은 이 대화와 작업 목록(검증, 문서, 커밋 같은 후속 작업, 멈춘 대기 작업, 아직 보고하지 않은 서브에이전트 결과), 저장소(커밋하지 않은 변경, 바뀐 줄의 TODO/FIXME, `MEMORY.md`의 "next" 섹션, 끝나지 않은 wanjang run, 이미 본 실패한 테스트나 린트. 보려고 테스트를 돌리지는 않아요), 그리고 다른 세션(보고가 안 온 relay 요청, 이 세션을 기다리는 세션)이에요. GitHub는 보지 않아요.
+결과는 페이지 하나(`~/.claude/wanjang/manager/page.html`: 결정이 필요한 일, 보내고 기다리는 일, 끝난 일, 문제, 그 밖에 열린 일)와 위저드예요. 위저드는 한 번에 하나씩, 점검마다 최대 네 개를 물어요. 승인, 거절, 또는 Other로 의견을 적어요(의견은 승인이 아니에요). 승인한 항목은 사용자의 말과 시각을 붙여 바로 그 일을 맡은 세션에 보내요(세션이 바쁘면 줄을 서요). 그 세션은 `manager reply`로 결과를 남기고, 이건 매니저에게 아무 비용도 들지 않아요. push, 배포, 마이그레이션, 삭제, 설치는 메시지에 승인이 들어 있어도 맡은 세션이 한 번 더 물어봐요. 믿고 맡긴 종류(아래 "믿고 맡기기": verify, test, docs, commit, 로컬만)는 묻지 않고 보내요. 바깥으로 나가는 일은 늘 물어봐요.
 
-찾은 것이 없으면 질문도 없고 메시지는 `·` 하나뿐이에요(Claude Code가 빈 응답을 거부해 자기 문구를 붙이기 때문이에요). 아무것도 못 찾을 점검(꺼져 있거나 25분 안에 이미 점검함)이면 `UserPromptSubmit` 훅이 모델이 돌기 전에 일정의 `/wanjang:next check`를 막아요. 이때 Claude Code가 모델 턴 없이 `· next check skipped: ...` 안내 한 줄을 보여줘요. `off` 뒤 첫 점검은 남은 일정을 지우도록 모델까지 가요. 한 번의 점검에 질문은 하나이고, 질문이 열려 있는 동안은 다음 점검이 돌지 않아요. 거절했거나 답하지 않은 후보는 근거가 바뀔 때까지(새 커밋, 새 실패, 새 메시지) 다시 묻지 않아요. `bin/next`가 그 기록을 `~/.claude/wanjang/next/<세션 id>.json`에 두고(`CLAUDE_CONFIG_DIR`를 따라요) 7일 뒤 지워요. 기록에는 `next`가 켜져 있는지 꺼져 있는지와 일정을 만든 시각도 들어 있어요. 점검은 메인 세션의 셸 스캔 한 번이고, 살펴보려고 서브에이전트를 띄우지 않아요.
+매니저의 컨텍스트는 작게 유지돼요. 새로운 것이 없는 점검은 모델이 돌기 전에 `UserPromptSubmit` 훅이 막아요(Claude Code가 `·` 안내 한 줄만 보여줘요). 새로운 것이 있으면 몇 줄과 위저드 하나가 들어요. 한 시간마다 도는 점검은 세션 cron이고, Claude Code의 7일 한도 전에 스스로 갱신하며, 사용자가 10분 안에 입력했으면 기다려요. 매니저의 기억은 `~/.claude/wanjang/manager/`의 장부예요(`CLAUDE_CONFIG_DIR`를 따라요). 압축이나 재시작 뒤에는 `manager resume`이 장부로 상태를 되살리니 잃는 것이 없어요. `/wanjang:next`는 이제 예전 일정을 지우는 껍데기예요. 약속과 믿고 맡기기는 그대로 이어져요.
 
 #### 약속
 
@@ -239,9 +241,9 @@ OpenRouter 모델을 가격대별로 보여 주고 자리마다 하나씩 물어
 머지되면 문서 고쳐 줘") 바로 `bin/next promise add`로 적어 둬요. 사용자가 한 말 그대로, 그리고 시각(`--at`,
 ISO 8601이나 `+30m`/`+2h`/`+3d`. "내일"은 현지 시각 09:00), 조건(`--when`, 예를 들어
 `gh run view ID --json status -q .status | grep -qx completed` 같은 셸 검사), 또는 둘 다요. 조건은 30분마다 다시
-확인하고(`--every`), 14일이 지나면 포기해요(`--for`). 약속을 적는다고 `next`가 켜지지는 않아요.
+확인하고(`--every`), 14일이 지나면 포기해요(`--for`). 약속을 적는다고 매니저가 켜지지는 않아요.
 
-조건은 `next scan`(점검) 안에서만 돌아요. 하나에 10초 제한, 한 번에 최대 3개이고 훅에서는 돌리지 않아요. 때가 된
+조건은 `next scan`(매니저의 점검) 안에서만 돌아요. 하나에 10초 제한, 한 번에 최대 3개이고 훅에서는 돌리지 않아요. 때가 된
 약속은 다른 후보보다 먼저 나와요. 질문에는 사용자가 한 말과 지금인 이유가 들어가고, 답은 세 가지예요. 하기,
 나중에(내일 09:00, 또는 직접 적은 시각), 없던 일로 하기. 약속은 사용자별로 `~/.claude/wanjang/promises.json`에
 두고(`CLAUDE_CONFIG_DIR`를 따라요) 각각 프로젝트에 묶여요.
@@ -254,17 +256,17 @@ ISO 8601이나 `+30m`/`+2h`/`+3d`. "내일"은 현지 시각 09:00), 조건(`--w
 | `done ID [--note N]` · `drop ID` | 닫아요 |
 | `due` | 여기서 때가 된 약속을 읽기만 해요(조건은 돌리지 않아요) |
 
-`/wanjang:next promises`는 이 목록을 표로 보여줘요. 이어서 "drop 2"나 "later 2"라고 하면 닫거나 미뤄요.
+`/wanjang:manager promises`는 이 목록을 표로 보여줘요. 이어서 "drop 2"나 "later 2"라고 하면 닫거나 미뤄요.
 
 #### 믿고 맡기기
 
-`next`가 켜져 있으면 계속 "Do it"을 고른 종류의 일은 더 묻지 않게 돼요. 한 종류에 세 번 답했고, 처음 답이
+매니저가 켜져 있으면 계속 "Do it"을 고른 종류의 일은 더 묻지 않게 돼요. 한 종류에 세 번 답했고, 처음 답이
 24시간 이상 지났고 모두 14일 안이면, 그 종류는 묻지 않고 처리한 뒤 한 줄로 알려줘요. 처음 승격될 때는 그렇게 됐다고도
 알려줘요. 로컬 커밋도 여기에 들어가요. 이 세션이 바꾼 파일만, 확인을 거친 뒤에 커밋하고,
 push는 하지 않고, 마지막 커밋은 되돌릴 수 있어요. 조용한 동안 최대 2개, 하루 최대 6개까지예요. 그 종류에
 한 번이라도 "Not now"라고 답하거나 그 종류의 일이 실패하면 0/3부터 다시 묻는 쪽으로 돌아가요. 승격되는 종류는 verify, test, docs, commit, relay예요. push, 배포, 마이그레이션, 삭제, 설치, 유료 서비스,
-사람에게 보내는 메시지는 언제나 먼저 물어보고, 약속 질문도 늘 물어봐요. `/wanjang:next trust`는 종류마다
-묻는지 아닌지 보여주고, `/wanjang:next trust off`는 이 기능을 꺼서 전부 다시 물어보게 해요(`on`으로 다시 켜요). `<종류> ask`는 그 종류를 늘 묻고, `<종류> reset`은 0으로 되돌리고, `/wanjang:next undo`는 묻지 않고 한 마지막 일을 되돌려요.
+사람에게 보내는 메시지는 언제나 먼저 물어보고, 약속 질문도 늘 물어봐요. `/wanjang:manager trust`는 종류마다
+묻는지 아닌지 보여주고, `/wanjang:manager trust off`는 이 기능을 꺼서 전부 다시 물어보게 해요(`on`으로 다시 켜요). `<종류> ask`는 그 종류를 늘 묻고, `<종류> reset`은 0으로 되돌리고, `/wanjang:manager undo`는 묻지 않고 한 마지막 일을 되돌려요.
 
 ## 메인 세션 전용 규칙과 `/wanjang:slim`
 
@@ -355,7 +357,7 @@ Sonnet, 오래 일한 워커를 이어 쓰는 대신 새로 띄우기, 브라우
 
 | 경로 | 내용 |
 |---|---|
-| `agents/` | 일곱 에이전트 |
+| `agents/` | 여덟 에이전트 |
 | `ROUTING.md` | 세션 시작 훅이 모든 세션에 넣는 라우팅 규칙(PM의 `Bad news` 줄을 바로 전달하는 것 포함) |
 | `bin/route` | 그 훅. 저장소에 끝나지 않은 run이 있으면 알려 줘요 |
 | `bin/guard` | PreToolUse 훅: PM과 읽기 전용 크루는 run 폴더에만 쓸 수 있고, 작업자는 잠긴 목표 검사 파일과 run 로그를 쓸 수 없어요 |
@@ -365,12 +367,13 @@ Sonnet, 오래 일한 워커를 이어 쓰는 대신 새로 띄우기, 브라우
 | `bin/close` | SubagentStop 훅: run 기록이 열린 채로 보고하려 하면 PM을 한 번 돌려보내요 |
 | `bin/status` | `/wanjang:now`의 스냅샷: 에이전트(중첩, 기다리는 도구 호출, 막힘), run 로그, 열린 작업 |
 | `bin/ledger` | SubagentStop 훅: 끝난 PM run의 `Shipped:` 줄을 사용자별 장부에 더하고, `ledger show`로 보여줘요 |
-| `bin/next` | `/wanjang:next`의 Stop 훅과 그 스캔·기록 |
+| `bin/manager`, `bin/manager-page` | `/wanjang:manager`의 스캔, 장부, 전달, 프롬프트 훅과 페이지 렌더러 |
+| `bin/next` | 매니저가 쓰는 스캔과 약속·믿고 맡기기 기록 |
 | `bin/usage` | `/wanjang:optimize`의 토큰 보고서 |
 | `bin/provider`, `bin/openrouter-key`, `bin/provider-hook`, `bin/provider-fail` | `/wanjang:provider`, 키 도우미, 모델 없이 실행하는 훅, 결제 오류 때 되돌리는 훅 |
 | `bin/docindex` | `/wanjang:docs`가 쓰는 로컬 문서 색인 |
-| `skills/` | `/wanjang:wanjang`, `/wanjang:optimize`, `/wanjang:now`, `/wanjang:next`, `/wanjang:docs`, `/wanjang:slim`, `/wanjang:relay`, `/wanjang:provider`, `/wanjang:visual-doc`, `/wanjang:brief` |
-| `test/` | `guard.sh`, `read-warn.sh`, `deliverables.sh`, `docindex.sh`, `main-rules.sh`, `route.sh`, `close.sh`, `ledger.sh`, `usage.sh`, `status.sh`, `provider.sh`, `next.sh`, `playbooks.sh`, `skills.sh` |
+| `skills/` | `/wanjang:wanjang`, `/wanjang:optimize`, `/wanjang:now`, `/wanjang:manager`, `/wanjang:next`(껍데기), `/wanjang:docs`, `/wanjang:slim`, `/wanjang:relay`, `/wanjang:provider`, `/wanjang:visual-doc`, `/wanjang:brief` |
+| `test/` | `guard.sh`, `read-warn.sh`, `deliverables.sh`, `docindex.sh`, `main-rules.sh`, `route.sh`, `close.sh`, `ledger.sh`, `usage.sh`, `status.sh`, `provider.sh`, `next.sh`, `manager.sh`, `manager-page.sh`, `playbooks.sh`, `skills.sh` |
 
 ```sh
 for t in test/*.sh; do "$t"; done   # 테스트마다 통과 요약을 출력해요

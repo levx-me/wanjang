@@ -146,7 +146,7 @@ a fact changed, added or dropped by rewording is a blocker.
 
 ## The decision block
 
-One per decision, at most three per document. The same fields in HTML and Markdown:
+One per decision, at most three per document (the manager's progress page, `/wanjang:manager`, may carry up to four). The same fields in HTML and Markdown:
 
 | Field | Rule |
 |---|---|

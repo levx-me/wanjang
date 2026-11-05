@@ -9,7 +9,7 @@ no study behind it: calibrate it with reader tests (`reader-test.md`) and record
   reason, what happens with no answer (and with do nothing, when that differs), and the deadline. Check: from it alone a reader passes
   R1-R3.
 - **S2 One decision per document,** or one per decision block, at most 3 blocks (*starting
-  value*). More decisions mean more documents.
+  value*; the manager's page may carry 4). More decisions mean more documents.
 - **S3 Headings state what the section concludes,** not its topic. Check: from the h1 and the h2s
   alone a reader can say the conclusion (R8).
 - **S4 At most 4 body sections** plus the appendix (*starting value*).
