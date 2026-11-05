@@ -1,0 +1,119 @@
+#!/usr/bin/env python3
+"""Render the manager page. stdin: JSON {now, state, items}; stdout: one self-contained HTML page.
+Deterministic: no clock reads, items sorted by (t, id). Look comes from skills/visual-doc (skeleton + base.css)."""
+import json, os, re, sys
+from html import escape as e
+
+ASSETS = os.path.join(os.path.dirname(os.path.realpath(__file__)), "..", "skills", "visual-doc", "assets")
+MAX_ASK = 4
+ASK, SENT, DONE, BAD = {"found", "asked"}, {"sent", "approved", "waiting"}, {"done"}, {"failed", "no reply", "gone", "changed"}
+SKIP = {"dropped", "rejected", "expired"}
+LABEL = {"found": "new", "asked": "asked", "sent": "sent", "approved": "approved, not sent yet", "waiting": "waiting for a session",
+         "done": "done", "failed": "failed", "no reply": "no reply", "gone": "session gone", "changed": "changed since asked"}
+
+
+def s(v):
+    return "" if v is None else str(v)
+
+
+def chip(it):
+    return ' <span class="tag on">new</span>' if it.get("new") else ""
+
+
+def table(rows, cols):
+    head = "".join(f"<th>{e(c)}</th>" for c in cols)
+    body = "".join("<tr>" + "".join(f"<td>{c}</td>" for c in r) + "</tr>" for r in rows)
+    return f'<div class="tablebox"><table><thead><tr>{head}</tr></thead><tbody>{body}</tbody></table></div>'
+
+
+def row(it):
+    note = e(s(it.get("note")))
+    return [f'<b>{e(s(it.get("kind")))}</b>{chip(it)}', e(s(it.get("text"))), e(s(it.get("project"))),
+            e(LABEL.get(s(it.get("status")), s(it.get("status")))) + (f": {note}" if note else "")]
+
+
+def decide(n, it):
+    kind, cost = e(s(it.get("kind"))), e(s(it.get("cost")) or "not stated")
+    return (f'<section class="decide" id="d{n}" aria-labelledby="d{n}-q">'
+            f'<h3 class="decide-q" id="d{n}-q">{kind}: {e(s(it.get("text")))}{chip(it)}</h3>'
+            f'<p class="decide-meta"><b>Project</b> {e(s(it.get("project")))} · <b>Answer</b> in the manager session</p>'
+            f'<div class="opt reco"><dl class="opt-facts"><dt>Why</dt><dd>{e(s(it.get("why")) or "not stated")}</dd>'
+            f'<dt>Cost</dt><dd>{cost}</dd></dl></div></section>')
+
+
+def page(d):
+    st, items = d.get("state") or {}, [i for i in d.get("items") or [] if isinstance(i, dict)]
+    items.sort(key=lambda i: (s(i.get("t")), s(i.get("id"))))
+    items = [i for i in items if s(i.get("status")) not in SKIP]
+    by = lambda S: [i for i in items if s(i.get("status")) in S]
+    ask = by(ASK)
+    groups = [("Decisions needed", None), ("Sent, waiting", by(SENT)), ("Done", by(DONE)), ("Problems", by(BAD)),
+              ("Also open", [i for i in items if s(i.get("status")) not in ASK | SENT | DONE | BAD] + ask[MAX_ASK:])]
+    counts = f"{len(ask)} to decide · {len(by(SENT))} sent or waiting · {len(by(DONE))} done · {len(by(BAD))} with problems"
+    tick = s(st.get("last_tick")) or "never"
+    if not items:
+        title, lede = "Nothing open", f"The manager has nothing to report. Last check: {tick}."
+    else:
+        title = f"{len(ask)} need your answer" if ask else "Nothing needs your answer"
+        lede = f"Last check: {tick}. {counts}."
+    secs, n = [], 0
+    for name, rows in groups:
+        if name == "Decisions needed":
+            if not ask:
+                continue
+            n += 1
+            body = "".join(decide(k + 1, i) for k, i in enumerate(ask[:MAX_ASK]))
+            extra = f"<p>{len(ask) - MAX_ASK} more are listed under Also open.</p>" if len(ask) > MAX_ASK else ""
+            h = f"{len(ask[:MAX_ASK])} waiting for your answer"
+            body = f"<p>Answer these in the manager session; this page only shows them.</p>{body}{extra}"
+        else:
+            if not rows:
+                continue
+            n += 1
+            h = f"{len(rows)} item{'s' if len(rows) != 1 else ''}"
+            body = table([row(i) for i in rows], ["Kind", "What", "Project", "State"])
+        sid = f"s{n}"
+        secs.append(f'<section id="{sid}" aria-labelledby="h-{sid}"><p class="eyebrow">{n} · {e(name)}</p>'
+                    f'<h2 id="h-{sid}">{e(h)}</h2>{body}</section>')
+    css = open(os.path.join(ASSETS, "base.css"), encoding="utf-8").read()
+    sk = open(os.path.join(ASSETS, "skeleton.html"), encoding="utf-8").read()
+    js = re.search(r"<script>.*?</script>", sk, re.S).group(0)  # theme toggle, contents, entry motion
+    fonts = re.search(r'<link rel="stylesheet" href="https://fonts[^>]*>', sk).group(0).replace("&", "&amp;")
+    return f"""<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Manager</title>
+{fonts}
+<style>
+{css}
+</style>
+</head>
+<body>
+<nav class="toc-side" lang="en" aria-label="Contents"><p class="toc-h">Contents</p><ol class="toc-list" id="toc-side"></ol></nav>
+<main lang="en">
+  <details class="toc-top"><summary>Contents ▾</summary><ol class="toc-list" id="toc-top"></ol></details>
+  <header class="hero">
+    <div class="topbar">
+      <span class="eyebrow">Manager · {e(s(d.get("now")))}</span>
+      <button type="button" class="theme-btn" id="theme-btn" aria-pressed="false" aria-label="Switch to dark mode"
+        data-light="Light" data-dark="Dark" data-to-dark="Switch to dark mode" data-to-light="Switch to light mode"><span class="theme-label">Light</span></button>
+    </div>
+    <h1>{e(title)}</h1>
+    <p class="lede">{e(lede)}</p>
+  </header>
+{chr(10).join(secs)}
+</main>
+{js}
+</body>
+</html>
+"""
+
+
+if __name__ == "__main__":
+    try:
+        data = json.load(sys.stdin)
+        if not isinstance(data, dict):
+            raise ValueError("expected a JSON object")
+    except ValueError as ex:
+        sys.exit(f"manager-page: bad input: {ex}")
+    sys.stdout.write(page(data))
