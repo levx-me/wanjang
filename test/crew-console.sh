@@ -62,7 +62,8 @@ d=$(h "$MAIN" | jq -r .hookSpecificOutput.permissionDecision+.hookSpecificOutput
 [ -z "$(h "${MAIN/$A/$B}")" ] || bad "project B should pass while A is on"
 [ -z "$(h "$SUB")" ] || bad "subagent call should pass"
 [ -z "$(h "$OTHER")" ] || bad "non-wanjang type should pass"
-[ -z "$(WANJANG_CREW_CONSOLE=1 bin/crew-console-hook <<<"$MAIN")" ] || bad "crew-run child should pass"
+[ "$(WANJANG_CREW_CONSOLE=1 bin/crew-console-hook <<<"$MAIN" | jq -r .hookSpecificOutput.updatedInput.run_in_background)" = false ] || bad "crew-run child: an Agent call with run_in_background omitted runs in the foreground"
+[ -z "$(WANJANG_CREW_CONSOLE=1 bin/crew-console-hook <<<"$(jq -c '.tool_input.run_in_background=false' <<<"$MAIN")")" ] || bad "crew-run child: explicit foreground passes untouched"
 (cd "$A" && "$ROOT/bin/crew-console" off >/dev/null)
 [ -z "$(h "$MAIN")" ] || bad "switch off should pass"
 exit $fail

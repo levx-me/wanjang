@@ -6,7 +6,8 @@ set -u
 input=$(cat)
 # Inside a crew-run child, `claude -p` exits when the turn ends, killing background workers: run them in the foreground.
 if [ -n "${WANJANG_CREW_CONSOLE:-}" ]; then
-  [ "$(printf '%s' "$input" | jq -r '.tool_input.run_in_background // false')" = true ] || exit 0
+  # an omitted run_in_background means background here, so anything but an explicit false is forced
+  [ "$(printf '%s' "$input" | jq -r '.tool_input.run_in_background')" = false ] && exit 0
   printf '%s' "$input" | jq '{hookSpecificOutput: {hookEventName: "PreToolUse", permissionDecision: "allow",
     updatedInput: (.tool_input + {run_in_background: false})}}'
   exit 0
