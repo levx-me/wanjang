@@ -9,7 +9,7 @@ q() { jq -r "$1" "$F"; }
 echo '{"permissions":{"allow":["Bash(ls)"]},"env":{"FOO":"1"}}' > "$F"
 # The dialog and the store are replaced (PROVIDER_ASK_CMD / PROVIDER_STORE_CMD) so no dialog shows and
 # the real keychain is never touched; keychain and secret-tool are looked up under a user that does not exist.
-export USER=wanjang-test-nobody OPENROUTER_API_KEY= HOME=$T/home XDG_CONFIG_HOME=
+export USER=wanjang-test-nobody OPENROUTER_API_KEY= ANTHROPIC_CONSOLE_API_KEY= HOME=$T/home XDG_CONFIG_HOME=
 mkdir -p "$T/home" "$T/shim"
 # Belt and braces: the real dialog and secret stores are shims that leave a mark and fail, so a test
 # that reached them fails instead of showing a dialog. (bin/provider also refuses them under a fake HOME.)
@@ -134,6 +134,26 @@ fail_ev billing_error
 [ "$(jq -r .env.ANTHROPIC_BASE_URL "$P/.claude/settings.local.json")" = https://api.anthropic.com ] && [ -s "$T/notified" ] || bad "fail: billing_error did not switch or notify"
 rm -f "$T/notified"; fail_ev authentication_failed
 [ ! -e "$T/notified" ] || bad "fail: switched or notified while already on the subscription"
+# console: an Anthropic Console API key through its own helper; no OpenRouter slot or URL left in effect.
+cp "$T/before" "$F"; rm -f "$T/stored"
+OPENROUTER_API_KEY=sk-test bin/provider openrouter --file "$F" --haiku x/h >/dev/null
+out=$(PROVIDER_ASK_CMD='printf sk-ant-api03-testsecret' PROVIDER_STORE_CMD="cat > $T/stored" bin/provider console --file "$F" 2>&1) || bad "console first use: exit $?"
+[ "$(cat "$T/stored" 2>/dev/null)" = sk-ant-api03-testsecret ] || bad "console: key not stored"
+case "$out$(cat "$F")" in *testsecret*) bad "console: the key reached the output or the settings file" ;; esac
+[ "$(q .apiKeyHelper)" = "$PWD/bin/console-key" ] || bad "console: key helper path"
+[ "$(q .env.ANTHROPIC_BASE_URL)" = https://api.anthropic.com ] || bad "console: base url"
+[ "$(q .env.ANTHROPIC_AUTH_TOKEN)" = "" ] && [ "$(q .env.ANTHROPIC_API_KEY)" = "" ] || bad "console: tokens not blank"
+[ -z "$(q '.env.ANTHROPIC_DEFAULT_HAIKU_MODEL // empty')" ] || bad "console: an OpenRouter model slot stayed in effect"
+[ "$(q .env.FOO)" = 1 ] || bad "console: other settings lost"
+case "$(bin/provider status --file "$F")" in "provider: console"*) ;; *) bad "console: status" ;; esac
+[ "$(ANTHROPIC_CONSOLE_API_KEY=sk-ant-x bin/console-key)" = sk-ant-x ] || bad "console-key: env fallback"
+case "$(jq -r .stopReason <<<"$(ANTHROPIC_CONSOLE_API_KEY=sk-ant-x hook wanjang:provider "console --file $F")")" in "Done."*"provider: console"*) ;; *) bad "hook: console" ;; esac
+bin/provider claude --file "$F" >/dev/null
+[ -z "$(q '.apiKeyHelper // empty')" ] && [ "$(q .env.ANTHROPIC_BASE_URL)" = https://api.anthropic.com ] || bad "claude did not undo console"
+# A billing error on the console key switches back too, and says which provider refused.
+ANTHROPIC_CONSOLE_API_KEY=sk-ant-x bin/provider console --file "$P/.claude/settings.local.json" >/dev/null
+rm -f "$T/notified"; fail_ev billing_error
+[ -z "$(jq -r '.apiKeyHelper // empty' "$P/.claude/settings.local.json")" ] && grep -q "Console API key" "$T/notified" 2>/dev/null || bad "fail: console billing_error did not switch back or say why"
 [ ! -e "$T/REAL-CALLED" ] || bad "a real dialog or secret store was called"
 [ $fail = 0 ] && echo "provider: all cases pass"
 exit $fail
