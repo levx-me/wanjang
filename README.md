@@ -8,7 +8,7 @@ Hand Claude Code a multi-step job: a PM splits it across a crew, a second agent 
 and you review the choices it made in one list at the end.
 
 [![Claude Code plugin](https://img.shields.io/badge/Claude_Code-plugin-d97757)](https://code.claude.com/docs/en/plugins)
-[![version](https://img.shields.io/badge/version-0.13.0-blue)](.claude-plugin/plugin.json)
+[![version](https://img.shields.io/badge/version-0.14.0-blue)](.claude-plugin/plugin.json)
 [![license](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
 English | [한국어](README.ko.md)
@@ -61,6 +61,8 @@ prices are never done by the crew: they come back as steps for you.
   logged with why and how to revert it.
 - **Tells you how it's going.** `/wanjang:now` lists what each agent is doing, for how long, and which one has gone
   silent for over ten minutes.
+- **Tells you when it'll be done.** `/wanjang:wen` guesses when each running agent and the whole run will finish, from how
+  long past agents of the same kind took.
 - **Spends to fit the task.** Haiku for lookups and mechanical edits, Sonnet for ordinary building and checking, Opus
   for UI and the hard parts; reasoning effort set the same way (low, medium, high). A task that fails moves one tier
   up.
@@ -186,6 +188,7 @@ field: know-how for a field comes from playbooks.
 | `/wanjang:visual-doc` | Turn a report, dashboard or explanation into one HTML page in a fixed style |
 | `/wanjang:brief` | Write a brief for non-developers: plain words, the decisions to approve, each paired with a question |
 | `/wanjang:now` | What each running agent is doing now, for how long, what is done and what looks stuck (`bin/status`, read-only) |
+| `/wanjang:wen` | Roughly when the running work will be done, per agent and overall, estimated from past runs (`bin/status --eta`, read-only) |
 | `/wanjang:now --week\|--since DATE\|--repo X` | What finished runs shipped, one line each, from the ledger at `~/.claude/wanjang/ledger.md` (honours `CLAUDE_CONFIG_DIR`; `bin/ledger`) |
 | `/wanjang:manager on\|off\|status` | Make this session the manager of your other open sessions: an hourly look, one page, up to 4 questions, approved items sent to their sessions (off by default, one manager per user) |
 | `/wanjang:manager` | Check now, and show the page |
@@ -374,14 +377,14 @@ and leaving browser testing to QA.
 | `bin/deliverables` | If a finished subagent's brief (or prompt) has a `Deliverables: <path>, <path>` line and a file is missing or empty: PostToolUse on `Agent` tells the parent at once; SubagentStop sends the worker back once |
 | `bin/main-rules` | SessionStart hook: injects `main-rules/*.md` into the main session only |
 | `bin/close` | SubagentStop hook: sends the PM back once if it tries to report with its run log still open |
-| `bin/status` | The snapshot behind `/wanjang:now`: agents (nested, waiting tool call, stuck), run logs, open tasks |
+| `bin/status` | The snapshot behind `/wanjang:now` (`--eta` adds the finish estimates behind `/wanjang:wen`): agents (nested, waiting tool call, stuck), run logs, open tasks |
 | `bin/ledger` | SubagentStop hook: adds a finished PM run's `Shipped:` line to the per-user ledger; `ledger show` prints it |
 | `bin/manager`, `bin/manager-page` | The scan, ledger, dispatch and prompt hook behind `/wanjang:manager`, and its page renderer |
 | `bin/next` | The scan and the promise and trust records the manager uses |
 | `bin/usage` | The token report behind `/wanjang:optimize` |
 | `bin/provider`, `bin/openrouter-key`, `bin/provider-hook`, `bin/provider-fail` | `/wanjang:provider`, its key helper, the hook that runs it with no model, and the one that switches back on a billing error |
 | `bin/docindex` | The local doc index behind `/wanjang:docs` |
-| `skills/` | `/wanjang:wanjang`, `/wanjang:optimize`, `/wanjang:now`, `/wanjang:manager`, `/wanjang:next` (a stub), `/wanjang:docs`, `/wanjang:slim`, `/wanjang:relay`, `/wanjang:provider`, `/wanjang:visual-doc` and `/wanjang:brief` |
+| `skills/` | `/wanjang:wanjang`, `/wanjang:optimize`, `/wanjang:now`, `/wanjang:wen`, `/wanjang:manager`, `/wanjang:next` (a stub), `/wanjang:docs`, `/wanjang:slim`, `/wanjang:relay`, `/wanjang:provider`, `/wanjang:visual-doc` and `/wanjang:brief` |
 | `test/` | `guard.sh`, `read-warn.sh`, `deliverables.sh`, `docindex.sh`, `main-rules.sh`, `route.sh`, `close.sh`, `ledger.sh`, `usage.sh`, `status.sh`, `provider.sh`, `next.sh`, `manager.sh`, `manager-page.sh`, `playbooks.sh` and `skills.sh` |
 
 ```sh

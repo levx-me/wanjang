@@ -8,7 +8,7 @@
 대신 정한 것들은 끝에 목록 하나로 검토하면 돼요.
 
 [![Claude Code plugin](https://img.shields.io/badge/Claude_Code-plugin-d97757)](https://code.claude.com/docs/en/plugins)
-[![version](https://img.shields.io/badge/version-0.13.0-blue)](.claude-plugin/plugin.json)
+[![version](https://img.shields.io/badge/version-0.14.0-blue)](.claude-plugin/plugin.json)
 [![license](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
 [English](README.md) | 한국어
@@ -60,6 +60,8 @@ designer는 페이지를 만들어요. checker는 주장을 playbook 기준표�
   되돌리는 방법을 기록해요.
 - **어떻게 돼 가는지 알려줘요.** `/wanjang:now`는 에이전트마다 지금 뭘 하는지, 얼마나 됐는지, 10분 넘게 소식이
   없는 게 누군지 보여줘요.
+- **언제 끝나는지 알려줘요.** `/wanjang:wen`은 돌아가는 에이전트마다, 그리고 전체가 대략 언제 끝날지 지난 run에서 같은
+  종류의 에이전트가 걸린 시간으로 추정해 알려줘요.
 - **일에 맞는 모델을 써요.** 조회와 단순 수정은 Haiku, 보통의 구현과 확인은 Sonnet, UI와 정말 어려운 부분은 Opus예요.
   추론 effort도 같은 식으로 정해요(low, medium, high). 실패한 일은 한 단계 위 모델로 다시 해요.
 - **메인 세션을 가볍게 지켜요.** 여러 단계가 필요한 일은 PM에게 가고, 돌아오는 건 짧은 요약 하나예요. 지금 쓸 수
@@ -182,6 +184,7 @@ Claude 세션에서는 PATH에 있어요. `/wanjang:docs <query> [dir]`가 이�
 | `/wanjang:visual-doc` | 보고서, 대시보드, 설명을 정해진 스타일의 HTML 페이지 하나로 만들어요 |
 | `/wanjang:brief` | 개발자가 아닌 분을 위한 브리프를 써요: 쉬운 말, 승인할 결정, 결정마다 질문 하나 |
 | `/wanjang:now` | 돌아가는 에이전트가 지금 무엇을, 얼마나 오래 하는지, 끝난 것과 막힌 것 같은 것을 알려줘요(`bin/status`, 읽기 전용) |
+| `/wanjang:wen` | 돌아가는 일이 대략 언제 끝날지 에이전트별로, 전체로 알려줘요. 지난 run의 소요 시간으로 추정해요(`bin/status --eta`, 읽기 전용) |
 | `/wanjang:now --week\|--since DATE\|--repo X` | 끝난 run이 만든 것을 장부(`~/.claude/wanjang/ledger.md`, `CLAUDE_CONFIG_DIR` 따라감, `bin/ledger`)에서 한 줄씩 보여줘요 |
 | `/wanjang:manager on\|off\|status` | 이 세션을 열려 있는 다른 세션들의 매니저로 만들어요. 한 시간마다 둘러보고, 한 페이지로 보여주고, 최대 4개를 묻고, 승인한 일은 맡은 세션에 보내요(기본 꺼짐, 사용자당 매니저 하나) |
 | `/wanjang:manager` | 지금 점검하고 페이지를 보여줘요 |
@@ -365,14 +368,14 @@ Sonnet, 오래 일한 워커를 이어 쓰는 대신 새로 띄우기, 브라우
 | `bin/deliverables` | 끝난 서브에이전트의 브리프(또는 프롬프트)에 `Deliverables: <경로>, <경로>` 줄이 있는데 파일이 없거나 비어 있으면, PostToolUse(`Agent`)는 부모에게 바로 알리고 SubagentStop은 워커를 한 번 돌려보내요 |
 | `bin/main-rules` | SessionStart 훅: `main-rules/*.md`를 메인 세션에만 넣어요 |
 | `bin/close` | SubagentStop 훅: run 기록이 열린 채로 보고하려 하면 PM을 한 번 돌려보내요 |
-| `bin/status` | `/wanjang:now`의 스냅샷: 에이전트(중첩, 기다리는 도구 호출, 막힘), run 로그, 열린 작업 |
+| `bin/status` | `/wanjang:now`의 스냅샷(`--eta`를 주면 `/wanjang:wen`의 완료 추정이 붙어요): 에이전트(중첩, 기다리는 도구 호출, 막힘), run 로그, 열린 작업 |
 | `bin/ledger` | SubagentStop 훅: 끝난 PM run의 `Shipped:` 줄을 사용자별 장부에 더하고, `ledger show`로 보여줘요 |
 | `bin/manager`, `bin/manager-page` | `/wanjang:manager`의 스캔, 장부, 전달, 프롬프트 훅과 페이지 렌더러 |
 | `bin/next` | 매니저가 쓰는 스캔과 약속·믿고 맡기기 기록 |
 | `bin/usage` | `/wanjang:optimize`의 토큰 보고서 |
 | `bin/provider`, `bin/openrouter-key`, `bin/provider-hook`, `bin/provider-fail` | `/wanjang:provider`, 키 도우미, 모델 없이 실행하는 훅, 결제 오류 때 되돌리는 훅 |
 | `bin/docindex` | `/wanjang:docs`가 쓰는 로컬 문서 색인 |
-| `skills/` | `/wanjang:wanjang`, `/wanjang:optimize`, `/wanjang:now`, `/wanjang:manager`, `/wanjang:next`(껍데기), `/wanjang:docs`, `/wanjang:slim`, `/wanjang:relay`, `/wanjang:provider`, `/wanjang:visual-doc`, `/wanjang:brief` |
+| `skills/` | `/wanjang:wanjang`, `/wanjang:optimize`, `/wanjang:now`, `/wanjang:wen`, `/wanjang:manager`, `/wanjang:next`(껍데기), `/wanjang:docs`, `/wanjang:slim`, `/wanjang:relay`, `/wanjang:provider`, `/wanjang:visual-doc`, `/wanjang:brief` |
 | `test/` | `guard.sh`, `read-warn.sh`, `deliverables.sh`, `docindex.sh`, `main-rules.sh`, `route.sh`, `close.sh`, `ledger.sh`, `usage.sh`, `status.sh`, `provider.sh`, `next.sh`, `manager.sh`, `manager-page.sh`, `playbooks.sh`, `skills.sh` |
 
 ```sh
