@@ -55,7 +55,7 @@ grep -q '^- repo-a | busy' "$DG" || bad "digest lacks the live session: $(cat "$
 clk 3600; echo b >> "$R/a.txt"
 out=$(tick); c=$(ctx <<<"$out")
 { [ -n "$c" ] && [ ${#c} -le 800 ] && grep -q 'wanjang:inspector' <<<"$c" && grep -q 'manager dispatch --id' <<<"$c"; } || bad "4: pass context (${#c} chars): $out"
-grep -q '^- uncommitted [0-9a-f]\{8\} | '"$R"' | repo-a | 1 files changed: a.txt' "$DG" || bad "4: digest: $(cat "$DG")"
+grep -q '^- uncommitted [0-9a-f]\{8\} | '"$R"' | repo-a | 1 file changed: a.txt' "$DG" || bad "4: digest: $(cat "$DG")"
 F1=$(awk '/^- uncommitted /{print $3}' "$DG")
 # installed under a long plugin path, the steps still fit
 LB=$T/plugins/cache/wanjang/wanjang/0.13.0/bin; mkdir -p "$LB"; cp bin/manager bin/next bin/status bin/manager-page "$LB"/
@@ -79,6 +79,7 @@ F2=$(awk '/^- uncommitted /{print $3}' "$DG"); FT=$(awk '/^- todo /{print $3}' "
 [ "$("$M" item add todo "$FT" --project "$R" --session repo-a --kind other --text "Finish the TODO" --why "new TODO in a.txt")" = "m-2 ask" ] || bad "item add todo"
 "$M" item add uncommitted "$F2" --project "$R" --session repo-a --kind commit --text "Save the work as a commit" --why "a.txt changed" >/dev/null
 [ "$(ev m-1 | tail -1 | jq -r .ev)" = closed ] || bad "a revised item should close the older one with the same key"
+[ "$("$M" item add uncommitted "$F1" --project "$R" --text x)" = "m-1 closed" ] || bad "item add on a closed item should say closed"
 grep -q 'changed=yes$' <<<"$("$M" page)" || bad "5: new finding should change the page"
 [ "$(grep -o 'class="tag on">new<' "$PG" | wc -l | tr -d ' ')" = 2 ] || bad "5: new chip count: $(grep -o 'class="tag on">new<' "$PG" | wc -l)"
 out=$("$M" ask-list); [ "$(grep -c '^ASK m-' <<<"$out")" = 2 ] && grep -q '^ASK m-2 | other | Finish the TODO | new TODO in a.txt | not stated$' <<<"$out" || bad "ask-list: $out"
@@ -86,6 +87,7 @@ out=$("$M" ask-list); [ "$(grep -c '^ASK m-' <<<"$out")" = 2 ] && grep -q '^ASK 
 
 # ---- 6: answered items are not asked again until the fp changes
 "$M" answer m-2 reject --words "not now" | grep -q 'm-2 rejected' || bad "6: reject"
+[ "$("$M" item add todo "$FT" --project "$R" --text x)" = "m-2 rejected" ] || bad "6: item add on a rejected item should not say ask"
 clk 14400; out=$(tick); blocked "·" <<<"$out" || bad "6: answered items should not come back: $out"
 # a comment is not approval: it is news for the inspector, once
 "$M" answer m-3 comment --words "only the docs part" >/dev/null
@@ -168,6 +170,44 @@ out=$("$M" item add commit:z z1 --project "$R" --session repo-a --text "commit t
 # a reply closes the trust ladder's running action
 CLAUDE_CODE_SESSION_ID=aaaa1111-x "$M" reply "$id11" failed --note "hook failed" >/dev/null
 [ "$("$N" trust --json --cwd "$R" | jq '.kinds[]|select(.kind=="commit")|.yeses')" = 0 ] || bad "11: a failed auto reply should reset the kind"
+
+# ---- the trust check reads the action sent (--what, else --text), also when bin/next already runs one
+R3=$T/r3; mkdir "$R3"; git -C "$R3" init -q; echo a > "$R3/a.txt"
+git -C "$R3" -c user.email=a@b -c user.name=t add a.txt; git -C "$R3" -c user.email=a@b -c user.name=t commit -qm init
+live; C=$P; reg "$C" cccc3333-x repo-c "$R3" busy
+for d in 3 2 1; do WANJANG_NOW=$((WANJANG_NOW - d * 86400)) "$N" answer "commit:t$d" "y$d" yes --cwd "$R3" >/dev/null; done
+clk 50400; "$M" scan --force >/dev/null; clk 50460
+i=0
+for txt in "commit the files, then git checkout -- . to discard the rest" "commit the files and d$(printf '\xd0\xb5')ploy the site" \
+           "commit the files and ssh server1 to restart nginx"; do
+  i=$((i + 1))
+  [ "$("$N" ask "commit:b$i" "b$i" --what "commit the files" --cwd "$R3" 2>/dev/null)" = auto ] || bad "bypass $i: next ask should be auto"
+  out=$("$M" item add "commit:b$i" "b$i" --project "$R3" --session repo-c --text "$txt" --why x)
+  [ "${out#* }" = ask ] || bad "bypass $i: a running action must not pass other text: $txt -> $out"
+  "$N" did "commit:b$i" "b$i" ask --cwd "$R3" >/dev/null
+done
+out=$("$M" item add commit:v v1 --project "$R3" --session repo-c --text "Save the finished work in repo-c as a commit" --why x)
+[ "${out#* }" = ask ] || bad "--what: free text alone is not the kind's short wording: $out"
+out=$("$M" item add commit:w w1 --project "$R3" --session repo-c --kind tidy --text "Save the finished work in repo-c as a commit" \
+      --what "commit the files" --why "tests passed"); idw2=${out% *}
+[ "${out#* }" = auto ] || bad "--what: the short action should be auto: $out"
+out=$("$M" dispatch --id "$idw2")
+{ grep -q "^wanjang manager · item $idw2 · under your standing yes for commit;" <<<"$out" && grep -qx "Do: commit the files. Evidence: tests passed." <<<"$out"; } \
+  || bad "--what: the auto message sends the short action and the derived kind: $out"
+"$M" sent "$idw2" >/dev/null
+[ "$("$M" item add commit:w w1 --project "$R3" --text x)" = "$idw2 sent" ] || bad "item add on a sent item should give its status"
+# a ledger line cut short (a crash mid-write) does not swallow the next event
+printf '{"ev":"cut' >> "$LG"
+out=$("$M" item add other:nl n1 --project "$R3" --session repo-c --text "Look at it" --why x)
+[ "$(tail -1 "$LG" | jq -r .id)" = "${out% *}" ] || bad "ledger: the event after a cut line was lost: $(tail -2 "$LG")"
+grep -vx '{"ev":"cut' "$LG" > "$T/lg"; cat "$T/lg" > "$LG"  # jq below reads the whole file
+# past the time budget the scan skips promise conditions and says so; the next scan runs them
+pid=$("$N" promise add "check x" --when "touch '$T/ran'; false" --cwd "$R3" | cut -f1)
+WANJANG_SCAN_BUDGET=0 "$M" scan --force >/dev/null
+{ head -1 "$DG" | grep -q ' · partial: promise conditions skipped after 0 s, next tick$' && [ ! -e "$T/ran" ]; } || bad "budget: $(head -1 "$DG"); ran: $(ls "$T/ran" 2>&1)"
+"$M" scan --force >/dev/null; { [ -e "$T/ran" ] && ! head -1 "$DG" | grep -q partial; } || bad "budget: the next scan should run the condition: $(head -1 "$DG")"
+"$N" promise drop "$pid" >/dev/null
+rm -f "$WANJANG_SESSIONS_DIR/$C.json"
 
 # ---- 7 (no live session): waiting, then expired after 7 days
 P2=$T/p2; mkdir "$P2"; git -C "$P2" init -q

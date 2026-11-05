@@ -20,6 +20,8 @@ MS=$T/home/.claude/wanjang/manager; mkdir -p "$MS"
 jq -nc --arg c "$T/projB" '{on:true,owner:{sessionId:"s0",pid:999999,name:"boss",cwd:$c}}' > "$MS/state.json"
 grep -qx 'manager was on here; `/wanjang:manager on` to resume' <<<"$(run "$T/home" "$T/projB")" || { echo "FAIL no manager resume line"; fail=1; }
 [ "$(run "$T/home" "$T/proj")" = "$base" ] || { echo "FAIL manager line in another folder"; fail=1; }
+jq -nc --arg c "$T/projB" '{on:true,owner:{sessionId:"s0",pid:null,name:"boss",cwd:$c}}' > "$MS/state.json"
+grep -qx 'manager was on here; `/wanjang:manager on` to resume' <<<"$(run "$T/home" "$T/projB")" || { echo "FAIL no resume line for an owner with no pid"; fail=1; }
 jq -nc --arg c "$T/projB" --argjson p $$ '{on:true,owner:{sessionId:"s0",pid:$p,name:"boss",cwd:$c}}' > "$MS/state.json"
 grep -q 'manager was on' <<<"$(run "$T/home" "$T/projB")" && { echo "FAIL manager line while its owner lives"; fail=1; }
 jq -nc --arg c "$T/projB" '{on:false,owner:{sessionId:"s0",pid:999999,name:"boss",cwd:$c}}' > "$MS/state.json"

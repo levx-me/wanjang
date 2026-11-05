@@ -12,8 +12,10 @@ Its memory is files, so a compaction or a restart loses nothing.
   scan [--force] [--sessions FILE|-] [--json]   look at the other sessions and their repositories (a script, no
           model), write the digest (at most 8 KB) and print `new=<k> open=<m> digest=<path> tick=<n>`; exit 3
           when nothing is new. --sessions: a JSON list of sessions (ListAgents) when there is no registry.
-  item add KEY FP --project P --session S --kind K --text T --why W --cost C   record a judged finding; prints
-          `<id> ask` or `<id> auto` (a trusted local kind: sent without asking)
+  item add KEY FP --project P --session S --kind K --text T [--what A] --why W --cost C   record a judged finding;
+          prints `<id> ask` or `<id> auto` (a trusted local kind: sent without asking), or `<id> <status>` when this
+          KEY FP was already answered. --what: the short action the trust check reads ("commit the files"); an auto
+          item sends it as the `Do:` line. Without it the check reads --text, the page's wording.
   item drop KEY FP --why W   not worth asking; not judged again until its fp changes
   page    render page.html with bin/manager-page; prints `<path> changed=yes|no` (written only when it changed)
   ask-list                   open undecided items (at most 4) as `ASK id | label | action | why | cost`
@@ -43,6 +45,8 @@ LOCAL = ("verify", "test", "docs", "commit")
 OPEN = ("found", "asked", "approved", "waiting", "sent", "changed")
 REPO = ("uncommitted", "todo", "memory-next", "unpushed")
 SESS = ("waiting", "idle", "you", "task")
+# the tick hook waits 45 s: past BUDGET seconds a scan skips the slow parts (bin/status, promise conditions)
+T0, BUDGET, SKIPPED = time.monotonic(), float(os.environ.get("WANJANG_SCAN_BUDGET") or 30), set()
 BOUNDS = ("Bounds: this repository only. Push, deploy, migrations, deletes, installs and anything outward still need "
           "the user's yes here, even though this message carries an approval: ask the user again before doing them.")
 
@@ -114,6 +118,13 @@ def git(cwd, *args):
         return ""
 
 
+def late(part):
+    if time.monotonic() - T0 < BUDGET:
+        return False
+    SKIPPED.add(part)
+    return True
+
+
 def alive(pid):
     try:
         os.kill(int(pid), 0)
@@ -168,10 +179,12 @@ def events():
 
 
 def write(now, *evs):
-    """append events; the caller holds lock()"""
-    with open(mp("ledger.jsonl"), "a") as f:
-        for e in evs:
-            f.write(json.dumps({"t": iso(now), **{k: v for k, v in e.items() if v not in (None, "")}}) + "\n")
+    """append events; the caller holds lock(). A last line cut short (a crash mid-write) gets its newline first."""
+    with open(mp("ledger.jsonl"), "ab+") as f:
+        if f.seek(0, 2) and (f.seek(-1, 2), f.read(1))[1] != b"\n":
+            f.write(b"\n")
+        f.write("".join(json.dumps({"t": iso(now), **{k: v for k, v in e.items() if v not in (None, "")}}) + "\n"
+                        for e in evs).encode())
 
 
 def fold(evs):
@@ -183,6 +196,7 @@ def fold(evs):
             known.add((e.get("key"), e.get("fp")))
             items[i] = dict(id=i, key=e.get("key", ""), fp=e.get("fp", ""), project=e.get("project", ""),
                             session=e.get("session", ""), kind=e.get("kind", ""), text=e.get("text", ""),
+                            what=e.get("what", ""),
                             why=e.get("why", ""), cost=e.get("cost", ""), status="found", ans="", words="", note="",
                             t=e.get("t", ""), first=t, last=t, appr=0, to="", tsid="")
             if ev == "auto":
@@ -328,7 +342,7 @@ def session_findings(s, now, deep=True):
             add(f"you:{sid8}:{tid}", sha(sub), f"{s['name']} has a task waiting on the user: {sub}")
         elif age > STALE_TASK and (idle or sub.lower().startswith("relay:")):
             add(f"task:{sid8}:{tid}", sha(sub), f"{s['name']}: task pending {int(age // 3600)} h, untouched: {sub}")
-    if deep and tp and glob.glob(os.path.join(tp[:-6], "subagents", "agent-*.jsonl")):
+    if deep and tp and glob.glob(os.path.join(tp[:-6], "subagents", "agent-*.jsonl")) and not late("bin/status"):
         try:
             r = subprocess.run([os.path.join(BIN, "status"), "--session", s["sid"], "--json"], capture_output=True,
                                text=True, timeout=10)
@@ -362,7 +376,7 @@ def repo_findings(cwds, now, conds):
                 out.append(dict(key=k, fp=fp, session=name, cwd=cwd, evidence=summ, extra=""))
     for root, (cwd, name) in roots.items():
         if conds is not None:
-            lines, ran = nx().promise_scan(root, now, conds[0])
+            lines, ran = nx().promise_scan(root, now, 0 if conds[0] > 0 and late("promise conditions") else conds[0])
             conds[0] -= ran
         else:  # no condition runs: open promises only, for the evidence check
             lines = [f"promise:{p['id']}\t{nx().pfp(p, now)}\t" for p in nx().pread()
@@ -444,7 +458,8 @@ def scan(a, now):
             return 3, (json.dumps(dict(new=0, open=n_open, findings=[])) if a.json else f"new=0 open={n_open}")
         st["prev_tick"], st["last_tick"], st["tick"] = last, now, int(st.get("tick") or 0) + 1
         ssave(st)
-    L = [f"wanjang manager digest · tick {st['tick']} · {iso(now, 'minutes')} · {k} new, {n_open} open",
+    L = [f"wanjang manager digest · tick {st['tick']} · {iso(now, 'minutes')} · {k} new, {n_open} open"
+         + (f" · partial: {' and '.join(sorted(SKIPPED))} skipped after {BUDGET:g} s, next tick" if SKIPPED else ""),
          f"manager: \"{ME}\"   next: \"{os.path.join(BIN, 'next')}\"",
          "Judge only the NEW findings: item add KEY FP (with --project P --session S) or item drop KEY FP --why."]
     if new:
@@ -551,11 +566,13 @@ def tick_autos(now, st):
 
 
 def trusted(it, st, now, create=True):
-    """the trust ladder allows sending this item without asking; the never-auto rule is checked here on the key
-    and the action text whatever bin/next says"""
-    n = nx()
-    k = n.kind_of(it["key"], it["text"])
-    if k not in LOCAL or n.outward(it["key"]) or n.outward(it["text"]) or tick_autos(now, st) >= AUTON:
+    """the trust ladder allows sending this item without asking; the never-auto rule is checked here on the key,
+    the page text and the action sent (what, else text), whatever bin/next says: the action must be the kind's own
+    short wording (next's safe), also when a running action already exists"""
+    n, act = nx(), it.get("what") or it["text"]
+    k = n.kind_of(it["key"], act)
+    if k not in LOCAL or n.outward(it["key"]) or n.outward(it["text"]) or not n.safe(k, it["key"], act) \
+            or tick_autos(now, st) >= AUTON:
         return False
     t = n.tload(it["project"] or ".")[0]
     run = next((e for e in t["auto"] if e.get("key") == it["key"] and e.get("fp") == sha(it["fp"])
@@ -564,7 +581,7 @@ def trusted(it, st, now, create=True):
         return n.kind_of(it["key"], run.get("what", "")) in LOCAL
     if not create:
         return False
-    a = SimpleNamespace(key=it["key"], fp=it["fp"], what=it["text"], cwd=it["project"] or ".", session=it["session"])
+    a = SimpleNamespace(key=it["key"], fp=it["fp"], what=act, cwd=it["project"] or ".", session=it["session"])
     with contextlib.redirect_stderr(io.StringIO()):
         return n.ask_level(a, k, now) == "auto"
 
@@ -592,8 +609,10 @@ def item_cmd(a, now):
             write(now, dict(ev="dropped", id=same and same["id"], key=a.key, fp=a.fp, why=a.why))
             print(f"dropped {a.key} {a.fp}")
             return
-        if same:
-            print(f"{same['id']} {'auto' if same['ans'] == 'auto' else 'ask'}")
+        if same:  # judged before: its verdict, or where it stands once answered or closed
+            was = same["status"]
+            print(f"{same['id']} " + ("ask" if was in ("found", "asked") else
+                                      "auto" if was == "approved" and same["ans"] == "auto" else was))
             return
         if not a.text.strip():
             print("usage: manager item add KEY FP --text T ...", file=sys.stderr)
@@ -601,10 +620,12 @@ def item_cmd(a, now):
         proj = os.path.realpath(a.project) if a.project and os.path.isdir(a.project) else a.project
         nid = max([int(st.get("next_id") or 0)] + [int(i[2:]) for i in items if str(i).startswith("m-") and i[2:].isdigit()]) + 1
         it = dict(id=f"m-{nid}", key=a.key, fp=a.fp, project=proj, session=a.session, kind=a.kind, text=one(a.text, 300),
-                  why=one(a.why, 300), cost=one(a.cost, 120))
+                  what=one(a.what, 120), why=one(a.why, 300), cost=one(a.cost, 120))
         k = nx().kind_of(a.key, a.text)
-        it["kind"] = "outward" if k == "outward" else (a.kind or k)
+        it["kind"] = "outward" if "outward" in (k, nx().kind_of(a.key, a.what)) else (a.kind or k)
         auto = trusted(it, st, now)
+        if auto:  # the standing yes names the kind the trust check read, not the inspector's free --kind
+            it["kind"] = nx().kind_of(a.key, it["what"] or it["text"])
         for old in items.values():  # a revised item replaces the open one with the same key
             if old["key"] == a.key and old["project"] == proj and old["status"] in OPEN and old["status"] != "sent":
                 write(now, dict(ev="closed", id=old["id"], note=f"replaced by {it['id']}"))
@@ -649,8 +670,9 @@ def message(it, now):
             f"question" if it["ans"] == "auto" else
             f"the user approved this in the manager session at {iso(it['appr'] or now, 'minutes')}")
     words = it["words"] or "(none: a trusted kind, sent without asking)"
+    do = it["what"] if it["ans"] == "auto" and it.get("what") else it["text"]
     return "\n".join([f"wanjang manager · item {it['id']} · {head}", f'User\'s words: "{words}"',
-                      f"Do: {it['text'].rstrip('.')}. Evidence: {it['why'].rstrip('.') or it['key']}.", BOUNDS,
+                      f"Do: {do.rstrip('.')}. Evidence: {it['why'].rstrip('.') or it['key']}.", BOUNDS,
                       f"When done: run `\"{ME}\" reply {it['id']} done|failed|question --note \"<one line>\"`. "
                       f"Do not message the manager."])
 
@@ -676,8 +698,9 @@ def dispatch_cmd(a, now):
                     release(it, now)
                     out.append(f"NOT SENT {it['id']}: not approved; ask the user first")
                     continue
+                it["kind"] = nx().kind_of(it["key"], it["what"] or it["text"])
                 write(now, dict(ev="auto", **{k: it[k] for k in ("id", "key", "fp", "project", "session", "kind", "text",
-                                                                  "why", "cost")}))
+                                                                  "what", "why", "cost")}))
                 it.update(status="approved", ans="auto", appr=now)
             if it["status"] not in ("approved", "waiting"):
                 out.append(f"NOT SENT {it['id']}: it is {it['status']}")
@@ -886,7 +909,7 @@ def main():
         s.add_argument("key")
         s.add_argument("fp")
         s.add_argument("--why", default="")
-    for n in ("project", "session", "kind", "text", "cost"):
+    for n in ("project", "session", "kind", "text", "what", "cost"):
         ip.choices["add"].add_argument("--" + n, default="")
     s = sub.add_parser("answer")
     s.add_argument("id")

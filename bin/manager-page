@@ -36,7 +36,7 @@ def decide(n, it):
     kind, cost = e(s(it.get("kind"))), e(s(it.get("cost")) or "not stated")
     return (f'<section class="decide" id="d{n}" aria-labelledby="d{n}-q">'
             f'<h3 class="decide-q" id="d{n}-q">{kind}: {e(s(it.get("text")))}{chip(it)}</h3>'
-            f'<p class="decide-meta"><b>Project</b> {e(s(it.get("project")))} · <b>Answer</b> in the manager session</p>'
+            + (f'<p class="decide-meta"><b>Project</b> {e(s(it.get("project")))}</p>' if s(it.get("project")) else "") +
             f'<div class="opt reco"><dl class="opt-facts"><dt>Why</dt><dd>{e(s(it.get("why")) or "not stated")}</dd>'
             f'<dt>Cost</dt><dd>{cost}</dd></dl></div></section>')
 

@@ -18,10 +18,11 @@ fi
 # Promises due in this project (read-only: runs no stored condition).
 due=$("$bin/next" promise due --cwd "${cwd:-.}" 2>/dev/null)
 [ -n "$due" ] && text+=$'\n\n'"$due"
-# The manager was on in this folder and its session has ended (a restart): say how to resume it.
+# The manager was on in this folder and its session has ended (a restart): say how to resume it. No pid (null)
+# counts as ended: kill -0 0 would signal this process group and succeed.
 st=${CLAUDE_CONFIG_DIR:-$HOME/.claude}/wanjang/manager/state.json
 if [ -n "$cwd" ] && [ -f "$st" ] && IFS=$'\t' read -r on pid dir < <(jq -r '[.on, (.owner.pid // 0), (.owner.cwd // "")] | @tsv' "$st" 2>/dev/null) \
-   && [ "$on" = true ] && [ "$dir" = "$cwd" ] && ! kill -0 "$pid" 2>/dev/null; then
+   && [ "$on" = true ] && [ "$dir" = "$cwd" ] && { ! [[ $pid =~ ^[1-9][0-9]*$ ]] || ! kill -0 "$pid" 2>/dev/null; }; then
   text+=$'\n\nmanager was on here; `/wanjang:manager on` to resume'
 fi
 jq -n --arg t "$text" '{hookSpecificOutput: {hookEventName: "SessionStart", additionalContext: $t}}'

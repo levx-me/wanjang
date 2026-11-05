@@ -99,7 +99,7 @@ def candidates(cwd):
     if por.strip():
         files = [l[3:] for l in por.splitlines()]
         more = f" +{len(files) - 3} more" if len(files) > 3 else ""
-        yield "uncommitted", sha(head + por + diff), one(f"{len(files)} files changed: {', '.join(files[:3])}{more}")
+        yield "uncommitted", sha(head + por + diff), one(f"{len(files)} file{'s' if len(files) != 1 else ''} changed: {', '.join(files[:3])}{more}")
     todos, cur = [], ""
     for l in diff.splitlines():
         if l.startswith("+++ "):

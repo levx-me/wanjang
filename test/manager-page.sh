@@ -15,10 +15,12 @@ out=$($P <<<"$IN"); [ $? = 0 ] || { echo "FAIL: exit"; fail=1; }
 for h in "Decisions needed" "Sent, waiting" "Done" "Problems" "Also open"; do ck "$out" "$h</p>"; done
 ck "$out" 'tag on">new'; ck "$out" "answer\|Answer in the manager session"
 ck "$out" "run &lt;b&gt;tests&lt;/b&gt; &amp; more"; no "$out" "<b>tests</b>"; no "$out" ">gone<"
+ck "$out" '<b>Project</b> p</p>'; no "$out" ' · </p>'
 [ "$out" = "$($P <<<"$IN")" ] || { echo "FAIL: not deterministic"; fail=1; }
 many=$(python3 -c 'import json;print(json.dumps({"now":"n","items":[{"id":str(i),"kind":"k","text":"t%d"%i,"status":"found","t":str(i)} for i in range(6)]}))')
 [ "$($P <<<"$many" | grep -o 'class="decide"' | wc -l | tr -d ' ')" = 4 ] || { echo "FAIL: more than 4 decide blocks"; fail=1; }
 ck "$($P <<<"$many")" "Also open</p>"
+no "$($P <<<"$many")" 'class="decide-meta"'  # no project: no Project line
 empty=$($P <<<'{"now":"n","state":{},"items":[]}'); ck "$empty" "Nothing open"; no "$empty" "Decisions needed"
 $P <<<'nope' 2>/dev/null && { echo "FAIL: bad input accepted"; fail=1; }
 command -v xmllint >/dev/null && xmllint --html --noout - <<<"$out" 2>&1 | grep 'parser error' | grep -v 'invalid' | grep -q . && { echo "FAIL: xmllint"; fail=1; }
