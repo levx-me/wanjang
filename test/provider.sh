@@ -116,12 +116,12 @@ done
 hook() { jq -n --arg n "$1" --arg a "$2" --arg c "$PWD" '{hook_event_name: "UserPromptExpansion", command_name: $n, command_args: $a, cwd: $c}' | bin/provider-hook; }
 OPENROUTER_API_KEY=sk-test bin/provider openrouter --file "$F" >/dev/null
 o=$(hook wanjang:provider "claude --file $F")
-[ "$(jq -r .decision <<<"$o")" = block ] && [ "$(jq -r .suppressOriginalPrompt <<<"$o")" = true ] || bad "hook: not blocked"
-case "$(jq -r .reason <<<"$o")" in "Done ("*"provider: claude ($F)"*) ;; *) bad "hook: reason" ;; esac
+[ "$(jq -r .continue <<<"$o")" = false ] || bad "hook: did not stop the prompt"
+case "$(jq -r .stopReason <<<"$o")" in "Done."*"provider: claude ($F)"*) ;; *) bad "hook: reason" ;; esac
 [ "$(q .env.ANTHROPIC_BASE_URL)" = https://api.anthropic.com ] || bad "hook: did not switch"
-case "$(jq -r .reason <<<"$(hook wanjang:provider "status --file $F")")" in "Done ("*"provider: claude"*) ;; *) bad "hook: status" ;; esac
-case "$(jq -r .reason <<<"$(hook wanjang:provider "default --file $F")")" in "Done ("*"provider: claude"*) ;; *) bad "hook: alias" ;; esac
-case "$(jq -r .reason <<<"$(hook wanjang:provider "bogus --file $F")")" in "Failed:"*) ;; *) bad "hook: failure wording" ;; esac
+case "$(jq -r .stopReason <<<"$(hook wanjang:provider "status --file $F")")" in "Done."*"provider: claude"*) ;; *) bad "hook: status" ;; esac
+case "$(jq -r .stopReason <<<"$(hook wanjang:provider "default --file $F")")" in "Done."*"provider: claude"*) ;; *) bad "hook: alias" ;; esac
+case "$(jq -r .stopReason <<<"$(hook wanjang:provider "bogus --file $F")")" in "Failed:"*) ;; *) bad "hook: failure wording" ;; esac
 [ -z "$(hook wanjang:provider "models")" ] || bad "hook: models not passed through"
 [ -z "$(hook wanjang:wanjang "claude --file $F")" ] || bad "hook: another command blocked"
 # StopFailure: billing or auth errors switch back only when on OpenRouter; other errors do nothing.

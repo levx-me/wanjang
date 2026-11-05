@@ -10,9 +10,11 @@ case "${args[0]:-}" in models) exit 0 ;; esac
 cwd=$(jq -r '.cwd // empty' <<<"$input")
 out=$(cd "${cwd:-.}" && "$(dirname "$0")/provider" ${args[@]+"${args[@]}"} 2>&1 </dev/null); rc=$?
 for a in ${args[@]+"${args[@]}"}; do [ "$a" = --user ] && out="Note: --user changed ~/.claude/settings.json, so every open session switched."$'\n'"$out"; done
-if [ $rc = 0 ]; then  # Claude Code titles every block "operation blocked by hook": say first that this one worked
-  out="Done (not an error: \"blocked\" only means it ran without a model call)."$'\n'"$out"$'\n'"Check with /status: the \"Anthropic base URL\" line shows where requests go."
+if [ $rc = 0 ]; then
+  out="Done."$'\n'"$out"$'\n'"Check with /status: the \"Anthropic base URL\" line shows where requests go."
 else
   out="Failed:"$'\n'"$out"
 fi
-jq -n --arg r "$out" '{decision: "block", reason: $r, suppressOriginalPrompt: true}'
+# continue:false stops before any model call and shows stopReason; a decision:block would be titled
+# "operation blocked by hook", which read as a failure even when the switch worked
+jq -n --arg r "$out" '{continue: false, stopReason: $r}'
