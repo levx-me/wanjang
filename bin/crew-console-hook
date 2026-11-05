@@ -3,8 +3,14 @@
 # is denied with the crew-run command to use instead, so it bills to the Console key.
 # Subagents (agent_id set) and crew-run children (WANJANG_CREW_CONSOLE=1) pass, as does everything else.
 set -u
-[ -n "${WANJANG_CREW_CONSOLE:-}" ] && exit 0
 input=$(cat)
+# Inside a crew-run child, `claude -p` exits when the turn ends, killing background workers: run them in the foreground.
+if [ -n "${WANJANG_CREW_CONSOLE:-}" ]; then
+  [ "$(printf '%s' "$input" | jq -r '.tool_input.run_in_background // false')" = true ] || exit 0
+  printf '%s' "$input" | jq '{hookSpecificOutput: {hookEventName: "PreToolUse", permissionDecision: "allow",
+    updatedInput: (.tool_input + {run_in_background: false})}}'
+  exit 0
+fi
 cfg=${CLAUDE_CONFIG_DIR:-$HOME/.claude}/wanjang
 dir=$(printf '%s' "$input" | jq -r '.cwd // empty'); [ -d "$dir" ] || exit 0
 proj=$(cd "$dir" && { git rev-parse --show-toplevel 2>/dev/null || pwd; })
