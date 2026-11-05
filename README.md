@@ -36,8 +36,8 @@ prices are never done by the crew: they come back as steps for you.
   hour, it looks at the rest, puts what you missed on one page and asks about up to four things, one at a time. What
   you approve is sent at once to the session that owns it. A declined item stays closed until its evidence changes.
 - **Remembers what it promised.** "Check the deploy once CI is green", "remind me in three days": it writes the
-  promise down with a time or a condition, and when it comes due the manager asks you once: do it, later, or drop
-  it. The conditions run only inside that check (10-second limit, at most 3 per check), never from a hook.
+  promise down with a time or a condition, and when it comes due the manager asks you once: approve or reject
+  (`/wanjang:manager promises` snoozes or drops it). The conditions run only inside that check (10-second limit, at most 3 per check), never from a hook.
 - **Earns your trust.** Say yes to the same kind of action three times (the first at least 24 hours old,
   all within 14 days) and it stops asking for that kind: it does it and tells you in one line. A local commit can earn
   this; push, deploy, migrations, deletes, installs, paid services and messages to people are always asked.
@@ -250,8 +250,9 @@ is rechecked every 30 minutes (`--every`) and the promise gives up after 14 days
 turn the manager on.
 
 Conditions run only inside `next scan` (the manager's check), with a 10-second timeout and at most 3 per scan; never from a
-hook. A due promise comes before every other candidate, and the question names your words and why it is due, with
-three answers: Do it, Later (tomorrow 09:00, or a time you type) and Drop it. Promises are kept per user in
+hook. A due promise comes before every other candidate, and the question names your words and why it is due, and it is
+answered like any other item: Approve, Reject, or Other for a comment. To snooze or drop it: `/wanjang:manager promises`,
+then "later 2" or "drop 2". Promises are kept per user in
 `~/.claude/wanjang/promises.json` (honours `CLAUDE_CONFIG_DIR`), each tied to its project.
 
 | `bin/next promise` | What it does |
