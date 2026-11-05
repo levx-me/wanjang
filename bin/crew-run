@@ -42,7 +42,8 @@ if [ -z "$budget" ]; then budget=$(jq -r --arg p "$proj" '.projects[$p].budget /
 printf '%s' "$budget" | grep -Eq '^[0-9]+(\.[0-9]+)?$' && [ -n "$(printf '%s' "$budget" | tr -d '0.')" ] || die 2 "--budget must be a positive number (USD)"
 
 settings=$(jq -cn --arg h "$root/bin/console-key" '{apiKeyHelper:$h, env:{ANTHROPIC_BASE_URL:"https://api.anthropic.com", ANTHROPIC_AUTH_TOKEN:"", ANTHROPIC_API_KEY:""}}')
-cmd=(claude -p --agent "wanjang:$agent" --permission-mode auto --output-format json --max-budget-usd "$budget" --settings "$settings")
+sid=$(uuidgen | tr 'A-Z' 'a-z')
+cmd=(claude -p --session-id "$sid" --agent "wanjang:$agent" --permission-mode auto --output-format json --max-budget-usd "$budget" --settings "$settings")
 [ -n "$model" ] && cmd+=(--model "$model")
 [ -n "$effort" ] && cmd+=(--effort "$effort")
 if [ $dry = 1 ]; then printf 'cd %q && WANJANG_CREW_CONSOLE=1' "$cwd"; printf ' %q' "${cmd[@]}"; echo; exit 0; fi
@@ -53,7 +54,19 @@ command -v claude >/dev/null || die 7 "claude is not on PATH"
 mkdir -p "$cfg/crew-console" || die 6 "cannot create $cfg/crew-console"
 log=$cfg/crew-console/$(date +%Y%m%d-%H%M%S)-$agent-$$.json
 err=$log.err
-(cd "$cwd" && WANJANG_CREW_CONSOLE=1 "${cmd[@]}") > "$log" 2> "$err"; rc=$?
+# run record for the deck and /wanjang:now: runs/<child-session-id>.json, written at start and on every exit
+brief=$(cat); runs=$cfg/crew-console/runs; run=$runs/$sid.json; started=$(date +%s); cost=0
+mkdir -p "$runs" || die 6 "cannot create $runs"
+title=$(printf '%s\n' "$brief" | grep -m1 '[^[:space:]]' | cut -c1-100)
+runwrite() { # status exit
+  jq -n --arg sid "$sid" --arg parent "${CLAUDE_CODE_SESSION_ID:-}" --arg agent "$agent" --arg model "${model:-default}" --arg effort "$effort" \
+    --arg title "$title" --arg cwd "$cwd" --argjson pid $$ --argjson started "$started" --arg status "$1" --argjson cost "$cost" --argjson exit "$2" --arg log "$log" \
+    '{session_id:$sid,parent_session_id:$parent,agent:$agent,model:$model,effort:$effort,title:$title,cwd:$cwd,pid:$pid,started:$started,status:$status,cost_usd:$cost,exit:$exit,ended:(if $status=="running" then null else now|floor end),log:$log}
+     | if .status=="running" then del(.exit,.ended) else . end' > "$run.tmp" && mv "$run.tmp" "$run"
+}
+runwrite running 0
+trap 'rc=$?; runwrite "$([ $rc = 0 ] && echo done || echo error)" $rc; exit $rc' EXIT
+(cd "$cwd" && WANJANG_CREW_CONSOLE=1 "${cmd[@]}") <<<"$brief" > "$log" 2> "$err"; rc=$?
 if ! jq -e . "$log" >/dev/null 2>&1; then
   msg=$(head -c 600 "$err"); rm -f "$log" "$err"
   case $msg in *[Cc]redit*|*401*|*[Aa]uthentication*|*[Ii]nvalid*key*) die 5 "billing or auth error: $msg (check the Console key and credit)" ;; esac
@@ -63,7 +76,7 @@ rm -f "$err"
 # the CLI prints one result object, or (verbose settings) an array of events that ends with it
 r=$(jq -c 'if type=="array" then (map(select(.type=="result")) | last // {}) else . end' "$log")
 sub=$(jq -r '.subtype // ""' <<<"$r"); isErr=$(jq -r '.is_error // false' <<<"$r")
-res=$(jq -r '.result // ""' <<<"$r")
+res=$(jq -r '.result // ""' <<<"$r"); cost=$(jq -r '.total_cost_usd // 0' <<<"$r")
 line=$(jq -r --arg a "$agent" --arg m "${model:-default}" '"crew-console: \($a) \($m) $\(.total_cost_usd // 0 | . * 10000 | round / 10000) \((.duration_ms // 0) / 1000 | round)s session \(.session_id // "?")"' <<<"$r")
 if [ $json = 1 ]; then printf '%s\n' "$r"; echo "$line" >&2; else printf '%s\n\n%s\n' "$res" "$line"; fi
 if [ "$isErr" = true ] || [ "$rc" != 0 ]; then
