@@ -263,7 +263,7 @@ if a.eta:
         return rows
 
     def own_log(g):
-        """the run log this PM named last in its tool_use inputs (`wanjang/<run>/<log>`), as an rlogs path"""
+        """the run log this PM named last in its tool_use inputs (`wanjang/<run>/log.md` in a repository, `wanjang/runs/<run>/log.md` outside one), as an rlogs path"""
         found = None
         try:
             for r in tail_rows(f"{os.path.splitext(main)[0]}/subagents/agent-{g['id']}.jsonl"):
@@ -271,7 +271,7 @@ if a.eta:
                 for b in c if isinstance(c, list) else ():
                     i = b.get("input") if isinstance(b, dict) and b.get("type") == "tool_use" else None
                     if isinstance(i, dict):
-                        m = re.findall(r"wanjang/[^/\s\"']+/log\.md", f"{i.get('file_path', '')} {i.get('command', '')}")
+                        m = re.findall(r"wanjang/(?:runs/)?[^/\s\"']+/log\.md", f"{i.get('file_path', '')} {i.get('command', '')}")
                         found = m[-1] if m else found
         except OSError:
             pass

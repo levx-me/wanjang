@@ -97,4 +97,11 @@ want '.agents[] | select(.id=="pmA") | .eta | [.likely - '"$NOW"', .tasks_done, 
 want '.agents[] | select(.id=="pmB") | .eta | [.likely - '"$NOW"', .tasks_done, .tasks_total] | @csv' '780,1,3'   # qa opus has no history: 6.5 + 6.5
 WANJANG_NOW=abc CLAUDE_CONFIG_DIR=$U bin/status --session s3 --cwd "$U/repo" --eta >/dev/null 2>"$T/err"; [ $? = 0 ] && ! grep -q Traceback "$T/err" || { echo "FAIL bad WANJANG_NOW"; fail=1; }
 unset WANJANG_NOW
+# a PM outside a repository keeps its log in ~/.claude/wanjang/runs/<run>/log.md
+R4=$U/.claude/wanjang/runs/run4; mkdir -p "$R4"
+printf '## Tasks\n| task | worker | files | status |\n| one | builder sonnet | a | done |\n| two | builder sonnet | b | todo |\n' > "$R4/log.md"
+touch -t "$(date -v-30M +%Y%m%d%H%M)" "$R4/log.md"   # older than run2/run3, so the newest-log fallback would pick another
+pmrun pmC Edit "{\"file_path\":\"$R4/log.md\",\"old_string\":\"a\",\"new_string\":\"b\"}"
+json=$(HOME=$U CLAUDE_CONFIG_DIR=$U bin/status --session s3 --cwd "$U/repo" --json --eta)
+want '.agents[] | select(.id=="pmC") | .eta | [.tasks_done, .tasks_total] | @csv' '1,2'
 [ $fail = 0 ] && echo "status.sh ok"; exit $fail
