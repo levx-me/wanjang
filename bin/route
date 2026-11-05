@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # SessionStart hook: puts the Wanjang routing rule into every session's context, and a note
-# about any Wanjang run in this repository that stopped before it finished, and any promise due here.
+# about any Wanjang run in this repository that stopped before it finished, any promise due here, and a
+# /wanjang:manager that was on in this folder before a restart.
 set -u
 input=$(cat)
 cwd=$(printf '%s' "$input" | jq -r '.cwd // empty')
@@ -17,4 +18,10 @@ fi
 # Promises due in this project (read-only: runs no stored condition).
 due=$("$bin/next" promise due --cwd "${cwd:-.}" 2>/dev/null)
 [ -n "$due" ] && text+=$'\n\n'"$due"
+# The manager was on in this folder and its session has ended (a restart): say how to resume it.
+st=${CLAUDE_CONFIG_DIR:-$HOME/.claude}/wanjang/manager/state.json
+if [ -n "$cwd" ] && [ -f "$st" ] && IFS=$'\t' read -r on pid dir < <(jq -r '[.on, (.owner.pid // 0), (.owner.cwd // "")] | @tsv' "$st" 2>/dev/null) \
+   && [ "$on" = true ] && [ "$dir" = "$cwd" ] && ! kill -0 "$pid" 2>/dev/null; then
+  text+=$'\n\nmanager was on here; `/wanjang:manager on` to resume'
+fi
 jq -n --arg t "$text" '{hookSpecificOutput: {hookEventName: "SessionStart", additionalContext: $t}}'

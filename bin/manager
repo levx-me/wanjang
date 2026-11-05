@@ -1,0 +1,919 @@
+#!/usr/bin/env python3
+"""manager: the /wanjang:manager role. One open session (the owner) checks the user's other open sessions every
+hour, shows what was missed on one page, asks about at most 4 items and sends each approved one to its session.
+Its memory is files, so a compaction or a restart loses nothing.
+
+  on [--take] [--session ID --name N --cwd P]   make this session the owner (refused while another live
+          owner holds it: `--take` moves it); prunes closed items older than 30 days, deletes old next/<sid>.json
+  off | status | resume      stop; or print at most 15 lines: owner, last tick, open items by state, page
+  prompt  UserPromptSubmit hook (JSON on stdin). Only the exact prompt `wanjang manager tick` in the owner session
+          waits: it runs the scan, then blocks with reason `·` when nothing is new (no model turn), defers when the
+          owner typed within 10 minutes, or passes with the tick's steps (at most 800 chars). Always exit 0.
+  scan [--force] [--sessions FILE|-] [--json]   look at the other sessions and their repositories (a script, no
+          model), write the digest (at most 8 KB) and print `new=<k> open=<m> digest=<path> tick=<n>`; exit 3
+          when nothing is new. --sessions: a JSON list of sessions (ListAgents) when there is no registry.
+  item add KEY FP --project P --session S --kind K --text T --why W --cost C   record a judged finding; prints
+          `<id> ask` or `<id> auto` (a trusted local kind: sent without asking)
+  item drop KEY FP --why W   not worth asking; not judged again until its fp changes
+  page    render page.html with bin/manager-page; prints `<path> changed=yes|no` (written only when it changed)
+  ask-list                   open undecided items (at most 4) as `ASK id | label | action | why | cost`
+  answer ID approve|reject|comment --words W   the user's answer (approve and reject also feed the trust ladder)
+  dispatch [--id ID]         for each approved item: `SEND <session name>` and the message, at once (a busy
+          session queues it). The evidence is checked first: changed means not sent, asked again.
+  sent ID [--failed]         SendMessage went out (or failed: retried next tick)
+  reply ID done|failed|question --note N   from the owning session: one locked ledger line
+  promises|trust|undo [ARGS]  bin/next promise list | trust | undo
+
+State: ${CLAUDE_CONFIG_DIR:-~/.claude}/wanjang/manager/ (ledger.jsonl, state.json, digest.txt, page.html).
+Sessions: $WANJANG_SESSIONS_DIR, else ${CLAUDE_CONFIG_DIR:-~/.claude}/sessions (<pid>.json from Claude Code).
+Clock: env WANJANG_NOW (epoch seconds or ISO 8601) replaces the current time, for tests.
+With no config dir or no registry every command exits 0 with a one-line reason.
+
+Exit codes: 0 ok, 1 no such item, 2 bad arguments, 3 nothing new (scan), 4 refused (on)."""
+import argparse, contextlib, fcntl, glob, hashlib, io, json, os, subprocess, sys, tempfile, time
+from datetime import datetime
+from types import SimpleNamespace
+
+BIN = os.path.dirname(os.path.realpath(__file__))
+ME = os.path.join(BIN, "manager")
+TICK = "wanjang manager tick"
+IDLE, STALE_TASK, TYPED, EXPIRE, PRUNE, KEEP_DONE = 1800, 7200, 600, 7 * 86400, 30 * 86400, 7 * 86400
+MAXS, DIGEST, TAILN, ASKN, AUTON, CONDS, TAIL = 12, 8192, 600, 4, 2, 3, 300_000
+LOCAL = ("verify", "test", "docs", "commit")
+OPEN = ("found", "asked", "approved", "waiting", "sent", "changed")
+REPO = ("uncommitted", "todo", "memory-next", "unpushed")
+SESS = ("waiting", "idle", "you", "task")
+BOUNDS = ("Bounds: this repository only. Push, deploy, migrations, deletes, installs and anything outward still need "
+          "the user's yes here, even though this message carries an approval: ask the user again before doing them.")
+
+
+def ts(s):
+    try:
+        return datetime.fromisoformat(str(s).replace("Z", "+00:00")).timestamp()
+    except ValueError:
+        return None
+
+
+def clock():
+    v = os.environ.get("WANJANG_NOW", "")
+    try:
+        return float(v)
+    except ValueError:
+        return ts(v) or time.time()
+
+
+def iso(t, spec="seconds"):
+    return datetime.fromtimestamp(t).astimezone().isoformat(timespec=spec)
+
+
+def hm(t):
+    return datetime.fromtimestamp(t).strftime("%H:%M")
+
+
+def sha(s):
+    return hashlib.sha1(str(s).encode()).hexdigest()[:8]
+
+
+def one(s, n=160):
+    s = " ".join(str(s or "").split())
+    return s if len(s) <= n else s[: n - 1] + "…"
+
+
+def cfg():
+    return os.environ.get("CLAUDE_CONFIG_DIR") or os.path.expanduser("~/.claude")
+
+
+def mdir():
+    return os.path.join(cfg(), "wanjang", "manager")
+
+
+def mp(name):
+    return os.path.join(mdir(), name)
+
+
+_nx = None
+
+
+def nx():
+    """bin/next as a module: candidates, promises, trust ladder, outward rule"""
+    global _nx
+    if _nx is None:
+        import importlib.util
+        from importlib.machinery import SourceFileLoader
+        ld = SourceFileLoader("wanjang_next", os.path.join(BIN, "next"))
+        _nx = importlib.util.module_from_spec(importlib.util.spec_from_loader(ld.name, ld))
+        ld.exec_module(_nx)
+    return _nx
+
+
+def git(cwd, *args):
+    try:
+        r = subprocess.run(["git", "-C", cwd, *args], capture_output=True, text=True, timeout=15, errors="replace")
+        return r.stdout.strip() if r.returncode == 0 else ""
+    except Exception:
+        return ""
+
+
+def alive(pid):
+    try:
+        os.kill(int(pid), 0)
+        return True
+    except PermissionError:
+        return True
+    except (OSError, TypeError, ValueError, OverflowError):
+        return False
+
+
+# ---- files: one lock for the ledger and state.json
+@contextlib.contextmanager
+def lock():
+    os.makedirs(mdir(), exist_ok=True)
+    with open(mp("ledger.lock"), "w") as lk:
+        fcntl.flock(lk, fcntl.LOCK_EX)
+        yield
+
+
+def sload():
+    try:
+        d = json.load(open(mp("state.json")))
+        return d if isinstance(d, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
+def wfile(path, text):
+    fd, tmp = tempfile.mkstemp(dir=os.path.dirname(path), suffix=".tmp")
+    with os.fdopen(fd, "w") as f:
+        f.write(text)
+    os.replace(tmp, path)
+
+
+def ssave(d):
+    wfile(mp("state.json"), json.dumps(d))
+
+
+def events():
+    out = []
+    try:
+        for l in open(mp("ledger.jsonl"), errors="replace"):
+            try:
+                e = json.loads(l)
+            except ValueError:
+                continue
+            if isinstance(e, dict) and e.get("ev"):
+                out.append(e)
+    except OSError:
+        pass
+    return out
+
+
+def write(now, *evs):
+    """append events; the caller holds lock()"""
+    with open(mp("ledger.jsonl"), "a") as f:
+        for e in evs:
+            f.write(json.dumps({"t": iso(now), **{k: v for k, v in e.items() if v not in (None, "")}}) + "\n")
+
+
+def fold(evs):
+    """(items by id, (key, fp) pairs already judged)"""
+    items, known = {}, set()
+    for e in evs:
+        ev, i, t = e.get("ev"), e.get("id"), ts(e.get("t")) or 0
+        if ev in ("found", "auto"):
+            known.add((e.get("key"), e.get("fp")))
+            items[i] = dict(id=i, key=e.get("key", ""), fp=e.get("fp", ""), project=e.get("project", ""),
+                            session=e.get("session", ""), kind=e.get("kind", ""), text=e.get("text", ""),
+                            why=e.get("why", ""), cost=e.get("cost", ""), status="found", ans="", words="", note="",
+                            t=e.get("t", ""), first=t, last=t, appr=0, to="", tsid="")
+            if ev == "auto":
+                items[i].update(status="approved", ans="auto", appr=t)
+            continue
+        if ev == "dropped":
+            known.add((e.get("key"), e.get("fp")))
+            i = i or next((x for x, it in items.items() if (it["key"], it["fp"]) == (e.get("key"), e.get("fp"))), None)
+        it = items.get(i)
+        if not it:
+            continue
+        it["last"] = t
+        if ev == "dropped":
+            it.update(status="dropped", note=e.get("why", ""))
+        elif ev == "asked" and it["status"] == "found":
+            it["status"] = "asked"
+        elif ev == "answered":
+            a = e.get("ans")
+            it.update(ans=a, words=e.get("words", ""))
+            if a in ("approve", "reject"):
+                it["status"] = "approved" if a == "approve" else "rejected"
+                it["appr"] = t
+            elif it["status"] == "found":
+                it["status"] = "asked"  # a comment is not approval: the inspector revises the item
+        elif ev in ("waiting", "changed", "expired", "closed"):
+            it["status"] = ev
+            it["note"] = e.get("note", it["note"])
+        elif ev == "sent":
+            it.update(status="sent", to=e.get("to", ""), tsid=e.get("tsid", ""))
+        elif ev == "reply":
+            it.update(status={"done": "done", "failed": "failed"}.get(e.get("ans"), "found"), note=e.get("note", ""))
+    return items, known
+
+
+# ---- sessions
+def norm_session(r):
+    sid = str(r.get("sessionId") or r.get("session_id") or r.get("id") or "")
+    if not sid:
+        return None
+    upd = r.get("statusUpdatedAt") or r.get("updatedAt") or 0
+    try:
+        upd = float(upd) / (1000 if float(upd) > 1e11 else 1)
+    except (TypeError, ValueError):
+        upd = 0.0
+    return dict(sid=sid, name=str(r.get("name") or sid[:8]), cwd=str(r.get("cwd") or ""), status=str(r.get("status") or ""),
+                upd=upd, pid=r.get("pid"))
+
+
+def registry():
+    """live interactive sessions from Claude Code's registry, or None when there is none"""
+    d = os.environ.get("WANJANG_SESSIONS_DIR") or os.path.join(cfg(), "sessions")
+    if not os.path.isdir(d):
+        return None
+    out = []
+    for f in glob.glob(os.path.join(d, "*.json")):
+        try:
+            r = json.load(open(f))
+        except (OSError, ValueError):
+            continue
+        if isinstance(r, dict) and r.get("kind") == "interactive" and alive(r.get("pid")):
+            s = norm_session(r)
+            if s:
+                out.append(s)
+    return out
+
+
+def given_sessions(src):
+    """sessions passed in (ListAgents output): a JSON list, or an object holding one; all taken as live"""
+    try:
+        d = json.load(sys.stdin if src == "-" else open(src))
+    except (OSError, ValueError):
+        return []
+    if isinstance(d, dict):
+        d = next((v for v in d.values() if isinstance(v, list)), [])
+    return [s for s in (norm_session(r) for r in d if isinstance(r, dict)) if s] if isinstance(d, list) else []
+
+
+def others(sess, st):
+    me = {(st.get("owner") or {}).get("sessionId"), os.environ.get("CLAUDE_CODE_SESSION_ID")}
+    return sorted((s for s in sess if s["sid"] not in me), key=lambda s: -s["upd"])
+
+
+_proj = {}
+
+
+def project(cwd):
+    if cwd not in _proj:
+        _proj[cwd] = nx().project(cwd) if cwd and os.path.isdir(cwd) else cwd
+    return _proj[cwd]
+
+
+def transcript(sid):
+    f = glob.glob(os.path.join(cfg(), "projects", "*", f"{sid}.jsonl"))
+    return max(f, key=os.path.getmtime) if f else ""
+
+
+def last_reply(path):
+    """the session's last reply text (main thread), at most 600 chars from its end"""
+    text = ""
+    try:
+        with open(path, "rb") as f:
+            size = f.seek(0, 2)
+            f.seek(max(0, size - TAIL))
+            lines = f.read().split(b"\n")[1 if size > TAIL else 0:]
+    except OSError:
+        return ""
+    for l in lines:
+        try:
+            r = json.loads(l)
+        except ValueError:
+            continue
+        m = r.get("message") if isinstance(r, dict) and not r.get("isSidechain") else None
+        if r.get("type") == "assistant" and isinstance(m, dict) and isinstance(m.get("content"), list):
+            t = "\n".join(b.get("text", "") for b in m["content"] if isinstance(b, dict) and b.get("type") == "text").strip()
+            if t:
+                text = t
+    return text[-TAILN:]
+
+
+def session_findings(s, now, deep=True):
+    """findings read from the registry entry, the reply tail, task files and (deep) bin/status"""
+    sid8, out = s["sid"][:8], []
+    add = lambda key, fp, ev, extra="": out.append(dict(key=key, fp=fp, session=s["name"], cwd=s["cwd"], evidence=one(ev),
+                                                         extra=extra))
+    idle = s["status"] == "idle"
+    if s["status"] == "waiting":
+        add(f"waiting:{sid8}", sha(s["upd"]), f"{s['name']} is waiting for the user since {hm(s['upd'] or now)}")
+    tp = transcript(s["sid"])
+    if idle and now - s["upd"] > IDLE and tp:
+        tail = last_reply(tp)
+        if tail:
+            add(f"idle:{sid8}", sha(tail), f"{s['name']} idle {int((now - s['upd']) // 60)} min after its reply: {tail}",
+                extra=tail)
+    for f in glob.glob(os.path.join(cfg(), "tasks", f"session-{sid8}", "*.json")):
+        try:
+            t, age = json.load(open(f)), now - os.path.getmtime(f)
+        except (OSError, ValueError):
+            continue
+        if not isinstance(t, dict) or t.get("status") != "pending":
+            continue
+        sub, tid = str(t.get("subject", "")), t.get("id") or os.path.basename(f)[:-5]
+        if sub.lower().startswith("you:"):
+            add(f"you:{sid8}:{tid}", sha(sub), f"{s['name']} has a task waiting on the user: {sub}")
+        elif age > STALE_TASK and (idle or sub.lower().startswith("relay:")):
+            add(f"task:{sid8}:{tid}", sha(sub), f"{s['name']}: task pending {int(age // 3600)} h, untouched: {sub}")
+    if deep and tp and glob.glob(os.path.join(tp[:-6], "subagents", "agent-*.jsonl")):
+        try:
+            r = subprocess.run([os.path.join(BIN, "status"), "--session", s["sid"], "--json"], capture_output=True,
+                               text=True, timeout=10)
+            ags = json.loads(r.stdout).get("agents", []) if r.returncode == 0 else []
+        except (OSError, ValueError, subprocess.TimeoutExpired):
+            ags = []
+        for g in ags:
+            if isinstance(g, dict) and g.get("stuck"):
+                add(f"stuck:{sid8}:{str(g.get('id'))[:8]}", sha(g.get("last_write")),
+                    f"{s['name']}: agent {g.get('type')} '{g.get('desc')}' silent, no tool call pending")
+    return out
+
+
+def docs_flag(root):
+    """code commits since the docs last changed: (fp, evidence) or None"""
+    d = git(root, "log", "-1", "--format=%H", "--", "*.md", "docs")
+    n = git(root, "rev-list", "--count", f"{d}..HEAD", "--", ".", ":(exclude)*.md", ":(exclude)docs") if d else ""
+    if n.isdigit() and int(n):
+        return git(root, "rev-parse", "--short", "HEAD"), f"{n} commit{'s' if n != '1' else ''} changed code since the docs last changed ({d[:7]})"
+    return None
+
+
+def repo_findings(cwds, now, conds):
+    """findings of the repositories the sessions are in; conds: promise conditions still allowed to run"""
+    out, seen, roots = [], set(), {}
+    for cwd, name in cwds:
+        roots.setdefault(project(cwd), (cwd, name))
+        for k, fp, summ in nx().candidates(cwd):
+            if (k, fp) not in seen:
+                seen.add((k, fp))
+                out.append(dict(key=k, fp=fp, session=name, cwd=cwd, evidence=summ, extra=""))
+    for root, (cwd, name) in roots.items():
+        if conds is not None:
+            lines, ran = nx().promise_scan(root, now, conds[0])
+            conds[0] -= ran
+        else:  # no condition runs: open promises only, for the evidence check
+            lines = [f"promise:{p['id']}\t{nx().pfp(p, now)}\t" for p in nx().pread()
+                     if p.get("status") == "open" and p.get("project") == root]
+        for l in lines:
+            k, fp, summ = (l.split("\t") + ["", ""])[:3]
+            out.append(dict(key=k, fp=fp, session=name, cwd=cwd, evidence=one(summ), extra=""))
+        df = docs_flag(root) if os.path.isdir(root) else None
+        if df:
+            out.append(dict(key=f"docs:{os.path.basename(root)}", fp=df[0], session=name, cwd=cwd, evidence=df[1],
+                            extra="judge: do the docs need updating?"))
+    for f in out:
+        f["project"] = project(f["cwd"])
+    return out
+
+
+def collect(sess, now, deep=True, conds=None):
+    fs = []
+    for i, s in enumerate(sess):
+        fs += session_findings(s, now, deep and i < MAXS)
+    for f in fs:
+        f.setdefault("project", project(f["cwd"]))
+    cwds = list({s["cwd"]: (s["cwd"], s["name"]) for s in reversed(sess[:MAXS]) if s["cwd"]}.values())
+    return fs + repo_findings(cwds, now, conds)
+
+
+def in_project(sess, proj):
+    return [s for s in sess if s["cwd"] and project(s["cwd"]) == proj]
+
+
+# ---- scan
+def gone_or_quiet(it, live):
+    """page status of a sent item: gone (its session is not live), no reply (2 idle ticks), else sent"""
+    if it["tsid"] and live is not None and it["tsid"] not in live:
+        return "gone"
+    return "no reply" if it.get("quiet", 0) >= 2 else "sent"
+
+
+def scan(a, now):
+    """(code, line): code 0 new, 3 nothing new, 5 no registry"""
+    if a.sessions:
+        sess = given_sessions(a.sessions)
+    else:
+        sess = registry()
+        if sess is None:
+            return 5, (f"manager: no session registry ({os.environ.get('WANJANG_SESSIONS_DIR') or cfg() + '/sessions'}); "
+                       f"run ListAgents and pass its JSON with `manager scan --sessions -`")
+    with lock():
+        st = sload()
+        items, known = fold(events())
+        sess = others(sess, st)
+        live = {s["sid"]: s for s in sess}
+        last = float(st.get("last_tick") or 0)
+        fs = collect(sess, now, conds=[CONDS])
+        new = [f for f in fs if (f["key"], f["fp"]) not in known]
+        news = [e for e in events() if (ts(e.get("t")) or 0) >= last and
+                (e.get("ev") == "reply" or (e.get("ev") == "answered" and e.get("ans") == "comment"))]
+        quiet, due, cross, expired = st.get("quiet") or {}, [], [], []
+        for it in items.values():
+            if it["status"] in ("approved", "waiting"):
+                if now - it["appr"] > EXPIRE:
+                    expired.append(it)
+                elif in_project(sess, it["project"]):
+                    due.append(it)
+            elif it["status"] == "sent" and not a.force:
+                s = live.get(it["tsid"])
+                if s and s["status"] == "idle":
+                    quiet[it["id"]] = quiet.get(it["id"], 0) + 1
+                    if quiet[it["id"]] == 2:
+                        cross.append(it)
+        quiet = {i: n for i, n in quiet.items() if items.get(i, {}).get("status") == "sent"}
+        if expired:
+            write(now, *[dict(ev="expired", id=it["id"], note="no live session for 7 days") for it in expired])
+        st.update(quiet=quiet, last_scan=now)
+        k = len(new) + len(news) + len(due) + len(cross)
+        n_open = sum(1 for it in items.values() if it["status"] in OPEN and it not in expired)
+        if not k and not a.force:
+            ssave(st)
+            return 3, (json.dumps(dict(new=0, open=n_open, findings=[])) if a.json else f"new=0 open={n_open}")
+        st["prev_tick"], st["last_tick"], st["tick"] = last, now, int(st.get("tick") or 0) + 1
+        ssave(st)
+    L = [f"wanjang manager digest · tick {st['tick']} · {iso(now, 'minutes')} · {k} new, {n_open} open",
+         f"manager: \"{ME}\"   next: \"{os.path.join(BIN, 'next')}\"",
+         "Judge only the NEW findings: item add KEY FP (with --project P --session S) or item drop KEY FP --why."]
+    if new:
+        L.append("NEW findings: KEY FP | P (project) | S (session) | evidence")
+        for f in new:
+            L.append(f"- {f['key']} {f['fp']} | {f['project']} | {f['session']} | {f['evidence']}")
+            if f["extra"] and f["extra"] != f["evidence"]:
+                L.append("    " + one(f["extra"], TAILN + 40))
+    for e in news:
+        it = items.get(e.get("id")) or {}
+        if e.get("ev") == "reply":
+            L.append(f"REPLY {e.get('id')} {e.get('ans')} from {it.get('to') or it.get('session')}: {one(e.get('note'))}"
+                     + (" (a question: revise it as a new item, same KEY, a new FP)" if e.get("ans") == "question" else ""))
+        else:
+            L.append(f"COMMENT on {e.get('id')} ({it.get('key')} {it.get('fp')}): \"{one(e.get('words'), 300)}\" "
+                     f"(revise: item add {it.get('key')} {it.get('fp')}-r{sha(e.get('t'))[:4]} ...)")
+    for it in due:
+        L.append(f"DISPATCH {it['id']} approved, a session is live in {it['project']}: run manager dispatch --id {it['id']}")
+    for it in cross:
+        L.append(f"NO REPLY {it['id']} sent to {it['to']}, 2 idle ticks, no reply: {one(it['text'], 80)}")
+    L.append(f"Sessions ({len(sess)} live besides the manager, the {min(len(sess), MAXS)} most recent in detail):")
+    L += [f"- {s['name']} | {s['status'] or '?'} since {hm(s['upd'] or now)} | {project(s['cwd'])}" for s in sess[:MAXS]]
+    L.append("Open: " + (", ".join(f"{it['id']} {it['status']} {it['key']}" for it in items.values()
+                                   if it["status"] in OPEN and it not in expired) or "none"))
+    text, size = "", 0
+    for l in L:
+        if size + len(l.encode()) + 1 > DIGEST - 40:
+            text += "… (digest cut at 8 KB)\n"
+            break
+        text, size = text + l + "\n", size + len(l.encode()) + 1
+    wfile(mp("digest.txt"), text)
+    if a.json:
+        return (0 if k else 3), json.dumps(dict(new=k, open=n_open, digest=mp("digest.txt"), tick=st["tick"], findings=new))
+    return (0 if k else 3), f"new={k} open={n_open} digest={mp('digest.txt')} tick={st['tick']}"
+
+
+# ---- hook
+def hook_out(block=None, ctx=None):
+    if block is not None:
+        print(json.dumps({"decision": "block", "reason": block,
+                          "hookSpecificOutput": {"hookEventName": "UserPromptSubmit", "suppressOriginalPrompt": True}}))
+    elif ctx:
+        print(json.dumps({"hookSpecificOutput": {"hookEventName": "UserPromptSubmit", "additionalContext": ctx}}))
+
+
+def steps(line):
+    m = f'"{ME}"'
+    return (f"wanjang manager tick: {line}. Steps (skill wanjang:manager):\n"
+            f"1. Agent wanjang:inspector with manager={m} and the digest; it returns TICK/ASK/AUTO/NOTE lines.\n"
+            f"2. One AskUserQuestion, a question per ASK: header=label, \"<action>? <why>. Cost: <cost>\", "
+            f"Approve/Reject, Other=comment. Each: manager answer ID approve|reject|comment --words \"<verbatim>\".\n"
+            f"3. At once per approved or AUTO id: manager dispatch --id ID; SendMessage the SEND <name> text; "
+            f"manager sent ID (--failed).\n"
+            f"4. Reply: Manager HH:MM · n new, n asked, n sent · <page>; NOTE lines.")
+
+
+def prompt_hook():
+    try:
+        inp = json.load(sys.stdin)
+        sid = str(inp.get("session_id") or "") if isinstance(inp, dict) else ""
+        text = inp.get("prompt") if sid else None
+        if not isinstance(text, str) or not os.path.isfile(mp("state.json")):
+            return
+        now, st = clock(), sload()
+        owner = st.get("owner") if isinstance(st.get("owner"), dict) else {}
+        mine = st.get("on") is True and owner.get("sessionId") == sid
+        if text.strip() != TICK:
+            if mine and text.strip():  # the owner typed: ticks wait 10 minutes
+                with lock():
+                    st = sload()
+                    st["last_typed"] = now
+                    ssave(st)
+            return
+        if not mine:  # a leftover schedule: the first one reaches the model, which deletes it
+            with lock():
+                st = sload()
+                sw = [x for x in st.get("swept") or [] if isinstance(x, str)]
+                if sid not in sw:
+                    st["swept"] = (sw + [sid])[-20:]
+                    ssave(st)
+            if sid in sw:
+                return hook_out(block="· manager is not on here")
+            where = f"on in {owner.get('name')}" if st.get("on") is True and owner.get("name") else "off"
+            return hook_out(ctx=f"The wanjang manager is not on in this session (it is {where}). CronList, CronDelete "
+                                f"every task whose prompt is `{TICK}`, then reply only `·`.")
+        if now - float(st.get("last_typed") or 0) < TYPED:
+            return hook_out(block="· manager: deferred, you typed in the last 10 min")
+        renew = nx().verdict(st, True, now) != "keep"
+        rtext = (f"First renew the schedule (6 days old): CronList, CronDelete the `{TICK}` task, CronCreate cron "
+                 f"`7 * * * *` recurring prompt `{TICK}`, then run \"{ME}\" on.\n") if renew else ""
+        code, line = scan(SimpleNamespace(sessions=None, force=False, json=False), now)
+        if code == 5:
+            return hook_out(ctx=rtext + f"{line}; then follow these steps.\n" + steps("no registry"))
+        if code == 3:
+            return hook_out(ctx=rtext + "Then reply only `·`.") if renew else hook_out(block="·")
+        hook_out(ctx=rtext + steps(line))
+    except Exception:
+        pass
+
+
+# ---- items
+def tick_autos(now, st):
+    return sum(1 for e in events() if e.get("ev") == "auto" and (ts(e.get("t")) or 0) >= float(st.get("last_tick") or 0))
+
+
+def trusted(it, st, now, create=True):
+    """the trust ladder allows sending this item without asking; the never-auto rule is checked here on the key
+    and the action text whatever bin/next says"""
+    n = nx()
+    k = n.kind_of(it["key"], it["text"])
+    if k not in LOCAL or n.outward(it["key"]) or n.outward(it["text"]) or tick_autos(now, st) >= AUTON:
+        return False
+    t = n.tload(it["project"] or ".")[0]
+    run = next((e for e in t["auto"] if e.get("key") == it["key"] and e.get("fp") == sha(it["fp"])
+                and e.get("state") == "running"), None)
+    if run:  # the inspector asked bin/next first: its action text must pass the same rule
+        return n.kind_of(it["key"], run.get("what", "")) in LOCAL
+    if not create:
+        return False
+    a = SimpleNamespace(key=it["key"], fp=it["fp"], what=it["text"], cwd=it["project"] or ".", session=it["session"])
+    with contextlib.redirect_stderr(io.StringIO()):
+        return n.ask_level(a, k, now) == "auto"
+
+
+def release(it, now):
+    """close a running trust action the manager will not send"""
+    a = SimpleNamespace(cmd="did", key=it["key"], fp=it["fp"], outcome="ask", commit="", files=[], note="",
+                        cwd=it["project"] or ".")
+    with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+        try:
+            nx().trust_cmd(a, now)
+        except SystemExit:
+            pass
+
+
+def item_cmd(a, now):
+    if not a.key.strip() or not a.fp.strip():
+        print("usage: manager item add|drop KEY FP ...", file=sys.stderr)
+        sys.exit(2)
+    with lock():
+        st = sload()
+        items, known = fold(events())
+        same = next((it for it in items.values() if (it["key"], it["fp"]) == (a.key, a.fp)), None)
+        if a.icmd == "drop":
+            write(now, dict(ev="dropped", id=same and same["id"], key=a.key, fp=a.fp, why=a.why))
+            print(f"dropped {a.key} {a.fp}")
+            return
+        if same:
+            print(f"{same['id']} {'auto' if same['ans'] == 'auto' else 'ask'}")
+            return
+        if not a.text.strip():
+            print("usage: manager item add KEY FP --text T ...", file=sys.stderr)
+            sys.exit(2)
+        proj = os.path.realpath(a.project) if a.project and os.path.isdir(a.project) else a.project
+        nid = max([int(st.get("next_id") or 0)] + [int(i[2:]) for i in items if str(i).startswith("m-") and i[2:].isdigit()]) + 1
+        it = dict(id=f"m-{nid}", key=a.key, fp=a.fp, project=proj, session=a.session, kind=a.kind, text=one(a.text, 300),
+                  why=one(a.why, 300), cost=one(a.cost, 120))
+        k = nx().kind_of(a.key, a.text)
+        it["kind"] = "outward" if k == "outward" else (a.kind or k)
+        auto = trusted(it, st, now)
+        for old in items.values():  # a revised item replaces the open one with the same key
+            if old["key"] == a.key and old["project"] == proj and old["status"] in OPEN and old["status"] != "sent":
+                write(now, dict(ev="closed", id=old["id"], note=f"replaced by {it['id']}"))
+        write(now, dict(ev="auto" if auto else "found", **it))
+        st["next_id"] = nid
+        ssave(st)
+    print(f"{it['id']} {'auto' if auto else 'ask'}")
+
+
+def answer_cmd(a, now):
+    with lock():
+        items = fold(events())[0]
+        it = items.get(a.id)
+        if not it:
+            print(f"manager: no item {a.id}", file=sys.stderr)
+            sys.exit(1)
+        write(now, dict(ev="answered", id=a.id, ans=a.answer, words=a.words))
+    if a.answer != "comment":
+        t = SimpleNamespace(cmd="answer", key=it["key"], fp=it["fp"], reply="yes" if a.answer == "approve" else "no",
+                            what=it["text"], cwd=it["project"] or ".")
+        try:
+            nx().trust_cmd(t, now)
+        except SystemExit:
+            pass
+    print(f"{a.id} {a.answer}" + ("d: run manager dispatch --id " + a.id if a.answer == "approve" else
+                                  "ed" if a.answer == "reject" else ": recorded, not approval; the inspector revises it"))
+
+
+def current(it, sess, now):
+    """the item's evidence fp now; None: the finding is gone; '' : not a scripted finding, nothing to check"""
+    p, fam = it["project"], it["key"].split(":")[0]
+    if fam not in REPO + SESS + ("run", "promise", "docs"):
+        return ""
+    ss = in_project(sess, p)
+    fs = (collect(ss, now, deep=False) if fam in SESS else
+          repo_findings([(p, "")] + [(s["cwd"], s["name"]) for s in ss], now, None))
+    return next((f["fp"] for f in fs if f["key"] == it["key"]), None)
+
+
+def message(it, now):
+    head = (f"under your standing yes for {it['kind']}; for docs/commit only if every dirty file is yours, else reply "
+            f"question" if it["ans"] == "auto" else
+            f"the user approved this in the manager session at {iso(it['appr'] or now, 'minutes')}")
+    words = it["words"] or "(none: a trusted kind, sent without asking)"
+    return "\n".join([f"wanjang manager · item {it['id']} · {head}", f'User\'s words: "{words}"',
+                      f"Do: {it['text'].rstrip('.')}. Evidence: {it['why'].rstrip('.') or it['key']}.", BOUNDS,
+                      f"When done: run `\"{ME}\" reply {it['id']} done|failed|question --note \"<one line>\"`. "
+                      f"Do not message the manager."])
+
+
+def dispatch_cmd(a, now):
+    sess = registry()
+    if sess is None:
+        print("manager: no session registry; SendMessage needs a live session name, so nothing is sent")
+        return
+    with lock():
+        st = sload()
+        items = fold(events())[0]
+        sess = others(sess, st)
+        todo = [items[a.id]] if a.id in items else [] if a.id else [it for it in items.values()
+                                                                    if it["status"] in ("approved", "waiting")]
+        if a.id and not todo:
+            print(f"manager: no item {a.id}", file=sys.stderr)
+            sys.exit(1)
+        pend, out = st.get("pending") or {}, []
+        for it in todo:
+            if it["status"] in ("found", "asked"):
+                if not trusted(it, st, now, create=False):
+                    release(it, now)
+                    out.append(f"NOT SENT {it['id']}: not approved; ask the user first")
+                    continue
+                write(now, dict(ev="auto", **{k: it[k] for k in ("id", "key", "fp", "project", "session", "kind", "text",
+                                                                  "why", "cost")}))
+                it.update(status="approved", ans="auto", appr=now)
+            if it["status"] not in ("approved", "waiting"):
+                out.append(f"NOT SENT {it['id']}: it is {it['status']}")
+                continue
+            cur = current(it, sess, now)
+            if cur is None or (cur and cur != it["fp"]):
+                write(now, dict(ev="changed", id=it["id"], note="evidence changed since approval"))
+                release(it, now)
+                out.append(f"CHANGED {it['id']}: the evidence changed since approval; not sent, asked again next tick")
+                continue
+            ss = in_project(sess, it["project"])
+            tgt = next((s for s in ss if it["session"] in (s["name"], s["sid"])), ss[0] if ss else None)
+            if not tgt:
+                if it["status"] != "waiting":
+                    write(now, dict(ev="waiting", id=it["id"], note=f"waiting for a session in {os.path.basename(it['project'])}"))
+                out.append(f"WAIT {it['id']}: waiting for a session in {it['project']} (expires 7 days after approval)")
+                continue
+            pend[it["id"]] = dict(to=tgt["name"], tsid=tgt["sid"])
+            out.append(f"SEND {tgt['name']}\n{message(it, now)}\n")
+        st["pending"] = pend
+        ssave(st)
+    print("\n".join(out) if out else "nothing approved to send")
+
+
+def sent_cmd(a, now):
+    if a.failed:
+        print(f"{a.id}: send failed; it is sent again next tick")
+        return
+    with lock():
+        st, items = sload(), fold(events())[0]
+        it, p = items.get(a.id), (st.get("pending") or {}).pop(a.id, None)
+        if not it or it["status"] not in ("approved", "waiting") or not p:
+            print(f"manager: {a.id} is not waiting to be sent (run manager dispatch --id {a.id} first)", file=sys.stderr)
+            sys.exit(1)
+        write(now, dict(ev="sent", id=a.id, to=p.get("to"), tsid=p.get("tsid")))
+        ssave(st)
+    print(f"{a.id} sent to {p.get('to')}")
+
+
+def reply_cmd(a, now):
+    with lock():
+        it = fold(events())[0].get(a.id)
+        if not it:
+            print(f"manager: no item {a.id}", file=sys.stderr)
+            sys.exit(1)
+        write(now, dict(ev="reply", id=a.id, ans=a.word, note=one(a.note, 300), by=os.environ.get("CLAUDE_CODE_SESSION_ID")))
+    if it["ans"] == "auto":  # close the trust ladder's running action, so undo knows what was done
+        cwd = it["project"] or "."
+        out = {"done": "ok", "failed": "failed"}.get(a.word, "ask")
+        files = []
+        if out == "ok" and it["kind"] == "docs":
+            files = [f for f in git(cwd, "diff", "--name-only", "HEAD").splitlines() if f] or \
+                    [f for f in git(cwd, "diff", "--name-only", "HEAD^", "HEAD").splitlines() if f]
+            out = out if files else "ask"
+        t = SimpleNamespace(cmd="did", key=it["key"], fp=it["fp"], outcome=out, note=a.note, files=files, cwd=cwd,
+                            commit=git(cwd, "rev-parse", "HEAD") if it["kind"] == "commit" else "")
+        with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+            try:
+                nx().trust_cmd(t, now)
+            except SystemExit:
+                pass
+    print(f"{a.id} {a.word}: recorded for the manager")
+
+
+# ---- page, resume, ask-list
+def view(now):
+    st, items = sload(), fold(events())[0]
+    sess = registry()
+    live = {s["sid"] for s in sess} if sess is not None else None
+    quiet, last = st.get("quiet") or {}, float(st.get("last_tick") or 0)
+    out = []
+    for it in items.values():
+        if it["status"] == "closed" or (it["status"] not in OPEN and now - it["last"] > KEEP_DONE):
+            continue
+        status = gone_or_quiet(dict(it, quiet=quiet.get(it["id"], 0)), live) if it["status"] == "sent" else it["status"]
+        out.append(dict({k: it[k] for k in ("id", "key", "fp", "project", "session", "kind", "text", "why", "cost", "ans",
+                                            "words", "note", "t")}, status=status, new=it["first"] >= last > 0))
+    return st, out
+
+
+def page_cmd(now):
+    st, items = view(now)
+    o = st.get("owner") or {}
+    data = dict(now=iso(now, "minutes"), items=items,
+                state=dict(owner=o.get("name", ""), on=st.get("on") is True, tick=st.get("tick", 0),
+                           last_tick=iso(float(st["last_tick"]), "minutes") if st.get("last_tick") else ""))
+    try:
+        r = subprocess.run([os.path.join(BIN, "manager-page")], input=json.dumps(data), capture_output=True, text=True,
+                           timeout=20)
+    except (OSError, subprocess.TimeoutExpired) as e:
+        print(f"manager: page renderer failed: {e}")
+        return
+    if r.returncode or not r.stdout.strip():
+        print(f"manager: page renderer failed: {one(r.stderr) or 'no output'}")
+        return
+    # the hash leaves out the render time: the page changes only when what it shows changes
+    h = hashlib.sha256(json.dumps(dict(data, now=""), sort_keys=True).encode()).hexdigest()
+    path = mp("page.html")
+    changed = h != st.get("page_hash") or not os.path.isfile(path)
+    if changed:
+        with lock():
+            wfile(path, r.stdout)
+            st = sload()
+            st["page_hash"] = h
+            ssave(st)
+    print(f"{path} changed={'yes' if changed else 'no'}")
+
+
+def resume_cmd(now):
+    st, items = view(now)
+    o = st.get("owner") or {}
+    L = []
+    if o:
+        L.append(f"manager {'on' if st.get('on') is True else 'off'} · owner {o.get('name')} ({str(o.get('sessionId'))[:8]}, "
+                 f"pid {o.get('pid')} {'alive' if alive(o.get('pid')) else 'gone'}) in {o.get('cwd')}")
+    else:
+        L.append("manager off · never turned on")
+    lt = float(st.get("last_tick") or 0)
+    L.append(f"tick {st.get('tick', 0)}, last {hm(lt) + ' (' + str(int((now - lt) // 60)) + ' min ago)' if lt else 'never'}"
+             + (f", last scan {hm(float(st['last_scan']))}" if st.get("last_scan") else ""))
+    op = [it for it in items if it["status"] in OPEN + ("no reply", "gone")]
+    by = {}
+    for it in op:
+        by[it["status"]] = by.get(it["status"], 0) + 1
+    L.append(f"open {len(op)}: " + (", ".join(f"{n} {s}" for s, n in by.items()) or "none"))
+    L += [f"- {it['id']} {it['status']} | {it['kind']} | {one(it['text'], 70)} | {os.path.basename(it['project'])}"
+          for it in op[:11]]
+    L.append(f"page {mp('page.html')}")
+    print("\n".join(L[:15]))
+
+
+def ask_list(now):
+    with lock():
+        items = [it for it in fold(events())[0].values() if it["status"] == "found"][:ASKN]
+        if items:
+            write(now, *[dict(ev="asked", id=it["id"]) for it in items])
+    for it in items:
+        why = it["why"] + (f" (its session asks: {it['note']})" if it["note"] else "")
+        print(f"ASK {it['id']} | {one(it['kind'] or it['key'], 12)} | {it['text']} | {why} | {it['cost'] or 'not stated'}")
+
+
+# ---- on, off
+def on_cmd(a, now):
+    sid = a.session
+    if not sid or "/" in sid:
+        print("manager: no session id (set --session or CLAUDE_CODE_SESSION_ID)", file=sys.stderr)
+        sys.exit(2)
+    me = next((s for s in registry() or [] if s["sid"] == sid), None) or {}
+    with lock():
+        st = sload()
+        o = st.get("owner") if isinstance(st.get("owner"), dict) else {}
+        if st.get("on") is True and o.get("sessionId") not in (None, sid) and (o.get("pid") is None or alive(o["pid"])) \
+                and not a.take:
+            print(f"manager already on in {o.get('name')}; `--take` to move it")
+            sys.exit(4)
+        took = o.get("name") if st.get("on") is True and o.get("sessionId") not in (None, sid) else ""
+        st.update(on=True, cron_created=now, swept=[x for x in st.get("swept") or [] if x != sid],
+                  owner=dict(sessionId=sid, pid=me.get("pid"), name=a.name or me.get("name") or sid[:8],
+                             cwd=a.cwd or me.get("cwd") or os.getcwd()))
+        ssave(st)
+        items, evs = fold(events())[0], events()
+        keep = [e for e in evs if now - (ts(e.get("t")) or 0) < PRUNE or
+                (e.get("id") in items and (items[e["id"]]["status"] in OPEN or now - items[e["id"]]["last"] < PRUNE))]
+        if len(keep) < len(evs):
+            wfile(mp("ledger.jsonl"), "".join(json.dumps(e) + "\n" for e in keep))
+    for f in glob.glob(os.path.join(cfg(), "wanjang", "next", "*.json")):  # the old /wanjang:next session state
+        with contextlib.suppress(OSError):
+            os.remove(f)
+    print(f"manager on in {st['owner']['name']}" + (f" (moved from {took})" if took else ""))
+
+
+def off_cmd():
+    with lock():
+        st = sload()
+        was = st.get("on") is True
+        st["on"] = False
+        ssave(st)
+    print(f"manager off (was on in {(st.get('owner') or {}).get('name')})" if was else "manager was not on")
+
+
+def main():
+    if len(sys.argv) > 1 and sys.argv[1] == "prompt":
+        return prompt_hook()
+    if len(sys.argv) > 1 and sys.argv[1] in ("promises", "trust", "undo"):
+        c = sys.argv[1]
+        rest = sys.argv[2:]
+        args = (["promise"] + (rest if rest and rest[0] in ("add", "list", "set", "done", "drop", "due") else ["list"] + rest)
+                if c == "promises" else [c] + rest)
+        os.execv(os.path.join(BIN, "next"), [os.path.join(BIN, "next")] + args)
+    par = argparse.ArgumentParser(prog="manager", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    sub = par.add_subparsers(dest="cmd", required=True)
+    s = sub.add_parser("on")
+    s.add_argument("--take", action="store_true")
+    s.add_argument("--session", default=os.environ.get("CLAUDE_CODE_SESSION_ID", ""))
+    s.add_argument("--name", default="")
+    s.add_argument("--cwd", default="")
+    for n in ("off", "status", "resume", "page", "ask-list"):
+        sub.add_parser(n)
+    s = sub.add_parser("scan")
+    s.add_argument("--force", action="store_true")
+    s.add_argument("--sessions")
+    s.add_argument("--json", action="store_true")
+    ip = sub.add_parser("item").add_subparsers(dest="icmd", required=True)
+    for n in ("add", "drop"):
+        s = ip.add_parser(n)
+        s.add_argument("key")
+        s.add_argument("fp")
+        s.add_argument("--why", default="")
+    for n in ("project", "session", "kind", "text", "cost"):
+        ip.choices["add"].add_argument("--" + n, default="")
+    s = sub.add_parser("answer")
+    s.add_argument("id")
+    s.add_argument("answer", choices=("approve", "reject", "comment"))
+    s.add_argument("--words", default="")
+    s = sub.add_parser("dispatch")
+    s.add_argument("--id")
+    s = sub.add_parser("sent")
+    s.add_argument("id")
+    s.add_argument("--failed", action="store_true")
+    s = sub.add_parser("reply")
+    s.add_argument("id")
+    s.add_argument("word", choices=("done", "failed", "question"))
+    s.add_argument("--note", default="")
+    a, now = par.parse_args(), clock()
+    if not os.path.isdir(cfg()):
+        print(f"manager: no config dir ({cfg()}); nothing to do")
+        return
+    if a.cmd == "scan":
+        code, line = scan(a, now)
+        print(line)
+        sys.exit(0 if code == 5 else code)
+    {"on": lambda: on_cmd(a, now), "off": off_cmd, "status": lambda: resume_cmd(now), "resume": lambda: resume_cmd(now),
+     "page": lambda: page_cmd(now), "ask-list": lambda: ask_list(now), "item": lambda: item_cmd(a, now),
+     "answer": lambda: answer_cmd(a, now), "dispatch": lambda: dispatch_cmd(a, now), "sent": lambda: sent_cmd(a, now),
+     "reply": lambda: reply_cmd(a, now)}[a.cmd]()
+
+
+if __name__ == "__main__":
+    main()

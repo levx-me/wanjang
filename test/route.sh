@@ -15,6 +15,16 @@ export WANJANG_NOW=1800000100
 b=$(run "$T/home" "$T/projB")
 { grep -q '^Promises due here' <<<"$b" && grep -q 'check the release; due: time passed' <<<"$b"; } || { echo "FAIL no due notice: $b"; fail=1; }
 [ "$(run "$T/home" "$T/proj")" = "$base" ] || { echo "FAIL due notice in a project without promises"; fail=1; }
+# the manager was on in projB and its session is gone: one line says how to resume; a live owner: nothing
+MS=$T/home/.claude/wanjang/manager; mkdir -p "$MS"
+jq -nc --arg c "$T/projB" '{on:true,owner:{sessionId:"s0",pid:999999,name:"boss",cwd:$c}}' > "$MS/state.json"
+grep -qx 'manager was on here; `/wanjang:manager on` to resume' <<<"$(run "$T/home" "$T/projB")" || { echo "FAIL no manager resume line"; fail=1; }
+[ "$(run "$T/home" "$T/proj")" = "$base" ] || { echo "FAIL manager line in another folder"; fail=1; }
+jq -nc --arg c "$T/projB" --argjson p $$ '{on:true,owner:{sessionId:"s0",pid:$p,name:"boss",cwd:$c}}' > "$MS/state.json"
+grep -q 'manager was on' <<<"$(run "$T/home" "$T/projB")" && { echo "FAIL manager line while its owner lives"; fail=1; }
+jq -nc --arg c "$T/projB" '{on:false,owner:{sessionId:"s0",pid:999999,name:"boss",cwd:$c}}' > "$MS/state.json"
+grep -q 'manager was on' <<<"$(run "$T/home" "$T/projB")" && { echo "FAIL manager line while off"; fail=1; }
+rm -rf "$MS"
 grep -q "^- A PM message starting \`Bad news\`" <<<"$base" || { echo "FAIL no Bad news relay line"; fail=1; }
 [ $fail = 0 ] && echo "route: all passed"
 exit $fail
