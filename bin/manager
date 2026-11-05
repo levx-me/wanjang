@@ -619,7 +619,14 @@ def release(it, now):
             pass
 
 
+def norm_key(a):
+    """the inspector sometimes writes KEY as "<kind>:<fp>"; the scan's key is just "<kind>" """
+    if a.fp and a.key.endswith(":" + a.fp):
+        a.key = a.key[:-len(a.fp) - 1]
+
+
 def item_cmd(a, now):
+    norm_key(a)
     if not a.key.strip() or not a.fp.strip():
         print("usage: manager item add|drop KEY FP ...", file=sys.stderr)
         sys.exit(2)
@@ -684,7 +691,8 @@ def current(it, sess, now):
     ss = in_project(sess, p)
     fs = (collect(ss, now, deep=False) if fam in SESS else
           repo_findings([(p, "")] + [(s["cwd"], s["name"]) for s in ss], now, None))
-    return next((f["fp"] for f in fs if f["key"] == it["key"]), None)
+    keys = (it["key"], it["key"][:-len(it["fp"]) - 1] if it["fp"] and it["key"].endswith(":" + it["fp"]) else None)
+    return next((f["fp"] for f in fs if f["key"] in keys), None)
 
 
 def message(it, now):

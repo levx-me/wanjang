@@ -135,6 +135,14 @@ out=$("$M" dispatch --id "$id8"); { grep -q "^CHANGED $id8" <<<"$out" && ! grep 
 [ "$(ev "$id8" | tail -1 | jq -r .ev)" = changed ] || bad "8: changed event"
 clk 36000; tick >/dev/null; grep -q '^- uncommitted ' "$DG" && [ "$(awk '/^- uncommitted /{print $3}' "$DG")" != "$F4" ] || bad "8: changed evidence should be a new finding"
 
+# ---- 8b: KEY written as "<kind>:<fp>" is stored as "<kind>"; an old suffixed ledger item still dispatches unchanged
+F8=$(fpnow uncommitted)
+id8b=$("$M" item add "uncommitted:$F8" "$F8" --project "$R" --session repo-a --text "Save the work as a commit" --why "x" | cut -d' ' -f1)
+[ "$(jq -r --arg i "$id8b" 'select(.id==$i and .key!=null)|.key' "$LG" | head -1)" = uncommitted ] || bad "8b: key not normalized"
+"$M" answer "$id8b" approve --words "go" >/dev/null
+sed -i.bak "s/\"key\": *\"uncommitted\"\(.*$F8\)/\"key\": \"uncommitted:$F8\"\1/" "$LG"; rm -f "$LG.bak"
+out=$("$M" dispatch --id "$id8b"); grep -q "^CHANGED" <<<"$out" && bad "8b: suffixed key reported CHANGED: $out"
+
 # ---- 10: sent, then 2 idle ticks of the target with no reply: Problems
 F5=$(fpnow uncommitted)
 id10=$("$M" item add uncommitted "$F5" --project "$R" --session repo-a --text "Save the work as a commit" --why "x" | cut -d' ' -f1)
