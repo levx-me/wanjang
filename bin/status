@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""status [--session ID|PATH] [--cwd DIR] [--json] [--eta]: a compact snapshot of what this Claude Code
+"""status [--session ID|PATH] [--cwd DIR] [--json] [--eta] [--bars]: a compact snapshot of what this Claude Code
 session's agents are doing now, read from transcripts on disk (only the last 200 KB of each).
 
   agents  subagents written to in the last 2 hours, nested under their parent: type, task, age,
@@ -15,6 +15,9 @@ session's agents are doing now, read from transcripts on disk (only the last 200
           refined by that table (k of n done, running and todo rows). Ends with when all top-level
           running work should be done. In --json each agent gets eta {likely, latest, left_min,
           basis_n, basis, over} (epoch seconds, null when none) and the top level eta_all.
+          History is cached in ${CLAUDE_CONFIG_DIR:-~/.claude}/wanjang/eta-cache.json (rebuilt after 10 min or when an
+          agent meta file is newer). --bars (implies --eta) prints a bar per agent, elapsed / likely total, with
+          neutral English labels.
           Clock: env WANJANG_NOW (epoch seconds) replaces the current time, for tests.
 
 Session: --session, else $CLAUDE_CODE_SESSION_ID, else the newest transcript for the cwd.
@@ -28,7 +31,9 @@ ap.add_argument("--session", default=os.environ.get("CLAUDE_CODE_SESSION_ID", ""
 ap.add_argument("--cwd", default=os.getcwd())
 ap.add_argument("--json", action="store_true")
 ap.add_argument("--eta", action="store_true")
+ap.add_argument("--bars", action="store_true")
 a = ap.parse_args()
+a.eta = a.eta or a.bars
 home = os.environ.get("CLAUDE_CONFIG_DIR") or os.path.expanduser("~/.claude")
 try:
     now = float(os.environ.get("WANJANG_NOW") or time.time())
@@ -227,8 +232,16 @@ tasks.sort(key=lambda t: (str(t["id"]).zfill(6)))
 eta, eta_all, no_eta, tasks_of = {}, None, 0, {}
 if a.eta:
     hist = {}
-    # ponytail: no cache; ~2700 agents read in 1.6 s. Add a cache file once this takes over ~5 s.
-    for mp in glob.glob(f"{home}/projects/*/*/subagents/agent-*.meta.json"):
+    metas = glob.glob(f"{home}/projects/*/*/subagents/agent-*.meta.json")
+    cache = f"{home}/wanjang/eta-cache.json"
+    try:  # warm: under 10 min old and no meta file written since (one stat each)
+        cm = os.path.getmtime(cache)
+        if now - cm < 600 and max((os.path.getmtime(m) for m in metas), default=0) <= cm:
+            hist = {(t, m): v for t, m, v in json.load(open(cache))["hist"]}
+    except (OSError, ValueError, KeyError, TypeError):
+        hist = {}
+    warm = bool(hist)
+    for mp in () if warm else metas:
         try:
             m = json.load(open(mp))
             if not m.get("finished"):
@@ -243,6 +256,15 @@ if a.eta:
             mod = None if m.get("model") == "inherit" else m.get("model")
             for k in ((m.get("agentType"), mod), (m.get("agentType"), "*")):
                 hist.setdefault(k, []).append((t1 - t0) / 60)
+    if hist and not warm:
+        try:  # atomic; a failed write only costs the next call a rebuild
+            os.makedirs(os.path.dirname(cache), exist_ok=True)
+            tmp = f"{cache}.{os.getpid()}"
+            with open(tmp, "w") as f:
+                json.dump(dict(hist=[[t, m, v] for (t, m), v in hist.items()]), f)
+            os.replace(tmp, cache)
+        except OSError:
+            pass
 
     def stat(typ, model, el=0):
         """(median min, p80 min, n, basis, n of group) of the past samples that lasted longer than el minutes, for the
@@ -380,6 +402,36 @@ L.append(f"agents: {n_run} running, {len(tree) - n_run} finished in the last 2h"
 def clock(t):
     d = datetime.fromtimestamp(t)
     return d.strftime("%H:%M" if d.date() == datetime.fromtimestamp(now).date() else "%m-%d %H:%M")
+
+
+if a.bars:
+    W, rows = 14, []
+    for g in tree:
+        e = g["eta"]
+        if not e:
+            continue
+        lab = "  " * (g["depth"] - 1 if g["parent"] in byid else 0) + short(g["desc"], 14)
+        if g["stuck"]:
+            bar, note = "?" * W, "may be stuck"
+        elif e["over"]:
+            bar, note = "\u2588" * (W - 1) + "\u2592", "longer than usual"
+        elif not e["likely"]:
+            bar, note = "\u2591" * W, "no estimate"
+        else:
+            full = round(W * min(1, max(0, now - g["started"]) / max(1, e["likely"] - g["started"])))
+            bar = "\u2588" * full + "\u2591" * (W - full)
+            note = f"{e['left_min']:>2} min  {clock(e['likely'])}"
+        rows.append((lab, bar, note))
+        if e.get("tasks_total"):
+            rows.append((f"  \u2514 {e['tasks_done']}/{e['tasks_total']} tasks done", None, None))
+    w = max((len(r[0]) for r in rows if r[1]), default=0)
+    print(f"Overall {clock(eta_all)} \u00b7 about {max(0, round((eta_all - now) / 60))} min left" if eta_all
+          else "Nothing running" if not any(active(g) for g in tree) else "Running work: no estimate")
+    if rows:
+        print()
+    for lab, bar, note in rows:
+        print(f"{lab:<{w}}  {bar}  {note}" if bar else lab)
+    sys.exit(0)
 
 
 def eta_line(g):

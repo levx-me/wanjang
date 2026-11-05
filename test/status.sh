@@ -123,4 +123,27 @@ echo "$et" | grep -q 'from 4 of 10 past wanjang:qa sonnet that ran this long' ||
 echo "$et" | grep -q 'taking longer than usual (most finish within 26 min), from 10 past' || { echo "FAIL over wording"; fail=1; }
 echo "$et" | grep -q 'min left), an estimate, 2 more with no estimate' || { echo "FAIL mixed overall line"; fail=1; }
 CLAUDE_CONFIG_DIR=$U bin/status --session s4 --cwd "$U/repo" | grep -q '\[WAITING\] wanjang:pm' || { echo "FAIL WAITING without eta"; fail=1; }
+# --- cache: written on the first call, reused while warm, rebuilt when stale or when a meta file is newer
+C=$U/wanjang/eta-cache.json; rm -f "$C"
+export WANJANG_NOW=$(date +%s)
+CLAUDE_CONFIG_DIR=$U bin/status --session s4 --cwd "$U/repo" --eta >/dev/null
+jq -e '.hist | length > 0' "$C" >/dev/null || { echo "FAIL cache not written"; fail=1; }
+jq '.hist |= map(if .[0]=="wanjang:scout" then .[2]=[5,5,5,5,5,5] else . end)' "$C" > "$C.t" && mv "$C.t" "$C"   # mark the cache
+chk() { CLAUDE_CONFIG_DIR=$U bin/status --session s4 --cwd "$U/repo" --json --eta | jq -r '.agents[] | select(.id=="scy") | .eta.basis_n'; }
+[ "$(chk)" = 6 ] || { echo "FAIL warm cache not used"; fail=1; }
+WANJANG_NOW=$(( $(date +%s) + 700 )); [ "$(chk)" = null ] || { echo "FAIL stale cache not rebuilt"; fail=1; }
+export WANJANG_NOW=$(date +%s)
+jq '.hist |= map(if .[0]=="wanjang:scout" then .[2]=[5,5,5,5,5,5] else . end)' "$C" > "$C.t" && mv "$C.t" "$C"
+[ "$(chk)" = 6 ] || { echo "FAIL re-marked cache not used"; fail=1; }
+sleep 1; touch "$H"/agent-h-scout-sonnet-1.meta.json   # a newer meta file
+[ "$(chk)" = null ] || { echo "FAIL newer meta not rebuilt"; fail=1; }
+# --- --bars: fixed clock; elapsed / likely, past-likely and no-estimate rows, PM task line
+export WANJANG_NOW=$NOW
+bars=$(CLAUDE_CONFIG_DIR=$U bin/status --session s2 --cwd "$U/repo" --bars)
+echo "$bars" | head -1 | grep -q '^Overall [0-9:]* · about [0-9]* min left$' || { echo "FAIL bars overall"; fail=1; }
+echo "$bars" | grep -q '^Fresh build *██████░░░░░░░░ *4 min  [0-9:]*$' || { echo "FAIL bars fresh"; fail=1; }   # 180 of 390 s
+echo "$bars" | grep -q '^Slow build *█████████████▒  longer than usual$' || { echo "FAIL bars over"; fail=1; }
+echo "$bars" | grep -q '^Look around *░* *no estimate$' || { echo "FAIL bars no estimate"; fail=1; }
+echo "$bars" | grep -q '└ 1/3 tasks done' || { echo "FAIL bars tasks"; fail=1; }
+unset WANJANG_NOW
 [ $fail = 0 ] && echo "status.sh ok"; exit $fail

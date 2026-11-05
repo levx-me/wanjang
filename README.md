@@ -62,7 +62,8 @@ prices are never done by the crew: they come back as steps for you.
 - **Tells you how it's going.** `/wanjang:now` lists what each agent is doing, for how long, and which one has gone
   silent for over ten minutes.
 - **Tells you when it'll be done.** `/wanjang:wen` guesses when each running agent and the whole run will finish, from how
-  long past agents of the same kind took.
+  long past agents of the same kind took, as a progress bar per agent. The
+  [Steading](https://github.com/levx-me/steading) deck shows the same countdown live, ticking every second.
 - **Spends to fit the task.** Haiku for lookups and mechanical edits, Sonnet for ordinary building and checking, Opus
   for UI and the hard parts; reasoning effort set the same way (low, medium, high). A task that fails moves one tier
   up.
@@ -188,7 +189,7 @@ field: know-how for a field comes from playbooks.
 | `/wanjang:visual-doc` | Turn a report, dashboard or explanation into one HTML page in a fixed style |
 | `/wanjang:brief` | Write a brief for non-developers: plain words, the decisions to approve, each paired with a question |
 | `/wanjang:now` | What each running agent is doing now, for how long, what is done and what looks stuck (`bin/status`, read-only) |
-| `/wanjang:wen` | Roughly when the running work will be done, per agent and overall, estimated from past runs (`bin/status --eta`, read-only) |
+| `/wanjang:wen` | Roughly when the running work will be done, per agent and overall, estimated from past runs, drawn as bars (`bin/status --eta --bars`, read-only; history cached in `~/.claude/wanjang/eta-cache.json`). The Steading deck shows it live |
 | `/wanjang:now --week\|--since DATE\|--repo X` | What finished runs shipped, one line each, from the ledger at `~/.claude/wanjang/ledger.md` (honours `CLAUDE_CONFIG_DIR`; `bin/ledger`) |
 | `/wanjang:manager on\|off\|status` | Make this session the manager of your other open sessions: an hourly look, one page, up to 4 questions, approved items sent to their sessions (off by default, one manager per user) |
 | `/wanjang:manager` | Check now, and show the page |
