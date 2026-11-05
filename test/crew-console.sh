@@ -6,7 +6,7 @@ T=$(mktemp -d); trap 'rm -rf "${T:?}"' EXIT
 fail=0
 bad() { echo "FAIL $1"; fail=1; }
 export CLAUDE_CONFIG_DIR=$T/cfg USER=wanjang-test-nobody HOME=$T/home XDG_CONFIG_HOME= ANTHROPIC_CONSOLE_API_KEY=sk-ant-testsecret
-mkdir -p "$T/home" "$T/shim"
+mkdir -p "$T/home" "$T/shim" "$T/projA" "$T/projB"; A=$T/projA; B=$T/projB
 printf '#!/bin/sh\n[ "$1" = find-generic-password ] && exit 44\nexit 1\n' > "$T/shim/security"
 printf '#!/bin/sh\nexit 1\n' > "$T/shim/secret-tool"
 # stub claude: records argv and env marker; STUB_OUT is the JSON it prints
@@ -33,8 +33,8 @@ grep -rq testsecret "$T/argv" "$T/cfg" && bad "key leaked into argv or logs"
 [ "$(ls "$T/cfg/wanjang/crew-console" | wc -l)" -eq 1 ] || bad "log not kept"
 # budget: flag, then the switch's value
 echo b | STUB_OUT=$OK bin/crew-run scout --budget 2.5 >/dev/null 2>&1; grep -q -- '--max-budget-usd 2.5 ' "$T/argv" || bad "budget flag"
-bin/crew-console on --budget 4 >/dev/null || bad "on: exit $?"
-echo b | STUB_OUT=$OK bin/crew-run scout >/dev/null 2>&1; grep -q -- '--max-budget-usd 4 ' "$T/argv" || bad "switch budget"
+(cd "$T/projA" && "$ROOT/bin/crew-console" on --budget 4 >/dev/null) || bad "on: exit $?"
+echo b | STUB_OUT=$OK bin/crew-run scout --cwd "$T/projA" >/dev/null 2>&1; grep -q -- '--max-budget-usd 4 ' "$T/argv" || bad "switch budget"
 # exit codes
 echo b | bin/crew-run nosuch >/dev/null 2>&1; [ $? = 2 ] || bad "unknown agent should exit 2"
 echo b | bin/crew-run scout --effort wild >/dev/null 2>&1; [ $? = 2 ] || bad "bad effort should exit 2"
@@ -47,18 +47,21 @@ bin/crew-run scout --dry-run | grep -q testsecret && bad "dry-run shows the key"
 
 # switch: on refuses without a key; off; status
 ANTHROPIC_CONSOLE_API_KEY= bin/crew-console on >/dev/null 2>&1; [ $? = 3 ] || bad "on without key should exit 3"
-bin/crew-console off >/dev/null; bin/crew-console status | grep -q '^crew-console: off' || bad "status off"
-bin/crew-console on >/dev/null; bin/crew-console status | grep -q '^crew-console: on, budget \$4' || bad "status on keeps budget"
+cd "$T/projA"; "$ROOT/bin/crew-console" status | grep -q '^crew-console: on for .*, budget \$4' || bad "status on keeps budget"
+"$ROOT/bin/crew-console" off >/dev/null; "$ROOT/bin/crew-console" status | grep -q '^crew-console: off' || bad "status off"
+"$ROOT/bin/crew-console" on >/dev/null; cd "$ROOT"
 
 # hook matrix
 h() { printf '%s' "$1" | bin/crew-console-hook; }
-MAIN='{"tool_name":"Agent","tool_input":{"subagent_type":"wanjang:builder","model":"sonnet","effort":"high"}}'
+
+MAIN='{"cwd":"'$A'","tool_name":"Agent","tool_input":{"subagent_type":"wanjang:builder","model":"sonnet","effort":"high"}}'
 SUB='{"agent_id":"a1","agent_type":"wanjang:pm","tool_name":"Agent","tool_input":{"subagent_type":"wanjang:builder"}}'
 OTHER='{"tool_name":"Agent","tool_input":{"subagent_type":"Explore"}}'
 d=$(h "$MAIN" | jq -r .hookSpecificOutput.permissionDecision+.hookSpecificOutput.permissionDecisionReason); case $d in deny*"crew-run\" builder --model sonnet --effort high"*) ;; *) bad "main+wanjang should deny: $d" ;; esac
+[ -z "$(h "${MAIN/$A/$B}")" ] || bad "project B should pass while A is on"
 [ -z "$(h "$SUB")" ] || bad "subagent call should pass"
 [ -z "$(h "$OTHER")" ] || bad "non-wanjang type should pass"
 [ -z "$(WANJANG_CREW_CONSOLE=1 bin/crew-console-hook <<<"$MAIN")" ] || bad "crew-run child should pass"
-bin/crew-console off >/dev/null
+(cd "$A" && "$ROOT/bin/crew-console" off >/dev/null)
 [ -z "$(h "$MAIN")" ] || bad "switch off should pass"
 exit $fail

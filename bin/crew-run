@@ -37,7 +37,8 @@ done
 [ -f "$root/agents/$agent.md" ] || die 2 "no wanjang agent '$agent' (see --help)"
 [ -d "$cwd" ] || die 2 "--cwd $cwd is not a directory"
 case $effort in ""|low|medium|high|xhigh|max) ;; *) die 2 "--effort must be low, medium, high, xhigh or max" ;; esac
-if [ -z "$budget" ]; then budget=$(jq -r '.budget // empty' "$cfg/crew-console.json" 2>/dev/null); budget=${budget:-10}; fi
+proj=$(cd "$cwd" && { git rev-parse --show-toplevel 2>/dev/null || pwd; })
+if [ -z "$budget" ]; then budget=$(jq -r --arg p "$proj" '.projects[$p].budget // empty' "$cfg/crew-console.json" 2>/dev/null); budget=${budget:-10}; fi
 printf '%s' "$budget" | grep -Eq '^[0-9]+(\.[0-9]+)?$' && [ -n "$(printf '%s' "$budget" | tr -d '0.')" ] || die 2 "--budget must be a positive number (USD)"
 
 settings=$(jq -cn --arg h "$root/bin/console-key" '{apiKeyHelper:$h, env:{ANTHROPIC_BASE_URL:"https://api.anthropic.com", ANTHROPIC_AUTH_TOKEN:"", ANTHROPIC_API_KEY:""}}')
