@@ -66,7 +66,7 @@ et=$(CLAUDE_CONFIG_DIR=$U bin/status --session s2 --cwd "$U/repo" --eta)
 json=$ej
 want '.agents[] | select(.id=="bnew") | .eta | [.likely - '"$NOW"', .latest - '"$NOW"', .left_min, .basis_n, .basis, .over] | @csv' '210,300,4,6,"wanjang:builder sonnet",false'
 want '.agents[] | select(.id=="bold") | .eta | [.likely, .latest, .over] | @csv' ',,true'
-want '.agents[] | select(.id=="chk") | .eta | [.basis_n, .basis] | @csv' '4,"wanjang:checker"'
+want '.agents[] | select(.id=="chk") | .eta | [.basis_n, .basis] | @csv' '4,"wanjang:checker that ran this long"'
 want '.agents[] | select(.id=="scx") | .eta | [.likely, .basis_n, .over] | @csv' ',,false'
 want '.agents[] | select(.id=="pm1") | .eta | .tasks_done' 1
 want '.agents[] | select(.id=="pm1") | .eta | .basis | endswith("1 of 3 tasks done")' true

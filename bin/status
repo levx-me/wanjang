@@ -305,6 +305,8 @@ if a.eta:
         e = dict(likely=None, latest=None, left_min=None, basis_n=None, basis=None, over=False)
         if st:
             med, p80, e["basis_n"], e["basis"], e["basis_of"] = st
+            if med is not None and e["basis_n"] != e["basis_of"]:
+                e["basis"] += " that ran this long"
             p80s[g["id"]] = p80
             if med is None:
                 e["over"] = True
@@ -391,8 +393,7 @@ def eta_line(g):
     return (f"eta: likely {clock(e['likely'])} (~{e['left_min']} min left), latest {clock(e['latest'])} "
             f"(~{max(0, round((e['latest'] - now) / 60))} min), from "
             f"{(str(e['basis_n']) + (' of ' + str(e['basis_of']) if e['basis_n'] != e.get('basis_of') else '') + ' past ') if e['basis_n'] else ''}"
-            f"{e['basis']}{' that ran this long' if e['basis_n'] and e['basis_n'] != e.get('basis_of') else ''}")
-
+            f"{e['basis']}")
 
 if a.eta:
     L.append(f"all running work should be done by {clock(eta_all)} (~{max(0, round((eta_all - now) / 60))} min left), an estimate"
