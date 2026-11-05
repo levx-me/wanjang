@@ -8,7 +8,7 @@
 대신 정한 것들은 끝에 목록 하나로 검토하면 돼요.
 
 [![Claude Code plugin](https://img.shields.io/badge/Claude_Code-plugin-d97757)](https://code.claude.com/docs/en/plugins)
-[![version](https://img.shields.io/badge/version-0.14.0-blue)](.claude-plugin/plugin.json)
+[![version](https://img.shields.io/badge/version-0.15.0-blue)](.claude-plugin/plugin.json)
 [![license](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
 [English](README.md) | 한국어
@@ -198,6 +198,7 @@ Claude 세션에서는 PATH에 있어요. `/wanjang:docs <query> [dir]`가 이�
 | `/wanjang:relay <세션> <요청>` · `status` | 이 컴퓨터에서 다른 저장소를 맡은 Claude 세션에 일을 넘기고 보고를 추적해요(Claude Code의 ListAgents/SendMessage) |
 | `/wanjang:optimize` | 에이전트를 멈추지 않은 채로, 이 세션의 토큰이 어디에 쓰이는지 보고 해당하는 것만 고쳐요 |
 | `/wanjang:provider openrouter\|console\|models\|presets\|claude\|key [console]\|status` | 재시작 없이 이 세션을 claude.ai 구독, OpenRouter, Anthropic Console API 키 사이에서 옮겨요 |
+| `/wanjang:crew-console on [--budget USD]\|off\|status` | wanjang 에이전트(PM과 그 작업자, 직접 부르는 builder·scout·checker)를 모두 Console API 키로 결제해요. 각각 따로 `claude -p`로 돌고 실행당 한도가 있어요(기본 $10). 메인 대화는 구독 그대로예요 |
 
 `/wanjang:optimize`는 `bin/usage`를 실행해요. 디스크에 있는 세션 기록을 읽고 짧은 보고서를 보여 줘요. 메인
 컨텍스트 크기, 가장 많이 차지한 도구 결과, 여러 번 다시 읽은 파일, 최근 10분 동안 일한 에이전트와 그 사용량,

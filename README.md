@@ -8,7 +8,7 @@ Hand Claude Code a multi-step job: a PM splits it across a crew, a second agent 
 and you review the choices it made in one list at the end.
 
 [![Claude Code plugin](https://img.shields.io/badge/Claude_Code-plugin-d97757)](https://code.claude.com/docs/en/plugins)
-[![version](https://img.shields.io/badge/version-0.14.0-blue)](.claude-plugin/plugin.json)
+[![version](https://img.shields.io/badge/version-0.15.0-blue)](.claude-plugin/plugin.json)
 [![license](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
 English | [한국어](README.ko.md)
@@ -202,6 +202,7 @@ field: know-how for a field comes from playbooks.
 | `/wanjang:relay <session> <request>` · `status` | Hand work to the Claude session that owns another repo on this machine (Claude Code's ListAgents/SendMessage) and track its report |
 | `/wanjang:optimize` | See where this session's tokens go and fix what applies, with agents still running |
 | `/wanjang:provider openrouter\|console\|models\|presets\|claude\|key [console]\|status` | Move this session between the claude.ai subscription, OpenRouter and an Anthropic Console API key, no restart |
+| `/wanjang:crew-console on [--budget USD]\|off\|status` | Bill every wanjang agent (the PM, its workers, the builder/scout/checker you call) to the Console API key as its own `claude -p` run, capped per run (default $10); the main chat stays on the subscription |
 
 `/wanjang:optimize` runs `bin/usage`, which reads the session's transcripts on disk and prints a short report: the
 main context, the tool results that took the most, files read again and again, agents active in the last ten
