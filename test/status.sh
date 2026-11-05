@@ -81,5 +81,20 @@ echo "$et" | grep -q 'eta: likely [0-9: -]* (~4 min left), latest' || { echo "FA
 # without --eta nothing changes: no eta keys, no eta text
 CLAUDE_CONFIG_DIR=$U bin/status --session s2 --cwd "$U/repo" --json | jq -e 'has("eta_all") or ([.agents[] | has("eta")] | any)' >/dev/null && { echo "FAIL eta leaked into --json"; fail=1; }
 CLAUDE_CONFIG_DIR=$U bin/status --session s2 --cwd "$U/repo" | grep -q 'eta' && { echo "FAIL eta leaked into text"; fail=1; }
+# two running PMs, each with its own run log (named in its transcript); a worker with no history takes builder sonnet's median; bad clock
+R2=$U/repo/.git/wanjang/run2; R3=$U/repo/.git/wanjang/run3; mkdir -p "$R2" "$R3"
+printf '## Tasks\n| task | worker | files | status |\n| one | builder sonnet | a | done |\n| two | builder sonnet | b | todo |\n| three | builder sonnet | c | todo |\n| four | builder sonnet | d | todo |\n' > "$R2/log.md"
+printf '## Tasks\n| task | worker | files | status |\n| one | builder sonnet | a | done |\n| two | qa opus | b | todo |\n| three | builder sonnet | c | todo |\n' > "$R3/log.md"
+echo "{\"type\":\"user\",\"cwd\":\"$U/repo\",\"timestamp\":\"$(isoN 9000)\"}" > "$Q/s3.jsonl"
+E3=$Q/s3/subagents; mkdir -p "$E3"
+pmrun() { echo '{"agentType":"wanjang:pm","model":null,"description":"Lead","spawnDepth":1}' > "$E3/agent-$1.meta.json"
+  { printf '{"type":"assistant","timestamp":"%s","message":{"content":[{"type":"text","text":"start"}]}}\n' "$(isoN 120)"
+    printf '{"type":"assistant","timestamp":"%s","message":{"content":[{"type":"tool_use","id":"u%s","name":"%s","input":%s}]}}\n' "$(isoN 5)" "$1" "$2" "$3"; } > "$E3/agent-$1.jsonl"; }
+pmrun pmA Write "{\"file_path\":\"$R2/log.md\",\"content\":\"x\"}"
+pmrun pmB Bash "{\"command\":\"echo hi >> $R3/log.md\"}"
+json=$(CLAUDE_CONFIG_DIR=$U bin/status --session s3 --cwd "$U/repo" --json --eta)
+want '.agents[] | select(.id=="pmA") | .eta | [.likely - '"$NOW"', .tasks_done, .tasks_total] | @csv' '1170,1,4'
+want '.agents[] | select(.id=="pmB") | .eta | [.likely - '"$NOW"', .tasks_done, .tasks_total] | @csv' '780,1,3'   # qa opus has no history: 6.5 + 6.5
+WANJANG_NOW=abc CLAUDE_CONFIG_DIR=$U bin/status --session s3 --cwd "$U/repo" --eta >/dev/null 2>"$T/err"; [ $? = 0 ] && ! grep -q Traceback "$T/err" || { echo "FAIL bad WANJANG_NOW"; fail=1; }
 unset WANJANG_NOW
 [ $fail = 0 ] && echo "status.sh ok"; exit $fail

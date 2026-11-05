@@ -28,7 +28,10 @@ ap.add_argument("--json", action="store_true")
 ap.add_argument("--eta", action="store_true")
 a = ap.parse_args()
 home = os.environ.get("CLAUDE_CONFIG_DIR") or os.path.expanduser("~/.claude")
-now = float(os.environ.get("WANJANG_NOW") or time.time())
+try:
+    now = float(os.environ.get("WANJANG_NOW") or time.time())
+except ValueError:  # not a number: the real clock
+    now = time.time()
 
 # --- find the session transcript
 how, main = "", ""
@@ -259,6 +262,21 @@ if a.eta:
                     rows.append(dict(zip(head, c), _line=l))
         return rows
 
+    def own_log(g):
+        """the run log this PM named last in its tool_use inputs (`wanjang/<run>/<log>`), as an rlogs path"""
+        found = None
+        try:
+            for r in tail_rows(f"{os.path.splitext(main)[0]}/subagents/agent-{g['id']}.jsonl"):
+                c = (r.get("message") or {}).get("content")
+                for b in c if isinstance(c, list) else ():
+                    i = b.get("input") if isinstance(b, dict) and b.get("type") == "tool_use" else None
+                    if isinstance(i, dict):
+                        m = re.findall(r"wanjang/[^/\s\"']+/log\.md", f"{i.get('file_path', '')} {i.get('command', '')}")
+                        found = m[-1] if m else found
+        except OSError:
+            pass
+        return next((lp for _, lp in rlogs if found and lp.endswith("/" + found)), None)
+
     p80s = {}
     for g in sorted(tree, key=lambda g: g["type"] == "wanjang:pm"):  # PMs last: rows read their workers' eta
         if not g["running"]:
@@ -272,8 +290,10 @@ if a.eta:
             e["over"] = now > e["latest"]
         if g["type"] == "wanjang:pm" and rlogs:
             try:
-                # ponytail: newest run log with a Tasks table; two PMs at once share it
-                rows = next(r for r in (table(lp) for _, lp in sorted(rlogs, reverse=True)) if r)
+                # the PM's own run log; ponytail: none named in its transcript tail -> the newest run log with a
+                # Tasks table, which two such PMs would share
+                own = own_log(g)
+                rows = (own and table(own)) or next(r for r in (table(lp) for _, lp in sorted(rlogs, reverse=True)) if r)
             except (StopIteration, OSError):
                 rows = []
             if rows:
@@ -283,7 +303,7 @@ if a.eta:
                     s = r.get("status", "").lower()
                     if s not in ("running", "todo"):
                         continue
-                    ws = stat(*worker(r.get("worker", "")))
+                    ws = stat(*worker(r.get("worker", ""))) or stat("wanjang:builder", "sonnet")
                     mine = [x for x in tree if x["running"] and x["id"] != g["id"] and x["id"] in eta
                             and re.search(rf"\b{re.escape(x['id'])}\b", r["_line"])]
                     if s == "running" and mine and eta[mine[0]["id"]]["likely"]:
