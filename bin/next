@@ -1,16 +1,9 @@
 #!/usr/bin/env python3
-"""next stop | prompt | on | off | cron [--exists yes|no] | scan [--cwd DIR] [--periodic] | ask KEY FP | asked KEY FP
-        | answer | did | undo | trust | promise | status [--json]
-        [--session ID]: find the next useful piece of work for /wanjang:next.
+"""next scan [--cwd DIR] | kind KEY | ask KEY FP | answer | did | undo | trust | promise:
+the repository scan, trust ladder and promises behind /wanjang:manager (bin/manager imports this file).
 
-  stop    Stop hook (JSON on stdin). When /wanjang:next is on (state `on`, or for older sessions a
-          session cron whose prompt is `/wanjang:next check`) and the main agent just finished a piece of work, print
-          additionalContext that asks it to run the check. Prints nothing otherwise; always exit 0.
-  prompt  UserPromptSubmit hook (JSON on stdin). When the prompt is exactly `/wanjang:next check` and the check
-          would do nothing (off, or checked within 25 minutes), print a block decision so the model never runs.
-          Off blocks only after one pass-through, which lets the check delete a leftover cron. Always exit 0.
-  scan    print repository candidates not yet asked, one per line: key<TAB>fp<TAB>summary
-          (uncommitted, todo, memory-next, run:<folder>). Never runs tests.
+  scan    print repository candidates, one per line: key<TAB>fp<TAB>summary (uncommitted, todo, memory-next,
+          unpushed, run:<folder>). Never runs tests. Nothing is filtered: bin/manager's ledger knows what was asked.
           Open promises for the project (see `promise`) come first: promise:<id><TAB><fp><TAB>you asked me to: ...
           Their stored `--when` conditions run here (10 s timeout, at most 3 per scan), never from a hook.
   promise add "WHAT" [--words W] [--why Y] [--at T] [--when CMD] [--every 30m] [--for 14d] [--fp E]
@@ -18,47 +11,35 @@
           without an offset) or +30m|+2h|+3d. Prints id<TAB>due<TAB>where it comes up. Exit 4 = duplicate (id printed).
           list [--all] [--json] | set ID [--at T] [--when CMD] [--what W] | done ID [--note N] | drop ID
           | due [--cwd DIR]  (read-only, runs no condition: the SessionStart notice)
-  ask KEY FP [--what W] [--cwd DIR]: record that KEY with fingerprint FP was asked (idempotent) and print one
-          word, `ask` or `auto` (do it without asking: the trust ladder below). A repeat prints `ask`.
-          asked: exit 0 if recorded.
-  answer KEY FP yes|no   the user's answer to an asked question: yes counts toward the kind, no resets it.
-          Prints one line when the kind is newly trusted.
+  kind KEY [--what W]: the kind KEY and its action map to (verify, test, docs, commit, relay, resume, promise,
+          other, or outward: always asked).
+  ask KEY FP [--what W] [--cwd DIR]: print one word, `ask` or `auto` (do it without asking: the trust ladder
+          below). An `auto` opens a running action; asking again for the same KEY and FP while it runs prints `auto`.
+  answer KEY FP yes|no [--what W]   the user's answer to an asked question: yes counts toward the kind, no resets
+          it. Prints one line when the kind is newly trusted.
   did KEY FP ok|failed|ask [--commit HASH] [--files F...] [--note N]: the outcome of an `auto` action (ask: it
           was not done after all and is being asked). Prints the one-line report. Exit 1 = no such running action.
   undo    undo the last auto action and reset its kind. Exit 4 = refused, nothing changed.
   trust [off | on | KIND ask | KIND reset] [--json]: the ladder table, or switch it, pin a kind, zero a kind.
           A kind (verify, test, docs, commit, relay) is `auto` after 3 yeses within 14 days, the first of them
-          24 h old; at most 2 auto actions per idle stretch and 6 per project per 24 h, one at a time.
+          24 h old; at most 6 auto actions per project per 24 h, one at a time (bin/manager adds: 2 per tick).
           resume (task:, run:), promise:, other keys and anything outward (push, deploy, publish, migrations,
           deletes, installs, messages, payments; checked on KEY and --what) are always asked.
-  on/off  record that /wanjang:next is on (the cron was just created) or off.
-  cron    print one word: off | create | recreate | keep, for the 30-minute cron [--exists yes|no].
-  status  on/off, schedule age, last check age, last hook age, number asked.
 
-State: ${CLAUDE_CONFIG_DIR:-~/.claude}/wanjang/next/<session>.json; session = --session, else
-$CLAUDE_CODE_SESSION_ID (stop: session_id from the input).
 Promises: ${CLAUDE_CONFIG_DIR:-~/.claude}/wanjang/promises.json (one per user, locked by promises.lock).
 Trust: ${CLAUDE_CONFIG_DIR:-~/.claude}/wanjang/next/trust/<sha8 of the project>.json (per project; worktrees share it).
 Clock: env WANJANG_NOW (epoch seconds) replaces the current time, for tests.
 
 Examples:
-  next scan --periodic          # from the 30-minute cron; exit 3 if checked within 25 minutes
   next scan | cut -f1,3         # keys and summaries
-  next ask uncommitted 3fa9c1d2 # hide that candidate until its fp changes
-  next asked uncommitted 3fa9c1d2 && echo already asked
+  next kind commit:x --what "commit and push"   # outward
+  next ask uncommitted 3fa9c1d2 --what "commit the files" --cwd ~/repo   # ask | auto
 
-Exit codes: 0 ok, 1 not asked (asked), unknown promise or no running auto action, 2 bad arguments or no session,
-3 periodic check skipped, 4 duplicate promise or undo refused."""
-import argparse, contextlib, fcntl, glob, hashlib, json, os, random, re, signal, subprocess, sys, tempfile, time, unicodedata
+Exit codes: 0 ok, 1 unknown promise or no running auto action, 2 bad arguments, 4 duplicate promise or undo refused."""
+import argparse, fcntl, glob, hashlib, json, os, random, re, signal, subprocess, sys, tempfile, time, unicodedata
 from datetime import datetime
 
-CRON = "/wanjang:next check"
-TAIL, PERIOD, KEEP, ASKED_MAX, DAY7, RENEW = 300_000, 25 * 60, 7 * 86400, 50, 7 * 86400, 6 * 86400
-LOOK = {"Read", "Grep", "Glob", "LS", "TaskList", "TaskGet", "ListAgents", "ToolSearch", "WebSearch",
-        "WebFetch", "AskUserQuestion", "Skill", "CronCreate", "CronList", "CronDelete"}
-TEXT = ("wanjang:next is on and you just finished a piece of work. Run the next-work check now: "
-        "use the Skill tool with skill `wanjang:next` and args `check`. If your own work is still "
-        "running or nothing is found, reply with only `·`.")
+DAY7, RENEW = 7 * 86400, 6 * 86400
 
 
 def clock():
@@ -77,7 +58,7 @@ def num(v):
 
 
 def verdict(d, exists, now):
-    """off | create | recreate | keep: what to do with the 30-minute cron (used by `cron` and the Stop hook)"""
+    """off | create | recreate | keep: what to do with a session cron made at d["cron_created"] (bin/manager)"""
     if d.get("on") is not True:
         return "recreate" if ("on" not in d and exists) else "off"
     if not exists:
@@ -89,145 +70,11 @@ def sdir():
     return os.path.join(os.environ.get("CLAUDE_CONFIG_DIR") or os.path.expanduser("~/.claude"), "wanjang", "next")
 
 
-def load(sid):
-    try:
-        d = json.load(open(os.path.join(sdir(), f"{sid}.json")))
-        if not isinstance(d, dict):
-            raise ValueError
-    except (OSError, ValueError):
-        d = {}
-    if not isinstance(d.get("asked"), list):
-        d["asked"] = []
-    return d
-
-
-def save(sid, d):
-    d["asked"] = d["asked"][-ASKED_MAX:]
-    p = sdir()
-    try:
-        os.makedirs(p, exist_ok=True)
-        fd, tmp = tempfile.mkstemp(dir=p, suffix=".tmp")
-        with os.fdopen(fd, "w") as f:
-            json.dump(d, f)
-        os.replace(tmp, os.path.join(p, f"{sid}.json"))
-    except OSError as e:
-        print(f"next: cannot save state ({p}): {e}", file=sys.stderr)
-        return
-    me = f"{sid}.json"
-    for f in glob.glob(p + "/*.json"):
-        try:
-            if os.path.basename(f) != me and clock() - os.path.getmtime(f) > KEEP:
-                os.remove(f)
-        except OSError:
-            pass
-
-
 def ts(s):
     try:
         return datetime.fromisoformat(s.replace("Z", "+00:00")).timestamp()
     except Exception:
         return None
-
-
-def tail_rows(path):
-    with open(path, "rb") as f:
-        size = f.seek(0, 2)
-        f.seek(max(0, size - TAIL))
-        data = f.read()
-    lines = data.split(b"\n")
-    if size > TAIL:
-        lines = lines[1:]  # first line is cut
-    for l in lines:
-        try:
-            r = json.loads(l)
-        except ValueError:
-            continue
-        if isinstance(r, dict) and not r.get("isSidechain"):
-            yield r
-
-
-def prompt_text(c):
-    """text of a user prompt, or None when the entry is only tool results"""
-    if isinstance(c, str):
-        return c
-    if isinstance(c, list):
-        bl = [b for b in c if isinstance(b, dict) and b.get("type") != "tool_result"]
-        if bl:
-            return " ".join(str(b.get("text", "")) for b in bl)
-    return None
-
-
-def stop_hook():
-    try:
-        inp = json.load(sys.stdin)
-        if not isinstance(inp, dict):
-            return
-        sid = str(inp.get("session_id") or "")
-        if not sid or "/" in sid:
-            return
-        d = load(sid)
-        exists = any(isinstance(c, dict) and str(c.get("prompt", "")).strip() == CRON
-                     for c in inp.get("session_crons") or [])
-        if not (d.get("on") is True or ("on" not in d and exists)):
-            return
-        if inp.get("agent_id") or inp.get("stop_hook_active") is True:
-            return
-        if any(isinstance(t, dict) and str(t.get("status", "")).lower() in ("running", "pending")
-               for t in inp.get("background_tasks") or []):
-            return
-        prompt = None  # (text, timestamp), tools used after it
-        tools = set()
-        for r in tail_rows(inp.get("transcript_path") or ""):
-            m = r.get("message")
-            if not isinstance(m, dict):
-                continue
-            if r.get("type") == "user":
-                t = prompt_text(m.get("content"))
-                if t is not None:
-                    prompt, tools = (t, r.get("timestamp")), set()
-            elif r.get("type") == "assistant" and isinstance(m.get("content"), list):
-                tools |= {b.get("name") for b in m["content"] if isinstance(b, dict) and b.get("type") == "tool_use"}
-        if not prompt or "wanjang:next" in prompt[0] or not (tools - LOOK):
-            return
-        pt = ts(prompt[1]) if isinstance(prompt[1], str) else None
-        if pt is None or num(d.get("last_hook")) >= pt:
-            return
-        d["last_hook"] = clock()
-        save(sid, d)
-        v = verdict(d, exists, clock())
-        text = TEXT if v == "keep" else f"{TEXT} First renew the schedule: the verdict is `{v}`; follow the check's renew step."
-        print(json.dumps({"hookSpecificOutput": {"hookEventName": "Stop", "additionalContext": text}}))
-    except Exception:
-        pass
-
-
-def prompt_hook():
-    try:
-        inp = json.load(sys.stdin)
-        sid = str(inp.get("session_id") or "") if isinstance(inp, dict) else ""
-        if not sid or "/" in sid:
-            return
-        if str(inp.get("prompt", "")).strip() != CRON:
-            if isinstance(inp.get("prompt"), str) and inp["prompt"].strip():  # a real prompt ends the idle stretch
-                d = load(sid)
-                d["last_prompt"] = clock()
-                save(sid, d)
-            return
-        d, now = load(sid), clock()
-        if d.get("on") is False:  # a leftover cron fired: the first one reaches the model, which deletes it
-            if not d.get("swept"):
-                d["swept"] = True
-                save(sid, d)
-                return
-            why = "off"
-        elif d.get("on") is True and now - num(d.get("last_check")) < PERIOD:
-            why = f"checked {round((now - num(d.get('last_check'))) / 60)} min ago"
-        else:
-            return
-        print(json.dumps({"decision": "block", "reason": f"· next check skipped: {why}",
-                          "hookSpecificOutput": {"hookEventName": "UserPromptSubmit", "suppressOriginalPrompt": True}}))
-    except Exception:
-        pass
 
 
 def git(cwd, *args):
@@ -261,6 +108,11 @@ def candidates(cwd):
             todos.append(f"{cur}: {l[1:].strip()}")
     if todos:
         yield "todo", sha("\n".join(todos)), one(f"{len(todos)} new TODO/FIXME/XXX, first {todos[0]}")
+    up = git(cwd, "rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}").strip()
+    ahead = git(cwd, "rev-list", "--count", "@{u}..HEAD").strip() if up else ""
+    if ahead.isdigit() and int(ahead):
+        yield "unpushed", sha(git(cwd, "rev-parse", "HEAD").strip()), \
+            f"{ahead} commit{'s' if ahead != '1' else ''} not pushed to {up}"
     root = git(cwd, "rev-parse", "--show-toplevel").strip()
     try:
         lines = open(os.path.join(root, "MEMORY.md"), errors="replace").read().splitlines()
@@ -298,7 +150,7 @@ def candidates(cwd):
 
 
 # ---- promises
-PMAX, PKEEP, PEXP, PEVERY, PCOND, PBATCH, PIDLE = 200, 30 * 86400, 14 * 86400, 1800, 10, 3, 2
+PMAX, PKEEP, PEXP, PEVERY, PCOND, PBATCH = 200, 30 * 86400, 14 * 86400, 1800, 10, 3
 DUR = {"s": 1, "m": 60, "h": 3600, "d": 86400}
 
 
@@ -400,19 +252,15 @@ def run_cond(cmd, cwd):
         return 127, "cannot start"
 
 
-def promise_scan(proj, d, asked, now):
-    """lines for due promises: runs stored conditions (the only place they run)"""
-    n = sum(1 for x in d["asked"] if isinstance(x, dict) and str(x.get("key", "")).startswith("promise:")
-            and num(x.get("at")) > num(d.get("last_prompt")))
-    if n >= PIDLE:
-        return []
+def promise_scan(proj, now, batch=PBATCH):
+    """(lines for due promises, conditions run): runs stored conditions (the only place they run), at most batch"""
     mine = lambda p: p.get("status") == "open" and p.get("project") == proj
     gone = []
 
     def pick(ps):
         run = sorted((p for p in ps if mine(p) and p.get("when") and (p.get("at") is None or now >= num(p["at"]))
                       and now < num(p["expires"]) and now - num(p.get("last_eval")) >= num(p.get("every") or PEVERY)),
-                     key=lambda p: num(p.get("last_eval")))[:PBATCH]
+                     key=lambda p: num(p.get("last_eval")))[:max(0, batch)]
         for p in run:
             p["last_eval"] = now  # claimed: a concurrent scan skips it
         for p in ps:
@@ -435,12 +283,7 @@ def promise_scan(proj, d, asked, now):
             k, why = pstate(p, now)
             if k == "due":
                 out.append((p, why))
-    lines = []
-    for p, why in out:
-        fp = pfp(p, now)
-        if (f"promise:{p['id']}", sha(fp)) not in asked:
-            lines.append(f"promise:{p['id']}\t{fp}\t{pline(p, why)}")
-    return lines
+    return [f"promise:{p['id']}\t{pfp(p, now)}\t{pline(p, why)}" for p, why in out], len(todo)
 
 
 def promise_cmd(a, now):
@@ -482,9 +325,7 @@ def promise_cmd(a, now):
             print(r[1])
             sys.exit(4)
         due = " and ".join(x for x in (f"at {lt(at)}" if at else "", f"`{a.when}` exits 0" if a.when else "") if x)
-        on = load(a.session).get("on") is True if a.session else False
-        print(f"{r[1]}\t{due}\t" + ("next check, and the next session start in " + proj if on else
-              f"next is off here: it comes up at the next session start in {proj}; /wanjang:next on reminds you in this session"))
+        print(f"{r[1]}\t{due}\tthe next session start in {proj}, and the manager's next check when it is on")
     elif c in ("list", "due"):
         proj = project(a.cwd) if hasattr(a, "cwd") else None
         ps = pread()
@@ -492,8 +333,8 @@ def promise_cmd(a, now):
             hit = [(p, pstate(p, now)) for p in ps if p.get("status") == "open" and p.get("project") == proj]
             hit = [(p, w) for p, (k, w) in hit if k]
             if hit:
-                print("Promises due here. After you handle the user's first message, ask about the first one with the "
-                      "wanjang:next check's promise question (run `\"{0}\" ask promise:ID FP` first; `\"{0}\" scan` gives the FP; "
+                print("Promises due here. After you handle the user's first message, ask the user about the first one in one "
+                      "question (done, later or drop; then `\"{0}\" promise done ID`, `set ID --at T` or `drop ID`; "
                       "this is wanjang's bin/next, not a `next` on PATH, which may be Next.js):".format(os.path.realpath(__file__)))
                 for p, w in hit[:3]:
                     print(f"- {p['id']}: {pline(p, w)}")
@@ -580,7 +421,7 @@ def safe(k, key, what):
     m = SAFE[k].fullmatch(w) if k in SAFE and plain(what) else None
     return bool(m) and not CHAIN.search(unicodedata.normalize("NFKC", what or "").lower()) and not outward(what) \
         and (k != "relay" or (plain(key.partition(":")[2]) and m.group("to") == words(key.partition(":")[2])))
-YES_N, YES_AGE, YES_WIN, YES_KEEP, AUTO_KEEP, STRETCH, DAYMAX = 3, 86400, 14 * 86400, 10, 20, 2, 6
+YES_N, YES_AGE, YES_WIN, YES_KEEP, AUTO_KEEP, DAYMAX = 3, 86400, 14 * 86400, 10, 20, 6
 STALE = 3600  # ponytail: a running auto action never closed by `did` stops blocking after an hour
 
 
@@ -676,18 +517,20 @@ def dropped(t, cwd, now):
     return False
 
 
-def ask_level(d, sid, a, k, now):
+def ask_level(a, k, now):
+    """ask | auto for a.key/a.fp/a.what/a.cwd (a.session is recorded): the trust ladder's verdict"""
     t, p = tload(a.cwd)
     changed, v = dropped(t, a.cwd, now), "ask"
     au = t["auto"]
+    run = [e for e in au if e.get("state") == "running" and now - num(e.get("at")) < STALE]
+    if any(e.get("key") == a.key and e.get("fp") == sha(a.fp) for e in run):
+        return "auto"  # asked again for the action already running (the manager re-checks what the inspector asked)
     done = [e for e in au if e.get("state") != "asked"]
-    if d.get("on") is True and safe(k, a.key, a.what) \
-            and level(t, k, now) == "auto" \
-            and not any(e.get("state") == "running" and now - num(e.get("at")) < STALE for e in au) \
-            and sum(1 for e in done if e.get("session") == sid and num(e.get("at")) > num(d.get("last_prompt"))) < STRETCH \
+    if safe(k, a.key, a.what) and level(t, k, now) == "auto" and not run \
             and sum(1 for e in done if now - num(e.get("at")) < 86400) < DAYMAX:
-        au.append(dict(kind=k, key=a.key, fp=sha(a.fp), what=one(a.what), at=now, state="running", session=sid,
-                       cwd=os.path.realpath(a.cwd), commit="", files={}, yeses=yeses(t, k, now)[0]))
+        au.append(dict(kind=k, key=a.key, fp=sha(a.fp), what=one(a.what), at=now, state="running",
+                       session=getattr(a, "session", ""), cwd=os.path.realpath(a.cwd), commit="", files={},
+                       yeses=yeses(t, k, now)[0]))
         changed, v = True, "auto"
     if changed and not tsave(t, p):
         v = "ask"  # an auto action that cannot be recorded cannot be undone
@@ -701,12 +544,11 @@ def fhash(f):
         return "-"
 
 
-def trust_cmd(a, d, sid, now):
+def trust_cmd(a, now):
     t, p = tload(a.cwd)
     c = a.cmd
     if c == "answer":
-        k = next((x.get("kind") for x in reversed(d["asked"]) if isinstance(x, dict) and x.get("key") == a.key
-                  and x.get("fp") == sha(a.fp) and x.get("kind")), None) or kind_of(a.key)
+        k = kind_of(a.key, getattr(a, "what", ""))
         ch = False
         for e in t["auto"]:  # an `auto` the skill turned into a question
             if e.get("key") == a.key and e.get("fp") == sha(a.fp) and e.get("state") == "running":
@@ -721,7 +563,7 @@ def trust_cmd(a, d, sid, now):
         n, w = yeses(t, k, now)
         if tsave(t, p) and n0 < YES_N <= n and not t["off"] and not kd(t, k)["pin"]:
             print(f"{k} is trusted now ({n} yeses): from {'now' if w <= now else lt(w)} it is done without asking and "
-                  f"reported. Always ask: /wanjang:next trust {k} ask")
+                  f"reported. Always ask: /wanjang:manager trust {k} ask")
     elif c == "did":
         e = next((e for e in reversed(t["auto"]) if e.get("key") == a.key and e.get("fp") == sha(a.fp)
                   and e.get("state") == "running"), None)
@@ -747,7 +589,7 @@ def trust_cmd(a, d, sid, now):
             e["state"] = "ok"
             tsave(t, p)
             print(f"Done without asking ({k}, trusted after {int(num(e.get('yeses')))} yeses): {e.get('what')}"
-                  + (f", {a.note}" if a.note else "") + f". Undo: /wanjang:next undo · always ask: /wanjang:next trust {k} ask")
+                  + (f", {a.note}" if a.note else "") + f". Undo: /wanjang:manager undo · always ask: /wanjang:manager trust {k} ask")
         else:
             e["state"] = "failed"
             demote(t, k, now)
@@ -830,23 +672,25 @@ def trust_cmd(a, d, sid, now):
 
 
 def main():
-    if len(sys.argv) > 1 and sys.argv[1] == "stop":
-        return stop_hook()
-    if len(sys.argv) > 1 and sys.argv[1] == "prompt":
-        return prompt_hook()
+    if sys.argv[1:2] in (["prompt"], ["stop"]):  # hooks loaded before 0.13.0 still call these: pass, never block
+        sys.stdin.read()
+        return 0
     par = argparse.ArgumentParser(prog="next", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     com = argparse.ArgumentParser(add_help=False)
     com.add_argument("--session", default=os.environ.get("CLAUDE_CODE_SESSION_ID", ""))
     sub = par.add_subparsers(dest="cmd", required=True)
     s = sub.add_parser("scan", parents=[com])
     s.add_argument("--cwd", default=os.getcwd())
-    s.add_argument("--periodic", action="store_true")
-    for n in ("ask", "asked", "answer", "did"):
+    s = sub.add_parser("kind")
+    s.add_argument("key")
+    s.add_argument("--what", default="")
+    for n in ("ask", "answer", "did"):
         p = sub.add_parser(n, parents=[com])
         p.add_argument("key")
         p.add_argument("fp")
     sub.choices["ask"].add_argument("--what", default="")
     sub.choices["answer"].add_argument("reply", choices=("yes", "no"))
+    sub.choices["answer"].add_argument("--what", default="")
     s = sub.choices["did"]
     s.add_argument("outcome", choices=("ok", "failed", "ask"))
     s.add_argument("--commit", default="")
@@ -856,13 +700,7 @@ def main():
     s = sub.add_parser("trust", parents=[com])
     s.add_argument("args", nargs="*")
     s.add_argument("--json", action="store_true")
-    for n in ("on", "off"):
-        sub.add_parser(n, parents=[com])
-    s = sub.add_parser("cron", parents=[com])
-    s.add_argument("--exists", choices=("yes", "no"), default="yes")
-    s = sub.add_parser("status", parents=[com])
-    s.add_argument("--json", action="store_true")
-    for n in ("ask", "answer", "did", "undo", "trust", "status"):
+    for n in ("ask", "answer", "did", "undo", "trust"):
         sub.choices[n].add_argument("--cwd", default=os.getcwd())
     pp = sub.add_parser("promise", parents=[com]).add_subparsers(dest="pcmd", required=True)
     s = pp.add_parser("add")
@@ -886,55 +724,21 @@ def main():
         s.add_argument("id")
         if n == "done":
             s.add_argument("--note", default="")
-    a = par.parse_args()
+    a, now = par.parse_args(), clock()
     if a.cmd == "promise":
-        return promise_cmd(a, clock())
-    sid = a.session
-    if a.cmd in ("answer", "did", "undo", "trust"):  # no session needed: the state is the project's
-        return trust_cmd(a, load(sid) if sid and "/" not in sid else load(""), sid, clock())
-    if not sid or "/" in sid:
-        print("next: no session id (set --session or CLAUDE_CODE_SESSION_ID)", file=sys.stderr)
-        sys.exit(2)
-    d, now = load(sid), clock()
-    asked = {(x.get("key"), x.get("fp")) for x in d["asked"] if isinstance(x, dict)}
-    if a.cmd == "scan":
-        if a.periodic and now - num(d.get("last_check")) < PERIOD:
-            sys.exit(3)
-        d["last_check"] = now
-        save(sid, d)
-        for l in promise_scan(project(a.cwd), d, asked, now):
+        return promise_cmd(a, now)
+    if a.cmd in ("answer", "did", "undo", "trust"):  # the state is the project's
+        return trust_cmd(a, now)
+    if a.cmd == "kind":
+        print(kind_of(a.key, a.what))
+    elif a.cmd == "scan":
+        for l in promise_scan(project(a.cwd), now)[0]:
             print(l)
         for k, fp, summ in candidates(a.cwd):
-            if (k, sha(fp)) not in asked:
-                print(f"{k}\t{fp}\t{summ}")
-    elif a.cmd == "ask":
-        if (a.key, sha(a.fp)) in asked:
-            print("ask")
-        else:
-            k = kind_of(a.key, a.what)
-            d["asked"].append({"key": a.key, "fp": sha(a.fp), "at": now, "kind": k})
-            save(sid, d)
-            print(ask_level(d, sid, a, k, now))
-    elif a.cmd == "on":
-        d["on"], d["cron_created"], d["swept"] = True, now, False
-        save(sid, d)
-    elif a.cmd == "off":
-        d["on"], d["swept"] = False, False
-        save(sid, d)
-    elif a.cmd == "cron":
-        print(verdict(d, a.exists == "yes", now))
-    elif a.cmd == "asked":
-        sys.exit(0 if (a.key, sha(a.fp)) in asked else 1)
-    else:
-        age = lambda t: round(now - num(t)) if num(t) else None
-        o = dict(last_check_age=age(d.get("last_check")), last_hook_age=age(d.get("last_hook")), asked=len(d["asked"]),
-                 on=d.get("on") is True, cron_age=age(d.get("cron_created")),
-                 auto_today=sum(1 for e in tload(a.cwd)[0]["auto"] if now - num(e.get("at")) < 86400 and e.get("state") != "asked"))
-        if a.json:
-            print(json.dumps(o))
-        else:
-            f = lambda v: "never" if v is None else f"{v}s ago"
-            print(f"{'on, schedule made ' + f(o['cron_age']) if o['on'] else 'off'}, last check {f(o['last_check_age'])}, last hook {f(o['last_hook_age'])}, {o['asked']} asked, {o['auto_today']} auto today")
+            print(f"{k}\t{fp}\t{summ}")
+    else:  # ask
+        print(ask_level(a, kind_of(a.key, a.what), now))
 
 
-main()
+if __name__ == "__main__":
+    main()
