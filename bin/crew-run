@@ -1,0 +1,74 @@
+#!/usr/bin/env bash
+# Runs one wanjang agent as its own `claude -p` process billed to the Anthropic Console API key
+# (see /wanjang:crew-console). The brief comes on stdin. Prints the agent's final result, then one
+# line: crew-console: <agent> <model> $<cost> <duration> session <id>. The full JSON goes to a log.
+# Exit: 0 ok, 2 usage, 3 no Console key, 4 budget hit, 5 billing/auth error, 6 agent error, 7 no claude.
+set -u
+root=$(cd "$(dirname "$0")/.." && pwd)
+cfg=${CLAUDE_CONFIG_DIR:-$HOME/.claude}/wanjang
+usage() { cat <<'USAGE'
+Usage: crew-run <agent> [--model M] [--effort E] [--budget USD] [--cwd DIR] [--json] [--dry-run] < brief
+  agent    a wanjang agent: pm, builder, scout, checker, planner, designer, qa, inspector
+  --model  opus|sonnet|haiku (default: the agent's own)    --effort  low|medium|high|xhigh|max
+  --budget max spend in USD (default: the switch's budget, 10)
+  --json   print the result JSON instead of the text       --dry-run print the command, run nothing
+Examples:
+  echo "Where is the guard hook?" | crew-run scout --model haiku --effort low
+  crew-run builder --model sonnet --effort medium --cwd ~/app <<'BRIEF'
+  ...the brief...
+  BRIEF
+Exit: 0 ok, 2 usage, 3 no Console key, 4 budget hit, 5 billing/auth error, 6 agent error, 7 no claude.
+USAGE
+}
+die() { echo "crew-run: $2" >&2; exit "$1"; }
+agent= model= effort= budget= cwd=$PWD json=0 dry=0
+while [ $# -gt 0 ]; do
+  case $1 in
+    -h|--help) usage; exit 0 ;;
+    --model|--effort|--budget|--cwd) [ $# -ge 2 ] || die 2 "$1 needs a value"; case $1 in --model) model=$2 ;; --effort) effort=$2 ;; --budget) budget=$2 ;; --cwd) cwd=$2 ;; esac; shift ;;
+    --json) json=1 ;;
+    --dry-run) dry=1 ;;
+    -*) die 2 "unknown option $1 (see --help)" ;;
+    *) [ -z "$agent" ] || die 2 "one agent only"; agent=${1#wanjang:} ;;
+  esac
+  shift
+done
+[ -n "$agent" ] || { usage >&2; exit 2; }
+[ -f "$root/agents/$agent.md" ] || die 2 "no wanjang agent '$agent' (see --help)"
+[ -d "$cwd" ] || die 2 "--cwd $cwd is not a directory"
+case $effort in ""|low|medium|high|xhigh|max) ;; *) die 2 "--effort must be low, medium, high, xhigh or max" ;; esac
+if [ -z "$budget" ]; then budget=$(jq -r '.budget // empty' "$cfg/crew-console.json" 2>/dev/null); budget=${budget:-10}; fi
+printf '%s' "$budget" | grep -Eq '^[0-9]+(\.[0-9]+)?$' && [ -n "$(printf '%s' "$budget" | tr -d '0.')" ] || die 2 "--budget must be a positive number (USD)"
+
+settings=$(jq -cn --arg h "$root/bin/console-key" '{apiKeyHelper:$h, env:{ANTHROPIC_BASE_URL:"https://api.anthropic.com", ANTHROPIC_AUTH_TOKEN:"", ANTHROPIC_API_KEY:""}}')
+cmd=(claude -p --agent "wanjang:$agent" --permission-mode auto --output-format json --max-budget-usd "$budget" --settings "$settings")
+[ -n "$model" ] && cmd+=(--model "$model")
+[ -n "$effort" ] && cmd+=(--effort "$effort")
+if [ $dry = 1 ]; then printf 'cd %q && WANJANG_CREW_CONSOLE=1' "$cwd"; printf ' %q' "${cmd[@]}"; echo; exit 0; fi
+
+command -v claude >/dev/null || die 7 "claude is not on PATH"
+"$root/bin/console-key" >/dev/null 2>&1 || die 3 "no Console key stored; run /wanjang:provider key console"
+
+mkdir -p "$cfg/crew-console" || die 6 "cannot create $cfg/crew-console"
+log=$cfg/crew-console/$(date +%Y%m%d-%H%M%S)-$agent-$$.json
+err=$log.err
+(cd "$cwd" && WANJANG_CREW_CONSOLE=1 "${cmd[@]}") > "$log" 2> "$err"; rc=$?
+if ! jq -e . "$log" >/dev/null 2>&1; then
+  msg=$(head -c 600 "$err"); rm -f "$log" "$err"
+  case $msg in *[Cc]redit*|*401*|*[Aa]uthentication*|*[Ii]nvalid*key*) die 5 "billing or auth error: $msg (check the Console key and credit)" ;; esac
+  die 6 "agent failed (exit $rc): $msg"
+fi
+rm -f "$err"
+# the CLI prints one result object, or (verbose settings) an array of events that ends with it
+r=$(jq -c 'if type=="array" then (map(select(.type=="result")) | last // {}) else . end' "$log")
+sub=$(jq -r '.subtype // ""' <<<"$r"); isErr=$(jq -r '.is_error // false' <<<"$r")
+res=$(jq -r '.result // ""' <<<"$r")
+line=$(jq -r --arg a "$agent" --arg m "${model:-default}" '"crew-console: \($a) \($m) $\(.total_cost_usd // 0 | . * 10000 | round / 10000) \((.duration_ms // 0) / 1000 | round)s session \(.session_id // "?")"' <<<"$r")
+if [ $json = 1 ]; then printf '%s\n' "$r"; echo "$line" >&2; else printf '%s\n\n%s\n' "$res" "$line"; fi
+if [ "$isErr" = true ] || [ "$rc" != 0 ]; then
+  case $sub:$res in
+    *budget*) echo "crew-run: budget \$$budget hit; raise it with --budget or /wanjang:crew-console on --budget N" >&2; exit 4 ;;
+    *[Cc]redit*|*"Invalid API key"*|*401*|*[Aa]uthentication*) echo "crew-run: billing or auth error; check the Console key and credit (log: $log)" >&2; exit 5 ;;
+  esac
+  echo "crew-run: agent error ($sub); log: $log" >&2; exit 6
+fi

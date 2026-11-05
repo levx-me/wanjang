@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+# PreToolUse hook (Agent): with /wanjang:crew-console on, a wanjang agent called from the main session
+# is denied with the crew-run command to use instead, so it bills to the Console key.
+# Subagents (agent_id set) and crew-run children (WANJANG_CREW_CONSOLE=1) pass, as does everything else.
+set -u
+[ -n "${WANJANG_CREW_CONSOLE:-}" ] && exit 0
+input=$(cat)
+cfg=${CLAUDE_CONFIG_DIR:-$HOME/.claude}/wanjang
+[ "$(jq -r '.on // false' "$cfg/crew-console.json" 2>/dev/null)" = true ] || exit 0
+[ -z "$(printf '%s' "$input" | jq -r '.agent_id // empty')" ] || exit 0
+type=$(printf '%s' "$input" | jq -r '.tool_input.subagent_type // empty')
+case "$type" in wanjang:*) ;; *) exit 0 ;; esac
+bin=$(cd "$(dirname "$0")" && pwd)
+model=$(printf '%s' "$input" | jq -r '.tool_input.model // "sonnet"')
+effort=$(printf '%s' "$input" | jq -r '.tool_input.effort // "medium"')
+jq -n --arg r "Crew-console is on: wanjang agents bill to the Console API key. Do not call this Agent. Instead run Bash with run_in_background true: \"$bin/crew-run\" ${type#wanjang:} --model $model --effort $effort <<'BRIEF' ... the same prompt ... BRIEF. Then end your turn and report its result when woken (the last line of the output is the cost). No SendMessage to it; a PM's 'Bad news' lines arrive with its final report." \
+  '{hookSpecificOutput: {hookEventName: "PreToolUse", permissionDecision: "deny", permissionDecisionReason: $r}}'
