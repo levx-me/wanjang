@@ -192,6 +192,7 @@ Claude 세션에서는 PATH에 있어요. `/wanjang:docs <query> [dir]`가 이�
 | `/wanjang:manager promises` | 이 프로젝트에 적어 둔 약속: id, 언제인지, 조건, 부탁한 내용(아래 참고) |
 | `/wanjang:manager trust [off\|on\|<종류> ask\|<종류> reset]` | 묻지 않고 처리하는 일의 종류를 봐요. `off`로 끄면 다시 전부 물어봐요(아래 참고) |
 | `/wanjang:manager undo` | 묻지 않고 한 마지막 일(로컬 커밋이나 문서 수정)을 되돌려요, 되돌릴 수 있을 때만요 |
+| `/wanjang:manager ignore [--remove] [PATH]` | 폐기된 저장소를 더 이상 추적하지 않아요(PATH 아래 저장소 항목 없음, 세션은 계속 보여요). 인자 없이 쓰면 목록이에요 |
 | `/wanjang:slim` | 메인 세션에만 필요한 규칙을 모든 서브에이전트가 읽는 곳에서 빼내요(아래 참고) |
 | `/wanjang:relay <세션> <요청>` · `status` | 이 컴퓨터에서 다른 저장소를 맡은 Claude 세션에 일을 넘기고 보고를 추적해요(Claude Code의 ListAgents/SendMessage) |
 | `/wanjang:optimize` | 에이전트를 멈추지 않은 채로, 이 세션의 토큰이 어디에 쓰이는지 보고 해당하는 것만 고쳐요 |

@@ -24,6 +24,8 @@ Its memory is files, so a compaction or a restart loses nothing.
           session queues it). The evidence is checked first: changed means not sent, asked again.
   sent ID [--failed]         SendMessage went out (or failed: retried next tick)
   reply ID done|failed|question --note N   from the owning session: one locked ledger line
+  ignore [--remove] [PATH]   retired repos: scan reports no repo findings under PATH (sessions there still show);
+          bare lists them. Kept in state.json
   promises|trust|undo [ARGS]  bin/next promise list | trust | undo
 
 State: ${CLAUDE_CONFIG_DIR:-~/.claude}/wanjang/manager/ (ledger.jsonl, state.json, digest.txt, page.html).
@@ -365,9 +367,29 @@ def docs_flag(root):
     return None
 
 
+def ignored(root):
+    r = os.path.realpath(root) if root else ""
+    return any(r == p or r.startswith(p.rstrip("/") + "/") for p in sload().get("ignore", []))
+
+
+def ignore_cmd(a):
+    with lock():
+        st = sload()
+        ig = st.get("ignore", [])
+        if a.path:
+            p = os.path.realpath(os.path.expanduser(a.path))
+            ig = [x for x in ig if x != p] + ([] if a.remove else [p])
+            st["ignore"] = sorted(ig)
+            ssave(st)
+            print(f"{'removed' if a.remove else 'ignoring'} {p}")
+        else:
+            print("\n".join(ig) or "no ignored paths")
+
+
 def repo_findings(cwds, now, conds):
     """findings of the repositories the sessions are in; conds: promise conditions still allowed to run"""
     out, seen, roots = [], set(), {}
+    cwds = [c for c in cwds if not ignored(project(c[0]))]
     for cwd, name in cwds:
         roots.setdefault(project(cwd), (cwd, name))
         for k, fp, summ in nx().candidates(cwd):
@@ -899,6 +921,9 @@ def main():
     s.add_argument("--cwd", default="")
     for n in ("off", "status", "resume", "page", "ask-list"):
         sub.add_parser(n)
+    s = sub.add_parser("ignore")
+    s.add_argument("--remove", action="store_true")
+    s.add_argument("path", nargs="?")
     s = sub.add_parser("scan")
     s.add_argument("--force", action="store_true")
     s.add_argument("--sessions")
@@ -935,7 +960,7 @@ def main():
     {"on": lambda: on_cmd(a, now), "off": off_cmd, "status": lambda: resume_cmd(now), "resume": lambda: resume_cmd(now),
      "page": lambda: page_cmd(now), "ask-list": lambda: ask_list(now), "item": lambda: item_cmd(a, now),
      "answer": lambda: answer_cmd(a, now), "dispatch": lambda: dispatch_cmd(a, now), "sent": lambda: sent_cmd(a, now),
-     "reply": lambda: reply_cmd(a, now)}[a.cmd]()
+     "reply": lambda: reply_cmd(a, now), "ignore": lambda: ignore_cmd(a)}[a.cmd]()
 
 
 if __name__ == "__main__":

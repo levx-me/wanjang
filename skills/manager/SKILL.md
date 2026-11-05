@@ -27,6 +27,9 @@ CronList (on or off, next run), then `manager resume`. Reply in two lines.
 **promises**, **trust**, **undo**
 Promises, trust and undo live in `next`, which the manager keeps as its library. **promises**: `next promise list` as a short table (id, due, condition, what was asked); "drop 2" or "later 2" afterwards: `next promise drop 2`, or `next promise set 2 --at <tomorrow 09:00 local, ISO 8601>`; `list --all` shows every project. **trust** (a kind of work the user said yes to 3 times, the first at least a day before, within 14 days, is done without asking and reported; push, deploy and anything outward or irreversible is always asked): `next trust` with the rest of `$ARGUMENTS` (`off`, `on`, `<kind> ask`, `<kind> reset`); bare, show its table and that sentence. **undo**: `next undo` and its one line (exit 4: it changed nothing; say why).
 
+**ignore**
+`manager ignore PATH` stops all repo findings under a retired repo (its sessions still show); `--remove PATH` undoes it; bare lists. Use it when the user says to stop tracking a repo.
+
 **approve ID**, **reject ID**
 The user answers an item from the page. `manager answer ID approve|reject --words "<the user's words>"`; after approve go to Dispatch.
 

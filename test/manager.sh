@@ -290,5 +290,15 @@ out=$(echo '[{"sessionId":"aaaa1111-x","name":"repo-a","cwd":"'"$R"'","status":"
 jq -e '(.hooks|has("Stop")|not) and (.hooks.UserPromptSubmit[0].hooks[0]|(.command|endswith("bin/manager\" prompt")) and .timeout==45)' hooks/hooks.json >/dev/null \
   || bad "hooks.json: Stop hook left or prompt hook wrong"
 
+# ---- ignore: a retired repo gets no repo findings, its session still shows
+R2=$T/old; mkdir "$R2"; git -C "$R2" init -q; echo a > "$R2/a.txt"; R=$R2 gl add a.txt; R=$R2 gl commit -qm init; echo b >> "$R2/a.txt"
+live; reg "$P" oooo1111-x old-sess "$R2" waiting
+"$M" scan --force >/dev/null; grep -q "^- uncommitted .*$R2" "$DG" || bad "ignore: control: repo finding expected"
+[ "$("$M" ignore)" = "no ignored paths" ] || bad "ignore: list empty"
+"$M" ignore "$R2" | grep -q "^ignoring $R2$" || bad "ignore: add"
+"$M" scan --force >/dev/null; ! grep -q "^- [a-z]*:\?[a-z]* [0-9a-f]\{8\} | $R2" "$DG" && grep -q '^- old-sess | waiting' "$DG" || bad "ignore: findings gone, session kept: $(cat "$DG")"
+[ "$("$M" ignore)" = "$R2" ] || bad "ignore: list"
+"$M" ignore --remove "$R2" >/dev/null; [ "$("$M" ignore)" = "no ignored paths" ] || bad "ignore: remove"
+
 [ $fail = 0 ] && echo "manager: all passed"
 exit $fail
