@@ -55,7 +55,7 @@ run() { echo "{\"agentType\":\"$2\",\"model\":$3,\"description\":\"$4\",\"spawnD
     printf '{"type":"assistant","timestamp":"%s","message":{"content":[{"type":"tool_use","id":"u%s","name":"Bash","input":{"command":"ls"}}]}}\n' "$(isoN 5)" "$1"; } > "$E/agent-$1.jsonl"; }
 run bnew wanjang:builder '"sonnet"' "Fresh build" 180        # 3 min in: likely +3.5, latest +5
 run bold wanjang:builder '"sonnet"' "Slow build" 1500        # 25 min in: past p80
-run chk wanjang:checker '"opus"' "Check it" 60               # model has 2, type has 5
+run chk wanjang:checker '"opus"' "Check it" 60               # model has 2, type has 5, 4 of them lasted over 1 min
 run scx wanjang:scout '"sonnet"' "Look around" 60            # 2 samples only: no estimate
 run pm1 wanjang:pm null "Lead" 120                           # history +8 min, run log says more
 run pmw wanjang:builder '"sonnet"' "Task 2" 180
@@ -66,7 +66,7 @@ et=$(CLAUDE_CONFIG_DIR=$U bin/status --session s2 --cwd "$U/repo" --eta)
 json=$ej
 want '.agents[] | select(.id=="bnew") | .eta | [.likely - '"$NOW"', .latest - '"$NOW"', .left_min, .basis_n, .basis, .over] | @csv' '210,300,4,6,"wanjang:builder sonnet",false'
 want '.agents[] | select(.id=="bold") | .eta | [.likely, .latest, .over] | @csv' ',,true'
-want '.agents[] | select(.id=="chk") | .eta | [.basis_n, .basis] | @csv' '5,"wanjang:checker"'
+want '.agents[] | select(.id=="chk") | .eta | [.basis_n, .basis] | @csv' '4,"wanjang:checker"'
 want '.agents[] | select(.id=="scx") | .eta | [.likely, .basis_n, .over] | @csv' ',,false'
 want '.agents[] | select(.id=="pm1") | .eta | .tasks_done' 1
 want '.agents[] | select(.id=="pm1") | .eta | .basis | endswith("1 of 3 tasks done")' true
@@ -104,4 +104,23 @@ touch -t "$(date -v-30M +%Y%m%d%H%M)" "$R4/log.md"   # older than run2/run3, so 
 pmrun pmC Edit "{\"file_path\":\"$R4/log.md\",\"old_string\":\"a\",\"new_string\":\"b\"}"
 json=$(HOME=$U CLAUDE_CONFIG_DIR=$U bin/status --session s3 --cwd "$U/repo" --json --eta)
 want '.agents[] | select(.id=="pmC") | .eta | [.tasks_done, .tasks_total] | @csv' '1,2'
+# a waiting PM (final reply, child still running), an agent past p80 with 4 longer samples, one with 1, a mixed overall line
+hist wanjang:qa '"sonnet"' 5 6 7 8 9 20 22 24 26 30
+echo "{\"type\":\"user\",\"cwd\":\"$U/repo\",\"timestamp\":\"$(isoN 9000)\"}" > "$Q/s4.jsonl"
+E4=$Q/s4/subagents; mkdir -p "$E4"
+E=$E4; run pmq wanjang:pm null "Lead the QA" 120; run kid wanjang:builder '"sonnet"' "Child" 180
+sed -i.bak 's/"spawnDepth":1/"spawnDepth":2,"parentAgentId":"pmq"/' "$E/agent-kid.meta.json"; rm -f "$E"/*.bak
+{ txt 1200 "start"; txt 5 "Waiting for the child"; } > "$E/agent-pmq.jsonl"   # ends in a final reply
+run qa21 wanjang:qa '"sonnet"' "Past p80" 1260; run qa28 wanjang:qa '"sonnet"' "Way past" 1680; run scy wanjang:scout '"sonnet"' "No history" 60
+json=$(CLAUDE_CONFIG_DIR=$U bin/status --session s4 --cwd "$U/repo" --json --eta)
+et=$(CLAUDE_CONFIG_DIR=$U bin/status --session s4 --cwd "$U/repo" --eta)
+want '.agents[] | select(.id=="pmq") | [.running, .waits_on_children] | @csv' 'false,true'
+want '(.agents | map({(.id): .eta}) | add) | [.pmq.likely >= .kid.likely, .pmq.over] | @csv' 'true,false'
+want '.agents[] | select(.id=="qa21") | .eta | [.likely - '"$NOW"', .latest - '"$NOW"', .basis_n, .basis_of, .over] | @csv' '240,540,4,10,false'
+want '.agents[] | select(.id=="qa28") | .eta | [.likely, .over, .basis_n] | @csv' ',true,10'
+echo "$et" | grep -q '\[WAITING\] wanjang:pm - Lead the QA' || { echo "FAIL WAITING text"; fail=1; }
+echo "$et" | grep -q 'from 4 of 10 past wanjang:qa sonnet that ran this long' || { echo "FAIL longer-samples basis"; fail=1; }
+echo "$et" | grep -q 'taking longer than usual (most finish within 26 min), from 10 past' || { echo "FAIL over wording"; fail=1; }
+echo "$et" | grep -q 'min left), an estimate, 2 more with no estimate' || { echo "FAIL mixed overall line"; fail=1; }
+CLAUDE_CONFIG_DIR=$U bin/status --session s4 --cwd "$U/repo" | grep -q '\[WAITING\] wanjang:pm' || { echo "FAIL WAITING without eta"; fail=1; }
 [ $fail = 0 ] && echo "status.sh ok"; exit $fail

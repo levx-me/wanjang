@@ -8,8 +8,10 @@ session's agents are doing now, read from transcripts on disk (only the last 200
   runs    Wanjang run folders touched in the last 2 hours: status line and last 5 log lines
   tasks   the main session's open tasks, if on disk
   --eta   when each running agent should finish, from how long past finished agents of the same
-          type and model took (median = likely, 80th percentile = latest; needs 5 samples, else
-          the type alone, else no estimate). A wanjang:pm with a `## Tasks` table in its run log is
+          type and model took, counting only those that lasted longer than this agent has run (median =
+          likely, 80th percentile = latest; needs 5 samples and 3 longer, else the type alone, else
+          no estimate). A finished agent with a running descendant is [WAITING] (--json:
+          waits_on_children) and is estimated too. A wanjang:pm with a `## Tasks` table in its run log is
           refined by that table (k of n done, running and todo rows). Ends with when all top-level
           running work should be done. In --json each agent gets eta {likely, latest, left_min,
           basis_n, basis, over} (epoch seconds, null when none) and the top level eta_all.
@@ -171,6 +173,14 @@ def order(pid=None):
 
 
 tree = list(order())
+for g in agents:  # a finished agent with a running descendant is waiting for it (a PM waits for hand-backs with its turn ended)
+    g["waits_on_children"] = False
+for g in agents:
+    p = byid.get(g["parent"])
+    while g["running"] and p and p["id"] != g["id"]:
+        p["waits_on_children"] = p["waits_on_children"] or not p["running"]
+        p = byid.get(p["parent"])
+active = lambda g: g["running"] or g["waits_on_children"]
 
 # --- wanjang runs
 cwd = a.cwd
@@ -214,7 +224,7 @@ for tp in glob.glob(f"{home}/tasks/session-{sid[:8]}/*.json"):
 tasks.sort(key=lambda t: (str(t["id"]).zfill(6)))
 
 # --- eta
-eta, eta_all, tasks_of = {}, None, {}
+eta, eta_all, no_eta, tasks_of = {}, None, 0, {}
 if a.eta:
     hist = {}
     # ponytail: no cache; ~2700 agents read in 1.6 s. Add a cache file once this takes over ~5 s.
@@ -234,13 +244,17 @@ if a.eta:
             for k in ((m.get("agentType"), mod), (m.get("agentType"), "*")):
                 hist.setdefault(k, []).append((t1 - t0) / 60)
 
-    def stat(typ, model):
-        """(median min, p80 min, n, basis) for the model group, else the type alone, else None"""
-        for k, label in (((typ, model), f"{typ} {model}" if model else typ), ((typ, "*"), typ)):
-            v = sorted(hist.get(k, ()))
-            if len(v) >= 5:
-                return statistics.median(v), v[min(len(v) - 1, int(0.8 * len(v)))], len(v), label
-        return None
+    def stat(typ, model, el=0):
+        """(median min, p80 min, n, basis, n of group) of the past samples that lasted longer than el minutes, for the
+        model group, else the type alone; needs 5 in the group and 3 longer. Else (None, p80 of the group, ...) when
+        the agent ran past them, else None"""
+        groups = [(sorted(hist.get(k, ())), label) for k, label in
+                  (((typ, model), f"{typ} {model}" if model else typ), ((typ, "*"), typ))]
+        for v, label in groups:
+            w = [x for x in v if x > el]
+            if len(v) >= 5 and len(w) >= 3:
+                return statistics.median(w), w[min(len(w) - 1, int(0.8 * len(w)))], len(w), label, len(v)
+        return next(((None, v[min(len(v) - 1, int(0.8 * len(v)))], len(v), label, len(v)) for v, label in groups if len(v) >= 5), None)
 
     def worker(cell):
         """'builder opus' -> ('wanjang:builder', 'opus'); unknown -> builder sonnet"""
@@ -278,16 +292,29 @@ if a.eta:
         return next((lp for _, lp in rlogs if found and lp.endswith("/" + found)), None)
 
     p80s = {}
-    for g in sorted(tree, key=lambda g: g["type"] == "wanjang:pm"):  # PMs last: rows read their workers' eta
-        if not g["running"]:
+    def below(g):
+        for x in agents:
+            if x["parent"] == g["id"]:
+                yield x
+                yield from below(x)
+
+    for g in sorted(tree, key=lambda g: (g["type"] == "wanjang:pm", -g["depth"])):  # workers first, PMs last: rows read their workers' eta
+        if not active(g):
             continue
-        st = stat(g["type"], models.get(g["id"]))
+        st = stat(g["type"], models.get(g["id"]), (now - g["started"]) / 60)
         e = dict(likely=None, latest=None, left_min=None, basis_n=None, basis=None, over=False)
         if st:
-            med, p80, e["basis_n"], e["basis"] = st
+            med, p80, e["basis_n"], e["basis"], e["basis_of"] = st
             p80s[g["id"]] = p80
-            e["likely"], e["latest"] = g["started"] + med * 60, g["started"] + p80 * 60
-            e["over"] = now > e["latest"]
+            if med is None:
+                e["over"] = True
+            else:
+                e["likely"], e["latest"] = g["started"] + med * 60, g["started"] + p80 * 60
+        dl = max((eta[x["id"]]["likely"] for x in below(g) if x["id"] in eta and eta[x["id"]]["likely"]), default=None)
+        if g["waits_on_children"] and dl:
+            e["likely"] = max(e["likely"] or 0, dl)
+            e["latest"] = max(e["latest"] or 0, e["likely"])
+            e["over"] = False
         if g["type"] == "wanjang:pm" and rlogs:
             try:
                 # the PM's own run log; ponytail: none named in its transcript tail -> the newest run log with a
@@ -323,9 +350,10 @@ if a.eta:
         if e["over"] or g["stuck"]:
             e["likely"] = e["latest"] = e["left_min"] = None
         eta[g["id"]] = e
-    top = [eta[g["id"]]["likely"] for g in tree
-           if g["running"] and not (g["parent"] in byid and byid[g["parent"]]["running"]) and eta[g["id"]]["likely"]]
-    eta_all = max(top, default=None)
+    roots = [eta[g["id"]]["likely"] for g in tree
+             if active(g) and not (g["parent"] in byid and active(byid[g["parent"]]))]
+    top = [t for t in roots if t]
+    eta_all, no_eta = max(top, default=None), len(roots) - len(top)
     for g in tree:
         g["eta"] = eta.get(g["id"])
 
@@ -361,17 +389,20 @@ def eta_line(g):
     if not e["likely"]:
         return "eta: no estimate (fewer than 5 past runs of this type)"
     return (f"eta: likely {clock(e['likely'])} (~{e['left_min']} min left), latest {clock(e['latest'])} "
-            f"(~{max(0, round((e['latest'] - now) / 60))} min), from {str(e['basis_n']) + ' past ' if e['basis_n'] else ''}{e['basis']}")
+            f"(~{max(0, round((e['latest'] - now) / 60))} min), from "
+            f"{(str(e['basis_n']) + (' of ' + str(e['basis_of']) if e['basis_n'] != e.get('basis_of') else '') + ' past ') if e['basis_n'] else ''}"
+            f"{e['basis']}{' that ran this long' if e['basis_n'] and e['basis_n'] != e.get('basis_of') else ''}")
 
 
 if a.eta:
     L.append(f"all running work should be done by {clock(eta_all)} (~{max(0, round((eta_all - now) / 60))} min left), an estimate"
-             if eta_all else "nothing running" if not n_run else "running work: no estimate")
+             + (f", {no_eta} more with no estimate" if no_eta else "")
+             if eta_all else "nothing running" if not any(active(g) for g in tree) else "running work: no estimate")
 for g in tree:
     ind = "  " * (1 + (g["depth"] - 1 if g["parent"] in byid else 0))
-    st = "RUNNING" if g["running"] else "done"
+    st = "RUNNING" if g["running"] else "WAITING" if g["waits_on_children"] else "done"
     L.append(f"{ind}[{st}] {g['type']} - {short(g['desc'], 60)} (started {ago(g['started'])} ago, last write {ago(g['last_write'])} ago)")
-    if a.eta and g["running"]:
+    if a.eta and active(g):
         L.append(f"{ind}    {eta_line(g)}")
     if g["waiting"]:
         w = g["waiting"]
