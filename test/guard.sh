@@ -137,5 +137,26 @@ rm -rf "$T/.git/wanjang"
 checkl allow wanjang:builder  Edit  "$T/test/goal.sh"                    # no log at all
 checkl allow wanjang:builder  Edit  "$T/nonexistent/dir/x.ts"
 checkl allow wanjang:builder  Edit  "relative/path.ts"
+# waiting by sleeping: refused for every wanjang agent, untouched for the main session and others
+for who in wanjang:pm wanjang:builder wanjang:qa; do
+  check deny  $who 't=$(( $(date +%s)+570 )); until grep -q '"'"'"rateM"'"'"' $S/run2.out || [ $(date +%s) -gt $t ]; do sleep 20; done'
+  check deny  $who 'until test -f /x/done; do sleep 20; done'
+  check deny  $who 'while true; do tail -1 run.log; sleep 30; done'
+  check deny  $who 'while true; do
+  ls
+  sleep "$n"
+done'
+  check deny  $who 'sleep 120'
+  check deny  $who 'cd /x && sleep 5m'
+  check deny  $who 'timeout 600 sleep 600'
+  check allow $who 'until curl -s localhost:3000; do sleep 1; done'
+  check allow $who 'sleep 2'
+  check allow $who 'sleep 3'
+  check allow $who 'echo "never sleep 120 here"; ls sleep-notes.md'
+  check allow $who 'grep -rn sleep 120 bin/'
+done
+check allow "" 'sleep 120'
+check allow "" 'until test -f /x; do sleep 20; done'
+check allow other:agent 'sleep 120'
 [ $fail = 0 ] && echo "guard: all cases pass"
 exit $fail

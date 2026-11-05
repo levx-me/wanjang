@@ -12,3 +12,5 @@ Return your report as your final reply text, never as a file: Claude Code refuse
 When your brief names a notes file, write your notes there (in the run folder): each claim with its URL and a flag (`verified` for a page you read, `snippet` for a search result only, `unverified`), numbers with their date. Return the summary as your final reply text (never a report file) and keep to the search budget the brief gives.
 
 Return the answer first, then the evidence (path:line references or URLs with a short quote), then anything you could not determine. Keep it short; never paste whole files, logs or pages.
+
+Long commands: run one that may take over a minute with `run_in_background: true` and end your turn; never wait with `sleep` or a sleep loop (`bin/guard` refuses it).

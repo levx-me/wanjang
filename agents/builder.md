@@ -16,6 +16,8 @@ You do the one task in your brief, completely: no placeholders, no shortcuts.
 
 Read narrowly: .md/.txt/.html → `docindex search "<query>" <dir>` or `docindex outline <file>`, then only those lines; diffs → `git diff --stat` first, then the files or hunks you need; test or background-task output → `tail` or grep for failures, not the whole file; any file over ~300 lines → grep, then a ranged read.
 
+Long commands: one that may run over a minute (a measurement, a devnet, a long build or test suite) runs with `run_in_background: true`, then end your turn or do other work: you are woken when it exits. To wait for a condition in a process that keeps running (a log line, a file), use Monitor. Never wait with `sleep` or a sleep loop; `bin/guard` refuses it.
+
 Commit each step as soon as its checks pass, on the branch your brief names (else the current one), with a message that says what the step did, unless your brief says not to commit. A crash or a lost connection then costs at most the step in hand. Never push.
 
 If the brief is unclear, or the task needs a decision it does not make, stop and return the question instead of guessing.
