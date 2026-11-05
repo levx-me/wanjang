@@ -5,6 +5,7 @@ ROOT=$PWD
 T=$(mktemp -d); trap 'rm -rf "${T:?}"' EXIT
 fail=0
 bad() { echo "FAIL $1"; fail=1; }
+unset WANJANG_CREW_CONSOLE  # (run from inside a crew-run child, the hook would pass everything)
 export CLAUDE_CONFIG_DIR=$T/cfg USER=wanjang-test-nobody HOME=$T/home XDG_CONFIG_HOME= ANTHROPIC_CONSOLE_API_KEY=sk-ant-testsecret
 mkdir -p "$T/home" "$T/shim" "$T/projA" "$T/projB"; A=$T/projA; B=$T/projB
 printf '#!/bin/sh\n[ "$1" = find-generic-password ] && exit 44\nexit 1\n' > "$T/shim/security"
@@ -30,7 +31,7 @@ grep -q -- '--agent wanjang:scout' "$T/argv" && grep -q -- '--model haiku' "$T/a
 grep -q -- '--max-budget-usd 10 ' "$T/argv" || bad "default budget not 10"
 grep -q 'apiKeyHelper' "$T/argv" && grep -q 'ANTHROPIC_API_KEY' "$T/argv" || bad "settings shape"
 grep -rq testsecret "$T/argv" "$T/cfg" && bad "key leaked into argv or logs"
-[ "$(ls "$T/cfg/wanjang/crew-console" | wc -l)" -eq 1 ] || bad "log not kept"
+[ "$(ls "$T"/cfg/wanjang/crew-console/*.json 2>/dev/null | wc -l)" -eq 1 ] || bad "log not kept"
 # budget: flag, then the switch's value
 echo b | STUB_OUT=$OK bin/crew-run scout --budget 2.5 >/dev/null 2>&1; grep -q -- '--max-budget-usd 2.5 ' "$T/argv" || bad "budget flag"
 (cd "$T/projA" && "$ROOT/bin/crew-console" on --budget 4 >/dev/null) || bad "on: exit $?"
