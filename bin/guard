@@ -74,9 +74,11 @@ cmd=$(printf '%s' "$input" | jq -r '.tool_input.command // empty')
 sl='(^|[;&|(`]|[[:space:]](do|then|else)|\{)[[:space:]]*(timeout[[:space:]]+[0-9.smhd]+[[:space:]]+)?sleep[[:space:]]+'
 long='([3-9][0-9]|[1-9][0-9]{2,})(\.[0-9]*)?[smhd]?|[0-9.]+[mhd]'
 loopy='([5-9]|[1-9][0-9]+)(\.[0-9]*)?[smhd]?|[0-9.]+[mhd]|"?\$'
-if printf '%s' "$cmd" | grep -Eq "${sl}(${long})([^0-9.smhd]|$)" ||
+# A wait run with run_in_background is the way to wait: it frees the agent and wakes it at exit.
+bg=$(printf '%s' "$input" | jq -r '.tool_input.run_in_background // false')
+if [ "$bg" != true ] && { printf '%s' "$cmd" | grep -Eq "${sl}(${long})([^0-9.smhd]|$)" ||
    { printf '%s' "$cmd" | grep -Eq '(^|[;&|[:space:]])(while|until)[[:space:]]' &&
-     printf '%s' "$cmd" | grep -Eq "${sl}(${loopy})([^0-9.smhd]|$|[0-9A-Za-z_{])"; }; then
+     printf '%s' "$cmd" | grep -Eq "${sl}(${loopy})([^0-9.smhd]|$|[0-9A-Za-z_{])"; }; }; then
   deny "Do not wait by sleeping: a sleep loop or a long sleep blocks you and costs a turn per round. Run the long command with run_in_background: true, then end your turn (or do other work): you are woken when it exits. To wait for a condition inside a still-running process (a log line, a file), use the Monitor tool."
   exit 0
 fi

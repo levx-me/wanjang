@@ -158,5 +158,10 @@ done
 check allow "" 'sleep 120'
 check allow "" 'until test -f /x; do sleep 20; done'
 check allow other:agent 'sleep 120'
+# the same wait run in the background is the way to wait: allowed
+for who in wanjang:pm wanjang:builder; do
+  out=$(jq -n --arg t "$who" '{agent_type: $t, tool_input: {command: "until test -f /x/done; do sleep 20; done", run_in_background: true}}' | bin/guard)
+  [ -z "$out" ] || { echo "FAIL background wait loop denied for $who"; fail=1; }
+done
 [ $fail = 0 ] && echo "guard: all cases pass"
 exit $fail
