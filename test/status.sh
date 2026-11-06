@@ -129,7 +129,7 @@ export WANJANG_NOW=$(date +%s)
 CLAUDE_CONFIG_DIR=$U bin/status --session s4 --cwd "$U/repo" --eta >/dev/null
 jq -e '.hist | length > 0' "$C" >/dev/null || { echo "FAIL cache not written"; fail=1; }
 jq '.hist |= map(if .[0]=="wanjang:scout" then .[2]=[5,5,5,5,5,5] else . end)' "$C" > "$C.t" && mv "$C.t" "$C"   # mark the cache
-chk() { CLAUDE_CONFIG_DIR=$U bin/status --session s4 --cwd "$U/repo" --json --eta | jq -r '.agents[] | select(.id=="scy") | .eta.basis_n'; }
+chk() { rm -f "$U/wanjang/eta-held.json"; CLAUDE_CONFIG_DIR=$U bin/status --session s4 --cwd "$U/repo" --json --eta | jq -r '.agents[] | select(.id=="scy") | .eta.basis_n'; }
 [ "$(chk)" = 6 ] || { echo "FAIL warm cache not used"; fail=1; }
 WANJANG_NOW=$(( $(date +%s) + 700 )); [ "$(chk)" = null ] || { echo "FAIL stale cache not rebuilt"; fail=1; }
 export WANJANG_NOW=$(date +%s)
@@ -164,4 +164,13 @@ want '.agents[] | select(.id=="c1") | [.api, .running, .type, .eta.likely != nul
 want '[.agents[].id] | index("cw") - index("c1")' 1
 want '.agents[] | select(.id=="cw") | .api' false
 CLAUDE_CONFIG_DIR=$U WANJANG_NOW=$NOW bin/status --session s6 --cwd "$U/repo" --eta | grep -q '\[RUNNING\] wanjang:builder \[api\] - Api build' || { echo "FAIL [api] text"; fail=1; }
+# --- held estimate: same likely before it passes, new later one after, Tasks change re-estimates
+rm -f "$U/wanjang/eta-held.json"
+lk() { CLAUDE_CONFIG_DIR=$U WANJANG_NOW=$1 bin/status --session $2 --cwd "$U/repo" --json --eta | jq -r --arg i "$3" '.agents[] | select(.id==$i) | .eta | "\(.likely) \(.tasks_done)"'; }
+L1=$(lk $NOW s2 bnew); L2=$(lk $((NOW + 60)) s2 bnew); L3=$(lk $((NOW + 120)) s2 bnew)
+[ "${L1% *}" != null ] && [ "$L1" = "$L2" ] && [ "$L1" = "$L3" ] || { echo "FAIL held likely moved ($L1 | $L2 | $L3)"; fail=1; }
+L4=$(lk $(( ${L1%.*} + 30 )) s2 bnew)
+[ "${L4% *}" != "${L1% *}" ] && { [ "${L4% *}" = null ] || [ "$(echo "${L4% *} > ${L1% *}" | bc)" = 1 ]; } || { echo "FAIL held likely kept after it passed ($L1 -> $L4)"; fail=1; }   # later, or the over wording when no longer sample is left
+T1=$(lk $NOW s5 pmD); sed -i.bak 's/| T4 z | builder | todo |/| T4 z | builder | done x |/' "$R5/log.md"; T2=$(lk $((NOW + 60)) s5 pmD)
+[ "${T1#* }" = 1 ] && [ "${T2#* }" = 2 ] || { echo "FAIL Tasks change did not re-estimate ($T1 | $T2)"; fail=1; }
 [ $fail = 0 ] && echo "status.sh ok"; exit $fail

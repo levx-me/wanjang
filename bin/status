@@ -15,6 +15,7 @@ session's agents are doing now, read from transcripts on disk (only the last 200
           refined by that table (k of n done, running and todo rows). Ends with when all top-level
           running work should be done. In --json each agent gets eta {likely, latest, left_min,
           basis_n, basis, over} (epoch seconds, null when none) and the top level eta_all.
+          Each agent's first estimate is held in eta-held.json (same dir) until its likely time passes or its PM's Tasks counts change.
           History is cached in ${CLAUDE_CONFIG_DIR:-~/.claude}/wanjang/eta-cache.json (rebuilt after 10 min or when an
           agent meta file is newer). --bars (implies --eta) prints a bar per agent, elapsed / likely total, with
           neutral English labels.
@@ -370,6 +371,13 @@ if a.eta:
             pass
         return next((lp for _, lp in rlogs if found and lp.endswith("/" + found)), None)
 
+    heldf = f"{home}/wanjang/eta-held.json"  # each agent's first estimate, kept until it passes (else the countdown climbs)
+    try:
+        held = json.load(open(heldf))
+        assert isinstance(held, dict)
+    except (OSError, ValueError, AssertionError):
+        held = {}
+    held0 = json.dumps(held, sort_keys=True)
     p80s = {}
     def below(g):
         for x in agents:
@@ -382,6 +390,7 @@ if a.eta:
             continue
         st = stat(g["type"], models.get(g["id"]), (now - g["started"]) / 60)
         e = dict(likely=None, latest=None, left_min=None, basis_n=None, basis=None, over=False)
+        key = None  # a PM's Tasks counts: a change is real news and re-estimates
         if st:
             med, p80, e["basis_n"], e["basis"], e["basis_of"] = st
             if med is not None and e["basis_n"] != e["basis_of"]:
@@ -427,11 +436,34 @@ if a.eta:
                 e["over"] = False
                 e["basis"] = f"{e['basis'] or 'run log'}; {done} of {len(rows)} tasks done"
                 e["tasks_done"], e["tasks_total"] = done, len(rows)
+                key = [done, len(rows), sum(first(r) == "running" for r in rows)]
         if e["likely"]:
             e["left_min"] = max(0, round((e["likely"] - now) / 60))
         if e["over"] or g["stuck"]:
             e["likely"] = e["latest"] = e["left_min"] = None
+        h = held.get(g["id"])
+        if g["stuck"]:
+            held.pop(g["id"], None)
+        elif h and h.get("likely") and now < h["likely"] and h.get("key") == key:
+            for k in ("likely", "latest", "basis", "basis_n", "basis_of", "over", "tasks_done", "tasks_total"):
+                if k in h["e"]:
+                    e[k] = h["e"][k]
+            e["left_min"] = max(0, round((e["likely"] - now) / 60))
+            h["seen"] = now
+        elif e["likely"]:
+            held[g["id"]] = dict(likely=e["likely"], key=key, seen=now, e={k: e[k] for k in e if k != "left_min"})
+        else:
+            held.pop(g["id"], None)
         eta[g["id"]] = e
+    held = {i: h for i, h in held.items() if isinstance(h, dict) and now - h.get("seen", 0) < 86400}
+    if json.dumps(held, sort_keys=True) != held0:
+        try:  # atomic: a deck and a wen may call at once
+            os.makedirs(os.path.dirname(heldf), exist_ok=True)
+            tmp = f"{heldf}.{os.getpid()}"
+            json.dump(held, open(tmp, "w"))
+            os.replace(tmp, heldf)
+        except OSError:
+            pass
     roots = [eta[g["id"]]["likely"] for g in tree
              if active(g) and not (g["parent"] in byid and active(byid[g["parent"]]))]
     top = [t for t in roots if t]
