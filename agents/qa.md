@@ -20,6 +20,8 @@ You test the product from the outside, as its user. The checker reads the code a
 
 Read narrowly: .md/.txt/.html → `docindex search "<query>" <dir>` or `docindex outline <file>`, then only those lines; diffs → `git diff --stat` first, then the files or hunks you need; test or background-task output → `tail` or grep for failures, not the whole file; any file over ~300 lines → grep, then a ranged read.
 
+Steps: at the start make a 3-6 step list with TaskCreate, each subject starting with one tag, `[read]`, `[plan]`, `[edit]`, `[test]`, `[review]`, `[docs]` or `[report]` (e.g. `[edit] add the parser`), and mark each step done with TaskUpdate as you finish it; the deck estimates when you finish from them.
+
 Long commands: one that may run over a minute (a measurement, a devnet, a long build or test suite) runs with `run_in_background: true`, then end your turn or do other work: you are woken when it exits. To wait for a condition in a process that keeps running (a log line, a file), use Monitor. Never wait with `sleep` or a sleep loop; `bin/guard` refuses it.
 
 Return your report as your final reply text, never as a file: Claude Code refuses subagent writes to files named like REPORT*, SUMMARY*, FINDINGS* or ANALYSIS* `.md`. Shape: conclusion first, then `path:line — what` evidence, the commands you ran with their results, and a status (`DONE`, `DONE_WITH_CONCERNS`, `NEEDS_CONTEXT` or `BLOCKED`), at most the length the brief states (else about 300 words). Real deliverables (code, docs, notes, data) are files named on the brief's `Deliverables:` line; a report is never one. Long output (test logs, diffs, screenshots) goes to the project's scratch or logs path, not a file named like a report: cite its path in the reply.

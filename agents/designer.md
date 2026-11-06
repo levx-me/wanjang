@@ -31,6 +31,8 @@ Verify before you finish: run the build, lint and type-check, and the project's 
 
 Read narrowly: .md/.txt/.html → `docindex search "<query>" <dir>` or `docindex outline <file>`, then only those lines; diffs → `git diff --stat` first, then the files or hunks you need; test or background-task output → `tail` or grep for failures, not the whole file; any file over ~300 lines → grep, then a ranged read.
 
+Steps: at the start make a 3-6 step list with TaskCreate, each subject starting with one tag, `[read]`, `[plan]`, `[edit]`, `[test]`, `[review]`, `[docs]` or `[report]` (e.g. `[edit] add the parser`), and mark each step done with TaskUpdate as you finish it; the deck estimates when you finish from them.
+
 Long commands: one that may run over a minute (a measurement, a devnet, a long build or test suite) runs with `run_in_background: true`, then end your turn or do other work: you are woken when it exits. To wait for a condition in a process that keeps running (a log line, a file), use Monitor. Never wait with `sleep` or a sleep loop; `bin/guard` refuses it.
 
 Commit each step as soon as its checks pass, on the branch your brief names (else the current one), with a message that says what the step did, unless your brief says not to commit. A crash or a lost connection then costs at most the step in hand. Never push.

@@ -189,7 +189,7 @@ field: know-how for a field comes from playbooks.
 | `/wanjang:visual-doc` | Turn a report, dashboard or explanation into one HTML page in a fixed style |
 | `/wanjang:brief` | Write a brief for non-developers: plain words, the decisions to approve, each paired with a question |
 | `/wanjang:now` | What each running agent is doing now, for how long, what is done and what looks stuck (`bin/status`, read-only) |
-| `/wanjang:wen` | Roughly when the running work will be done, per agent and overall, estimated from past runs, drawn as bars (`bin/status --eta --bars`, read-only; history cached in `~/.claude/wanjang/eta-cache.json`). The Steading deck shows it live |
+| `/wanjang:wen` | Roughly when the running work will be done, per agent and overall, estimated from past runs, drawn as bars (`bin/status --eta --bars`, read-only; history cached in `~/.claude/wanjang/wanjang.db`). The Steading deck shows it live |
 | `/wanjang:now --week\|--since DATE\|--repo X` | What finished runs shipped, one line each, from the ledger at `~/.claude/wanjang/ledger.md` (honours `CLAUDE_CONFIG_DIR`; `bin/ledger`) |
 | `/wanjang:manager on\|off\|status` | Make this session the manager of your other open sessions: an hourly look, one page, up to 4 questions, approved items sent to their sessions (off by default, one manager per user) |
 | `/wanjang:manager` | Check now, and show the page |

@@ -32,6 +32,11 @@ grep -q -- '--max-budget-usd 10 ' "$T/argv" || bad "default budget not 10"
 grep -q 'apiKeyHelper' "$T/argv" && grep -q 'ANTHROPIC_API_KEY' "$T/argv" || bad "settings shape"
 grep -rq testsecret "$T/argv" "$T/cfg" && bad "key leaked into argv or logs"
 [ "$(ls "$T"/cfg/wanjang/crew-api/*.json 2>/dev/null | wc -l)" -eq 1 ] || bad "log not kept"
+# the run record is a crew_runs row as well as runs/<session>.json
+R=$(ls "$T"/cfg/wanjang/crew-api/runs/*.json | head -1); sid=$(jq -r .session_id "$R")
+[ "$(sqlite3 "$T/cfg/wanjang/wanjang.db" "SELECT agent || '|' || model || '|' || status || '|' || exit FROM crew_runs WHERE session_id='$sid'")" = "scout|haiku|done|0" ] || bad "crew_runs row missing or wrong"
+echo "it's a \"quoted\" brief" | STUB_OUT=$OK bin/crew-run scout >/dev/null 2>&1
+[ "$(sqlite3 "$T/cfg/wanjang/wanjang.db" "SELECT count(*) FROM crew_runs WHERE title = 'it''s a \"quoted\" brief'")" = 1 ] || bad "crew_runs: quote in the title"
 # budget: flag, then the switch's value
 echo b | STUB_OUT=$OK bin/crew-run scout --budget 2.5 >/dev/null 2>&1; grep -q -- '--max-budget-usd 2.5 ' "$T/argv" || bad "budget flag"
 (cd "$T/projA" && "$ROOT/bin/crew-api" on --budget 4 >/dev/null) || bad "on: exit $?"

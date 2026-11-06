@@ -23,9 +23,10 @@ gl() { git -C "$R" -c user.email=a@b -c user.name=t "$@"; }
 tick() { jq -nc --arg s "${1:-own-0000}" --arg p "${2:-wanjang manager tick}" '{session_id:$s,prompt:$p}' | "$M" prompt; }
 blocked() { jq -e --arg r "$1" '.decision=="block" and .reason==$r and .hookSpecificOutput.suppressOriginalPrompt==true' >/dev/null; }
 ctx() { jq -r '.hookSpecificOutput.additionalContext // empty'; }
-LG=$CLAUDE_CONFIG_DIR/wanjang/manager/ledger.jsonl ST=$CLAUDE_CONFIG_DIR/wanjang/manager/state.json
+DB=$CLAUDE_CONFIG_DIR/wanjang/wanjang.db ST=$CLAUDE_CONFIG_DIR/wanjang/manager/state.json
 DG=$CLAUDE_CONFIG_DIR/wanjang/manager/digest.txt PG=$CLAUDE_CONFIG_DIR/wanjang/manager/page.html
-ev() { jq -c "select(.id==\"$1\")" "$LG"; }
+lg() { sqlite3 "$DB" "SELECT data FROM ledger ORDER BY seq" 2>/dev/null; }   # the ledger, one JSON event per line
+ev() { lg | jq -c "select(.id==\"$1\")"; }
 fpnow() { "$N" scan --cwd "$R" | awk -F'\t' -v k="$1" '$1==k{print $2}'; }
 judged() { grep -E '^- [^ ]+ [^ ]+ \| ' "$DG" | while read -r _ k f _; do "$M" item drop "$k" "$f" --why test >/dev/null; done; }  # the inspector drops every new finding
 
@@ -42,7 +43,7 @@ jq -nc '{id:"1",subject:"you: pick a name",status:"pending"}' > "$CLAUDE_CONFIG_
 "$M" on --name boss | grep -q '^manager on in boss$' || bad "on: $("$M" on)"
 [ "$(jq -r '.owner|[.sessionId,.pid,.name,.cwd]|@tsv' "$ST")" = "$(printf 'own-0000\t%s\tboss\t%s' "$OWN" "$R")" ] || bad "on: owner $(jq -c .owner "$ST")"
 out=$(tick); blocked "·" <<<"$out" || bad "1: nothing new should block with ·: $out"
-[ ! -s "$LG" ] || bad "1: ledger written on a nothing-new tick"
+[ -z "$(lg)" ] || bad "1: ledger written on a nothing-new tick"
 "$M" scan >/dev/null; [ $? = 3 ] || bad "1: scan with nothing new should exit 3"
 # 2, 3: the owner's entry, a dead pid and a non-interactive entry never show
 "$M" scan --force >/dev/null
@@ -58,7 +59,7 @@ out=$(tick); c=$(ctx <<<"$out")
 grep -q '^- uncommitted [0-9a-f]\{8\} | '"$R"' | repo-a | 1 file changed: a.txt' "$DG" || bad "4: digest: $(cat "$DG")"
 F1=$(awk '/^- uncommitted /{print $3}' "$DG")
 # installed under a long plugin path, the steps still fit
-LB=$T/plugins/cache/wanjang/wanjang/0.13.0/bin; mkdir -p "$LB"; cp bin/manager bin/next bin/status bin/manager-page "$LB"/
+LB=$T/plugins/cache/wanjang/wanjang/0.13.0/bin; mkdir -p "$LB"; cp bin/manager bin/next bin/status bin/manager-page bin/schema.sql "$LB"/
 c=$(cp "$ST" "$T/st"; jq -nc '{session_id:"own-0000",prompt:"wanjang manager tick"}' | "$LB/manager" prompt | ctx); cp "$T/st" "$ST"
 [ -n "$c" ] && [ ${#c} -le 800 ] || bad "4: steps under a long path are ${#c} chars"
 
@@ -124,7 +125,7 @@ sys.exit(0 if 0 <= i < j else 1)
 EOF
 clk 28800; out=$(tick); [ -n "$(ctx <<<"$out")" ] && grep -q "^REPLY $id done from repo-a: committed abc123" "$DG" || bad "9: a reply should be news"
 W=(); for i in 1 2 3 4; do CLAUDE_CODE_SESSION_ID=aaaa1111-x "$M" reply "$id" question --note "q$i" >/dev/null & W+=($!); done; wait "${W[@]}"
-[ "$(grep -c '"ev": *"reply"' "$LG")" = 5 ] || bad "9: concurrent replies: $(grep -c '"ev": *"reply"' "$LG") lines"
+[ "$(lg | grep -c '"ev": *"reply"')" = 5 ] || bad "9: concurrent replies: $(lg | grep -c '"ev": *"reply"') lines"
 "$M" reply m-999 done 2>/dev/null; [ $? = 1 ] || bad "reply to an unknown item should exit 1"
 
 # ---- 8: the evidence changed after approval: not sent, re-asked as a new fp
@@ -138,9 +139,9 @@ clk 36000; tick >/dev/null; grep -q '^- uncommitted ' "$DG" && [ "$(awk '/^- unc
 # ---- 8b: KEY written as "<kind>:<fp>" is stored as "<kind>"; an old suffixed ledger item still dispatches unchanged
 F8=$(fpnow uncommitted)
 id8b=$("$M" item add "uncommitted:$F8" "$F8" --project "$R" --session repo-a --text "Save the work as a commit" --why "x" | cut -d' ' -f1)
-[ "$(jq -r --arg i "$id8b" 'select(.id==$i and .key!=null)|.key' "$LG" | head -1)" = uncommitted ] || bad "8b: key not normalized"
+[ "$(lg | jq -r --arg i "$id8b" 'select(.id==$i and .key!=null)|.key' | head -1)" = uncommitted ] || bad "8b: key not normalized"
 "$M" answer "$id8b" approve --words "go" >/dev/null
-sed -i.bak "s/\"key\": *\"uncommitted\"\(.*$F8\)/\"key\": \"uncommitted:$F8\"\1/" "$LG"; rm -f "$LG.bak"
+sqlite3 "$DB" "UPDATE ledger SET data = replace(data, '\"key\": \"uncommitted\"', '\"key\": \"uncommitted:$F8\"') WHERE data LIKE '%$F8%'"
 out=$("$M" dispatch --id "$id8b"); grep -q "^CHANGED" <<<"$out" && bad "8b: suffixed key reported CHANGED: $out"
 
 # ---- 10: sent, then 2 idle ticks of the target with no reply: Problems
@@ -204,11 +205,6 @@ out=$("$M" dispatch --id "$idw2")
   || bad "--what: the auto message sends the short action and the derived kind: $out"
 "$M" sent "$idw2" >/dev/null
 [ "$("$M" item add commit:w w1 --project "$R3" --text x)" = "$idw2 sent" ] || bad "item add on a sent item should give its status"
-# a ledger line cut short (a crash mid-write) does not swallow the next event
-printf '{"ev":"cut' >> "$LG"
-out=$("$M" item add other:nl n1 --project "$R3" --session repo-c --text "Look at it" --why x)
-[ "$(tail -1 "$LG" | jq -r .id)" = "${out% *}" ] || bad "ledger: the event after a cut line was lost: $(tail -2 "$LG")"
-grep -vx '{"ev":"cut' "$LG" > "$T/lg"; cat "$T/lg" > "$LG"  # jq below reads the whole file
 # past the time budget the scan skips promise conditions and says so; the next scan runs them
 pid=$("$N" promise add "check x" --when "touch '$T/ran'; false" --cwd "$R3" | cut -f1)
 WANJANG_SCAN_BUDGET=0 "$M" scan --force >/dev/null
@@ -269,8 +265,8 @@ CLAUDE_CODE_SESSION_ID=bbbb2222-x "$M" on >/dev/null; [ ! -e "$CLAUDE_CONFIG_DIR
 out=$(tick bbbb2222-x); grep -q 'it is off' <<<"$(ctx <<<"$out")" || bad "tick after off: $out"
 
 # ---- the ledger prune on `on`: closed items older than 30 days go, open ones stay
-n0=$(wc -l < "$LG"); clk $((60 * 86400)); "$M" on >/dev/null
-[ "$(wc -l < "$LG")" -lt "$n0" ] && [ -n "$(ev "$id10")" ] && [ -z "$(ev m-1)" ] || bad "prune: $(wc -l < "$LG") of $n0 lines; sent item kept? $(ev "$id10" | head -1)"
+n0=$(lg | wc -l); clk $((60 * 86400)); "$M" on >/dev/null
+[ "$(lg | wc -l)" -lt "$n0" ] && [ -n "$(ev "$id10")" ] && [ -z "$(ev m-1)" ] || bad "prune: $(lg | wc -l) of $n0 lines; sent item kept? $(ev "$id10" | head -1)"
 
 # ---- 15: no registry, no config dir: every command exits 0 with one line
 for c in "on" "off" "status" "resume" "scan" "page" "ask-list" "dispatch"; do
@@ -307,6 +303,16 @@ live; reg "$P" oooo1111-x old-sess "$R2" waiting
 "$M" scan --force >/dev/null; ! grep -q "^- [a-z]*:\?[a-z]* [0-9a-f]\{8\} | $R2" "$DG" && grep -q '^- old-sess | waiting' "$DG" || bad "ignore: findings gone, session kept: $(cat "$DG")"
 [ "$("$M" ignore)" = "$R2" ] || bad "ignore: list"
 "$M" ignore --remove "$R2" >/dev/null; [ "$("$M" ignore)" = "no ignored paths" ] || bad "ignore: remove"
+
+# ---- the ledger moved into wanjang.db: an old ledger.jsonl (with a cut line) is imported once and renamed, never deleted
+C2=$T/cfg2; mkdir -p "$C2/wanjang/manager"; : > "$C2/wanjang/manager/ledger.lock"
+printf '{"t":"2026-01-01T00:00:00+00:00","ev":"found","id":"m-1","key":"todo","fp":"aaaa1111","project":"/p","session":"s","kind":"todo","text":"Old item","why":"w","cost":"c"}\n{"t":"2026-01-01T00:00:01+00:00","ev":"asked","id":"m-1"}\n{"ev":"cut' > "$C2/wanjang/manager/ledger.jsonl"
+for i in 1 2; do out=$(CLAUDE_CONFIG_DIR=$C2 "$M" ask-list); done
+[ "$(sqlite3 "$C2/wanjang/wanjang.db" 'SELECT count(*) FROM ledger')" = 2 ] && [ -f "$C2/wanjang/manager/ledger.jsonl.migrated" ] && [ -f "$C2/wanjang/manager/ledger.lock.migrated" ] \
+  && [ ! -e "$C2/wanjang/manager/ledger.jsonl" ] || bad "ledger migration: $(sqlite3 "$C2/wanjang/wanjang.db" 'SELECT count(*) FROM ledger') rows"
+[ "$(sqlite3 "$C2/wanjang/wanjang.db" 'PRAGMA journal_mode')" = wal ] || bad "ledger: not WAL"
+CLAUDE_CONFIG_DIR=$C2 "$M" item add todo bbbb2222 --project /p --session s --kind todo --text "New item" --why w --cost c >/dev/null
+[ "$(sqlite3 "$C2/wanjang/wanjang.db" "SELECT ev || ':' || id FROM ledger ORDER BY seq" | sed -n '1p;2p;$p' | tr '\n' ' ')" = "found:m-1 asked:m-1 found:m-2 " ] || bad "ledger: order after the import: $(sqlite3 "$C2/wanjang/wanjang.db" 'SELECT ev, id FROM ledger')"
 
 [ $fail = 0 ] && echo "manager: all passed"
 exit $fail

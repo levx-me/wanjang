@@ -123,17 +123,20 @@ echo "$et" | grep -q 'from 4 of 10 past wanjang:qa sonnet that ran this long' ||
 echo "$et" | grep -q 'taking longer than usual (most finish within 26 min), from 10 past' || { echo "FAIL over wording"; fail=1; }
 echo "$et" | grep -q 'min left), an estimate, 2 more with no estimate' || { echo "FAIL mixed overall line"; fail=1; }
 CLAUDE_CONFIG_DIR=$U bin/status --session s4 --cwd "$U/repo" | grep -q '\[WAITING\] wanjang:pm' || { echo "FAIL WAITING without eta"; fail=1; }
-# --- cache: written on the first call, reused while warm, rebuilt when stale or when a meta file is newer
-C=$U/wanjang/eta-cache.json; rm -f "$C"
+# --- cache (eta_cache table of wanjang.db): written on the first call, reused while warm, rebuilt when stale or when a meta file is newer
+DB=$U/wanjang/wanjang.db; sq() { sqlite3 "$DB" "$@"; }
+sq 'DELETE FROM eta_cache' 2>/dev/null
 export WANJANG_NOW=$(date +%s)
 CLAUDE_CONFIG_DIR=$U bin/status --session s4 --cwd "$U/repo" --eta >/dev/null
-jq -e '.hist | length > 0' "$C" >/dev/null || { echo "FAIL cache not written"; fail=1; }
-jq '.hist |= map(if .[0]=="wanjang:scout" then .[2]=[5,5,5,5,5,5] else . end)' "$C" > "$C.t" && mv "$C.t" "$C"   # mark the cache
-chk() { rm -f "$U/wanjang/eta-held.json"; CLAUDE_CONFIG_DIR=$U bin/status --session s4 --cwd "$U/repo" --json --eta | jq -r '.agents[] | select(.id=="scy") | .eta.basis_n'; }
+[ "$(sq 'SELECT count(*) > 0 FROM eta_cache')" = 1 ] || { echo "FAIL cache not written"; fail=1; }
+mark() { sq "CREATE TEMP TABLE m AS SELECT DISTINCT model FROM eta_cache WHERE agent_type='wanjang:scout'; DELETE FROM eta_cache WHERE agent_type='wanjang:scout';
+  INSERT INTO eta_cache SELECT 'wanjang:scout', model, 5, (SELECT max(built) FROM eta_cache) FROM m, (WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i + 1 FROM n WHERE i < 6) SELECT i FROM n)"; }   # mark the cache: six 5-minute scouts
+mark
+chk() { sq 'DELETE FROM eta_held'; CLAUDE_CONFIG_DIR=$U bin/status --session s4 --cwd "$U/repo" --json --eta | jq -r '.agents[] | select(.id=="scy") | .eta.basis_n'; }
 [ "$(chk)" = 6 ] || { echo "FAIL warm cache not used"; fail=1; }
 WANJANG_NOW=$(( $(date +%s) + 700 )); [ "$(chk)" = null ] || { echo "FAIL stale cache not rebuilt"; fail=1; }
 export WANJANG_NOW=$(date +%s)
-jq '.hist |= map(if .[0]=="wanjang:scout" then .[2]=[5,5,5,5,5,5] else . end)' "$C" > "$C.t" && mv "$C.t" "$C"
+mark
 [ "$(chk)" = 6 ] || { echo "FAIL re-marked cache not used"; fail=1; }
 sleep 1; touch "$H"/agent-h-scout-sonnet-1.meta.json   # a newer meta file
 [ "$(chk)" = null ] || { echo "FAIL newer meta not rebuilt"; fail=1; }
@@ -155,8 +158,8 @@ json=$(CLAUDE_CONFIG_DIR=$U WANJANG_NOW=$NOW bin/status --session s5 --cwd "$U/r
 want '.agents[] | select(.id=="pmD") | .eta | [.tasks_done, .tasks_total] | @csv' '1,4'   # the short T3 row has no status cell: counted as a row, neither done nor running
 # --- crew-api run under the session: listed as an agent [api], eta like a builder, its own worker nested
 echo "{\"type\":\"user\",\"cwd\":\"$U/repo\",\"timestamp\":\"$(isoN 9000)\"}" > "$Q/s6.jsonl"
-mkdir -p "$U/wanjang/crew-api/runs" "$Q/c1/subagents"
-echo "{\"session_id\":\"c1\",\"parent_session_id\":\"s6\",\"agent\":\"builder\",\"model\":\"sonnet\",\"title\":\"Api build\",\"pid\":$$,\"started\":$((NOW - 180)),\"status\":\"running\"}" > "$U/wanjang/crew-api/runs/c1.json"
+mkdir -p "$Q/c1/subagents"
+sq "INSERT OR REPLACE INTO crew_runs(session_id, parent_session_id, agent, model, title, pid, started, status, updated) VALUES('c1', 's6', 'builder', 'sonnet', 'Api build', $$, $((NOW - 180)), 'running', $NOW)"   # what bin/crew-run writes
 E=$Q; mkdir -p "$Q/c1"; run c1 wanjang:builder '"sonnet"' x 180; mv "$Q/agent-c1.jsonl" "$Q/c1.jsonl"; rm "$Q/agent-c1.meta.json"
 E=$Q/c1/subagents; run cw wanjang:scout '"sonnet"' "Api worker" 60
 json=$(CLAUDE_CONFIG_DIR=$U WANJANG_NOW=$NOW bin/status --session s6 --cwd "$U/repo" --json --eta)
@@ -165,7 +168,7 @@ want '[.agents[].id] | index("cw") - index("c1")' 1
 want '.agents[] | select(.id=="cw") | .api' false
 CLAUDE_CONFIG_DIR=$U WANJANG_NOW=$NOW bin/status --session s6 --cwd "$U/repo" --eta | grep -q '\[RUNNING\] wanjang:builder \[api\] - Api build' || { echo "FAIL [api] text"; fail=1; }
 # --- held estimate: same likely before it passes, new later one after, Tasks change re-estimates
-rm -f "$U/wanjang/eta-held.json"
+sq "DELETE FROM eta_held"
 lk() { CLAUDE_CONFIG_DIR=$U WANJANG_NOW=$1 bin/status --session $2 --cwd "$U/repo" --json --eta | jq -r --arg i "$3" '.agents[] | select(.id==$i) | .eta | "\(.likely) \(.tasks_done)"'; }
 L1=$(lk $NOW s2 bnew); L2=$(lk $((NOW + 60)) s2 bnew); L3=$(lk $((NOW + 120)) s2 bnew)
 [ "${L1% *}" != null ] && [ "$L1" = "$L2" ] && [ "$L1" = "$L3" ] || { echo "FAIL held likely moved ($L1 | $L2 | $L3)"; fail=1; }
@@ -173,4 +176,10 @@ L4=$(lk $(( ${L1%.*} + 30 )) s2 bnew)
 [ "${L4% *}" != "${L1% *}" ] && { [ "${L4% *}" = null ] || [ "$(echo "${L4% *} > ${L1% *}" | bc)" = 1 ]; } || { echo "FAIL held likely kept after it passed ($L1 -> $L4)"; fail=1; }   # later, or the over wording when no longer sample is left
 T1=$(lk $NOW s5 pmD); sed -i.bak 's/| T4 z | builder | todo |/| T4 z | builder | done x |/' "$R5/log.md"; T2=$(lk $((NOW + 60)) s5 pmD)
 [ "${T1#* }" = 1 ] && [ "${T2#* }" = 2 ] || { echo "FAIL Tasks change did not re-estimate ($T1 | $T2)"; fail=1; }
+# --- first open imports the old runs/*.json records into crew_runs once and leaves them in place (a consumer such as the deck reads them)
+V=$(mktemp -d); mkdir -p "$V/wanjang/crew-api/runs" "$V/projects/-x"; cp "$Q/s6.jsonl" "$V/projects/-x/s6.jsonl"
+echo '{"session_id":"old1","parent_session_id":"s6","agent":"scout","model":"haiku","title":"Old run","pid":1,"started":5,"status":"done","ended":9,"cost_usd":0.5}' > "$V/wanjang/crew-api/runs/old1.json"
+CLAUDE_CONFIG_DIR=$V bin/status --session s6 --cwd "$U/repo" >/dev/null
+[ "$(sqlite3 "$V/wanjang/wanjang.db" "SELECT agent || model || status || ended || cost_usd FROM crew_runs WHERE session_id='old1'")" = "scouthaikudone90.5" ] && [ -f "$V/wanjang/crew-api/runs/old1.json" ] || { echo "FAIL runs import"; fail=1; }
+rm -rf "$V"
 [ $fail = 0 ] && echo "status.sh ok"; exit $fail

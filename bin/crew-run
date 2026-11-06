@@ -61,11 +61,18 @@ err=$log.err
 brief=$(cat); runs=$cfg/crew-api/runs; run=$runs/$sid.json; started=$(date +%s); cost=0
 mkdir -p "$runs" || die 6 "cannot create $runs"
 title=$(printf '%s\n' "$brief" | grep -m1 '[^[:space:]]' | cut -c1-100)
+db=$cfg/wanjang.db
+{ echo 'PRAGMA journal_mode=WAL;'; cat "$root/bin/schema.sql"; } | sqlite3 -cmd '.timeout 5000' "$db" >/dev/null 2>&1  # the crew_runs table; a failure only leaves the file record
 runwrite() { # status exit
   jq -n --arg sid "$sid" --arg parent "${CLAUDE_CODE_SESSION_ID:-}" --arg agent "$agent" --arg model "${model:-default}" --arg effort "$effort" \
     --arg title "$title" --arg cwd "$cwd" --argjson pid $$ --argjson started "$started" --arg status "$1" --argjson cost "$cost" --argjson exit "$2" --arg log "$log" \
     '{session_id:$sid,parent_session_id:$parent,agent:$agent,model:$model,effort:$effort,title:$title,cwd:$cwd,pid:$pid,started:$started,status:$status,cost_usd:$cost,exit:$exit,ended:(if $status=="running" then null else now|floor end),log:$log}
      | if .status=="running" then del(.exit,.ended) else . end' > "$run.tmp" && mv "$run.tmp" "$run"
+  # the same record as a crew_runs row (json_extract of the record, quotes doubled); never fails the run
+  local j c sq="'" cols=session_id,parent_session_id,agent,model,effort,title,cwd,pid,started,status,cost_usd,exit,ended,log vals=
+  j=$(jq -c . "$run" 2>/dev/null) || return 0
+  for c in ${cols//,/ }; do vals+="json_extract(j,'\$.$c'),"; done
+  sqlite3 -cmd '.timeout 5000' "$db" "INSERT OR REPLACE INTO crew_runs($cols,updated) SELECT ${vals}(julianday('now')-2440587.5)*86400.0 FROM (SELECT '${j//$sq/$sq$sq}' AS j)" >/dev/null 2>&1 || true
 }
 runwrite running 0
 trap 'rc=$?; runwrite "$([ $rc = 0 ] && echo done || echo error)" $rc; exit $rc' EXIT

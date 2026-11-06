@@ -15,15 +15,21 @@ session's agents are doing now, read from transcripts on disk (only the last 200
           refined by that table (k of n done, running and todo rows). Ends with when all top-level
           running work should be done. In --json each agent gets eta {likely, latest, left_min,
           basis_n, basis, over} (epoch seconds, null when none) and the top level eta_all.
-          Each agent's first estimate is held in eta-held.json (same dir) until its likely time passes or its PM's Tasks counts change.
-          History is cached in ${CLAUDE_CONFIG_DIR:-~/.claude}/wanjang/eta-cache.json (rebuilt after 10 min or when an
+          A worker that keeps a step list (TaskCreate with a "[tag] " subject prefix: read, plan, edit, test, review, docs,
+          report; TaskUpdate to mark progress) is estimated from its steps: the current step's rest plus the median of each
+          step to come, from every finished step on disk (the steps table of that database; type and model, else tag alone), scaled by this
+          agent's pace on its finished steps (method "progress"). With no list, its tool calls give a stage (only reads, edits
+          begun, a test or build after the last edit) blended with the history median (method "phase"); else
+          method "history". --json adds eta.method and steps_done, steps_total. A step's change re-estimates, like a Tasks count.
+          Each agent's first estimate is held in the eta_held table until its likely time passes or its PM's Tasks counts or its steps' counts change.
+          History is cached in the eta_cache table of ${CLAUDE_CONFIG_DIR:-~/.claude}/wanjang/wanjang.db (rebuilt after 10 min or when an
           agent meta file is newer). --bars (implies --eta) prints a bar per agent, elapsed / likely total, with
           neutral English labels.
           Clock: env WANJANG_NOW (epoch seconds) replaces the current time, for tests.
 
 Session: --session, else $CLAUDE_CODE_SESSION_ID, else the newest transcript for the cwd.
 Exit codes: 0 snapshot printed, 2 bad arguments or no transcript."""
-import argparse, glob, json, os, re, statistics, subprocess, sys, time
+import argparse, glob, json, os, re, sqlite3, statistics, subprocess, sys, time
 from datetime import datetime
 
 TAIL, WINDOW, STUCK = 200_000, 7200, 600
@@ -180,14 +186,63 @@ def alive(pid):
         return False
 
 
+CREW_COLS = "session_id parent_session_id agent model effort title cwd pid started status cost_usd exit ended log".split()
+
+
 def crew_records():
-    """crew-api run records (crew-console is the old name), as (record, path)"""
-    for n in ("crew-api", "crew-console"):
-        for rp in glob.glob(f"{home}/wanjang/{n}/runs/*.json"):
-            try:
-                yield json.load(open(rp)), rp
-            except (OSError, ValueError):
-                pass
+    """crew-api run records (crew_runs table), as (record dict, epoch seconds it was last written)"""
+    db = open_db()
+    try:
+        for *v, upd in db.execute(f"SELECT {', '.join(CREW_COLS)}, updated FROM crew_runs"):
+            yield dict(zip(CREW_COLS, v)), upd or 0
+    except (sqlite3.Error, AttributeError):
+        pass
+
+
+_db = []
+
+
+def open_db():
+    """the wanjang database (WAL, 5 s busy timeout; bin/schema.sql), or None when it cannot be opened; opened once. The first
+    open imports the old eta-cache.json and eta-held.json and renames them *.migrated (never deleted), and the runs/*.json
+    records into crew_runs (those stay where they are: bin/crew-run still writes them and a consumer such as the deck reads them)"""
+    if _db:
+        return _db[0]
+    _db.append(None)
+    try:
+        os.makedirs(f"{home}/wanjang", exist_ok=True)
+        db = sqlite3.connect(f"{home}/wanjang/wanjang.db", timeout=5)
+        db.execute("PRAGMA journal_mode=WAL")
+        db.executescript(open(os.path.join(os.path.dirname(os.path.realpath(__file__)), "schema.sql")).read())
+        for name, sql, rows in (
+                ("eta-cache.json", "INSERT INTO eta_cache VALUES(?,?,?,?)",
+                 lambda j, built: [(t, m, v, built) for t, m, vs in j["hist"] for v in vs]),
+                ("eta-held.json", "INSERT OR REPLACE INTO eta_held VALUES(?,?,?,?,?)",
+                 lambda j, built: [(i, h.get("likely"), json.dumps(h.get("key")), h.get("seen"), json.dumps(h.get("e")))
+                                   for i, h in j.items() if isinstance(h, dict)])):
+            f = f"{home}/wanjang/{name}"
+            if os.path.exists(f):
+                try:
+                    with db:
+                        db.executemany(sql, rows(json.load(open(f)), os.path.getmtime(f)))
+                except (ValueError, KeyError, TypeError, AttributeError):
+                    pass  # unreadable old file: renamed all the same, it was only a cache
+                os.replace(f, f + ".migrated")
+        if not db.execute("SELECT 1 FROM meta WHERE key='crew_runs_imported'").fetchone():
+            with db:
+                for n in ("crew-console", "crew-api"):  # the old name first: a run in both folders keeps the newer
+                    for rp in glob.glob(f"{home}/wanjang/{n}/runs/*.json"):
+                        try:
+                            r = json.load(open(rp))
+                            db.execute(f"INSERT OR REPLACE INTO crew_runs VALUES({','.join('?' * (len(CREW_COLS) + 1))})",
+                                       [r.get(c) for c in CREW_COLS] + [os.path.getmtime(rp)])
+                        except (OSError, ValueError, AttributeError, sqlite3.Error):
+                            pass
+                db.execute("INSERT INTO meta VALUES('crew_runs_imported', '1')")
+        _db[0] = db
+        return db
+    except (sqlite3.Error, OSError):
+        return None
 
 
 add_agents(os.path.splitext(main)[0])
@@ -285,14 +340,15 @@ tasks.sort(key=lambda t: (str(t["id"]).zfill(6)))
 # --- eta
 eta, eta_all, no_eta, tasks_of = {}, None, 0, {}
 if a.eta:
+    db = open_db()
     hist = {}
     metas = glob.glob(f"{home}/projects/*/*/subagents/agent-*.meta.json")
-    cache = f"{home}/wanjang/eta-cache.json"
     try:  # warm: under 10 min old and no meta file written since (one stat each)
-        cm = os.path.getmtime(cache)
-        if now - cm < 600 and max((os.path.getmtime(m) for m in metas + [p for _, p in crew_records()]), default=0) <= cm:
-            hist = {(t, m): v for t, m, v in json.load(open(cache))["hist"]}
-    except (OSError, ValueError, KeyError, TypeError):
+        cm = db.execute("SELECT max(built) FROM eta_cache").fetchone()[0] or 0
+        if now - cm < 600 and max([os.path.getmtime(m) for m in metas] + [u for _, u in crew_records()], default=0) <= cm:
+            for t, m, v in db.execute("SELECT agent_type, model, minutes FROM eta_cache"):
+                hist.setdefault((t, m), []).append(v)
+    except (sqlite3.Error, AttributeError, OSError):
         hist = {}
     warm = bool(hist)
     for mp in () if warm else metas:
@@ -314,15 +370,109 @@ if a.eta:
         if rec.get("status") == "done" and rec.get("ended") and rec.get("started") and rec["ended"] > rec["started"]:
             for k in ((f"wanjang:{rec.get('agent')}", rec.get("model")), (f"wanjang:{rec.get('agent')}", "*")):
                 hist.setdefault(k, []).append((rec["ended"] - rec["started"]) / 60)
-    if hist and not warm:
-        try:  # atomic; a failed write only costs the next call a rebuild
-            os.makedirs(os.path.dirname(cache), exist_ok=True)
-            tmp = f"{cache}.{os.getpid()}"
-            with open(tmp, "w") as f:
-                json.dump(dict(hist=[[t, m, v] for (t, m), v in hist.items()]), f)
-            os.replace(tmp, cache)
-        except OSError:
+    if hist and not warm and db:
+        try:  # a failed write only costs the next call a rebuild
+            with db:
+                db.execute("DELETE FROM eta_cache")
+                db.executemany("INSERT INTO eta_cache VALUES(?,?,?,?)",
+                               [(t, m, v, time.time()) for (t, m), vs in hist.items() for v in vs])
+        except sqlite3.Error:
             pass
+
+    TAGS = "read|plan|edit|test|review|docs|report"
+
+    def scan(jp, tools=False):
+        """an agent's own steps from its TaskCreate/TaskUpdate calls (the only step record transcripts have; TodoWrite never
+        appears in them, in subscription or `claude -p` runs): steps [{tag, start, end}] in creation order, tagged ("[edit] ...")
+        ones only, last_end (the last completion of any task, else the start), and with tools=True the tool calls [(name, command)]"""
+        made, tasks, order, tl = {}, {}, [], []
+        last = first_ts(jp)
+        with open(jp, "rb") as f:
+            for l in f:
+                if not (tools or b"TaskCreate" in l or b"TaskUpdate" in l or b"Task #" in l):
+                    continue
+                try:
+                    r = json.loads(l)
+                except ValueError:
+                    continue
+                t, c = ts(r.get("timestamp") or ""), (r.get("message") or {}).get("content")
+                for b in c if isinstance(c, list) else ():
+                    if not isinstance(b, dict) or not t:
+                        continue
+                    i = b.get("input") if isinstance(b.get("input"), dict) else {}
+                    if b.get("type") == "tool_use" and b.get("name") == "TaskCreate":
+                        made[b.get("id")] = str(i.get("subject", ""))
+                    elif b.get("type") == "tool_use" and b.get("name") == "TaskUpdate":
+                        k = tasks.get(str(i.get("taskId")))
+                        if not k:
+                            continue
+                        k["subject"] = str(i.get("subject", k["subject"]))
+                        if i.get("status") == "in_progress" and not k["start"]:
+                            k["start"] = t
+                        elif i.get("status") == "completed" and not k["end"]:
+                            k["start"], k["end"], last = k["start"] or last, t, t
+                        elif i.get("status") == "deleted":
+                            k["gone"] = True
+                    elif b.get("type") == "tool_use":
+                        tl.append((b.get("name", ""), str(i.get("command", ""))))
+                    elif b.get("type") == "tool_result" and b.get("tool_use_id") in made:
+                        x = b.get("content")
+                        x = x if isinstance(x, str) else " ".join(str(y.get("text", "")) for y in x if isinstance(y, dict)) if isinstance(x, list) else ""
+                        m = re.match(r"Task #(\d+) created", x)
+                        if m:
+                            tasks[m.group(1)] = dict(subject=made[b["tool_use_id"]], start=None, end=None, gone=False)
+                            order.append(tasks[m.group(1)])
+        steps = []
+        for k in order:
+            m = re.match(rf"\[({TAGS})\]", k["subject"].strip().lower())
+            if m and not k["gone"]:
+                steps.append(dict(tag=m.group(1), start=k["start"], end=k["end"]))
+        return dict(steps=steps, last_end=last, tools=tl)
+
+    # step history: every finished step of every agent on disk (type, model, tag, minutes, start, end), in the steps table
+    # derived from the transcripts; a transcript is rescanned only when its mtime or size changed, and only new steps are inserted
+    try:
+        seen = {p: (m, z) for p, m, z in db.execute("SELECT path, mtime, size FROM transcripts")}
+        cand = {mp[: -len(".meta.json")] + ".jsonl": (mp, None) for mp in metas}
+        for rec, _ in crew_records():
+            for jp in glob.glob(f"{home}/projects/*/{rec['session_id']}.jsonl") if rec.get("session_id") else ():
+                cand[jp] = (None, rec)
+        for jp, (mp, rec) in cand.items():
+            try:
+                stt = os.stat(jp)
+                if seen.get(jp) == (stt.st_mtime, stt.st_size):
+                    continue
+                if mp:
+                    m = json.load(open(mp))
+                    typ, mod = m.get("agentType"), None if m.get("model") == "inherit" else m.get("model")
+                else:
+                    typ, mod = f"wanjang:{rec.get('agent')}", rec.get("model")
+                have = set(db.execute("SELECT t0, t1 FROM steps WHERE path=?", (jp,)))
+                # ponytail: a batch "mark all done" at the end gives near-zero durations; steps under 10 s are dropped, not repaired
+                rows = [(jp, typ, mod, s["tag"], (s["end"] - s["start"]) / 60, s["start"], s["end"]) for s in scan(jp)["steps"]
+                        if s["end"] and s["start"] and s["end"] - s["start"] >= 10 and (s["start"], s["end"]) not in have]
+            except (OSError, ValueError, AttributeError):
+                continue
+            if rows or jp not in seen:  # a running agent with nothing new costs no write
+                db.executemany("INSERT INTO steps VALUES(?,?,?,?,?,?,?)", rows)
+                db.execute("INSERT OR REPLACE INTO transcripts VALUES(?,?,?)", (jp, stt.st_mtime, stt.st_size))
+        db.commit()
+    except (sqlite3.Error, AttributeError):
+        db = None  # no step history this call: the estimate falls back to the phase and agent history
+
+    def step_stat(typ, model, tag, own):
+        """(median min, p80 min, n) of the other agents' finished steps with this tag, for the type and model, else for
+        the tag alone; needs 3. None when there are fewer"""
+        if not db:
+            return None
+        try:
+            for q, args in (("agent_type IS ? AND model IS ? AND tag=?", (typ, model, tag)), ("tag=?", (tag,))):
+                v = [r[0] for r in db.execute(f"SELECT minutes FROM steps WHERE {q} AND path<>? ORDER BY minutes", args + (own,))]
+                if len(v) >= 3:
+                    return statistics.median(v), v[min(len(v) - 1, int(0.8 * len(v)))], len(v)
+        except sqlite3.Error:
+            pass
+        return None
 
     def stat(typ, model, el=0):
         """(median min, p80 min, n, basis, n of group) of the past samples that lasted longer than el minutes, for the
@@ -371,11 +521,46 @@ if a.eta:
             pass
         return next((lp for _, lp in rlogs if found and lp.endswith("/" + found)), None)
 
-    heldf = f"{home}/wanjang/eta-held.json"  # each agent's first estimate, kept until it passes (else the countdown climbs)
+    def progress(g, sc):
+        """by the agent's own steps: the current step's expected rest plus the median of every step still to come (this type
+        and model's past steps with the same tag, else any agent's), all scaled by how fast this agent ran its finished steps
+        against those medians. (likely, latest, n, done, total) or None when it has no steps, none left, or a tag has no history"""
+        steps = sc["steps"]
+        todo = [s for s in steps if not s["end"]]
+        if not todo:
+            return None
+        ms = {t: step_stat(g["type"], models.get(g["id"]), t, g["jp"]) for t in {s["tag"] for s in steps}}
+        if any(ms[s["tag"]] is None for s in todo):
+            return None
+        own = [((s["end"] - s["start"]) / 60, ms[s["tag"]][0]) for s in steps if s["end"] and s["start"] and ms[s["tag"]]]
+        k = min(4, max(0.25, sum(x for x, _ in own) / sum(y for _, y in own))) if own else 1
+        cur = next((s for s in todo if s["start"]), todo[0])
+        el = max(0, now - (cur["start"] or sc["last_end"] or now)) / 60
+        out = []
+        for i in (0, 1):  # median, then p80
+            c = ms[cur["tag"]][i] * k
+            # ponytail: a step past its expected length is guessed to need half as long again as it has run; no data behind it
+            out.append(now + 60 * (c - el if el < c else el / 2) + 60 * sum(ms[s["tag"]][i] * k for s in todo if s is not cur))
+        return out[0], max(out), min(ms[s["tag"]][2] for s in todo), len(steps) - len(todo), len(steps)
+
+    def phase(tools):
+        """what stage a step-less agent is in, from its tool calls: (name, fraction of the run done) or None under 3 calls.
+        Only reads so far: early; edits or writes begun: middle; a test or build command after the last edit: late"""
+        if len(tools) < 3:
+            return None
+        last = max((i for i, (n, _) in enumerate(tools) if n in ("Edit", "Write", "MultiEdit", "NotebookEdit")), default=None)
+        if last is None:
+            return "early", 0.25
+        if any(n == "Bash" and re.search(r"\b(test|tests|pytest|jest|vitest|cargo|npm|bun|make|build|tsc|lint|check|forge)\b", c)
+               for n, c in tools[last:]):
+            return "late", 0.85
+        return "middle", 0.55
+
+    held = {}  # each agent's first estimate, kept until it passes (else the countdown climbs)
     try:
-        held = json.load(open(heldf))
-        assert isinstance(held, dict)
-    except (OSError, ValueError, AssertionError):
+        for i, lk, k, sn, ej in db.execute("SELECT agent_id, likely, key, seen, e FROM eta_held"):
+            held[i] = dict(likely=lk, key=json.loads(k), seen=sn, e=json.loads(ej))
+    except (sqlite3.Error, AttributeError, ValueError):
         held = {}
     held0 = json.dumps(held, sort_keys=True)
     p80s = {}
@@ -389,7 +574,7 @@ if a.eta:
         if not active(g):
             continue
         st = stat(g["type"], models.get(g["id"]), (now - g["started"]) / 60)
-        e = dict(likely=None, latest=None, left_min=None, basis_n=None, basis=None, over=False)
+        e = dict(likely=None, latest=None, left_min=None, basis_n=None, basis=None, over=False, method=None)
         key = None  # a PM's Tasks counts: a change is real news and re-estimates
         if st:
             med, p80, e["basis_n"], e["basis"], e["basis_of"] = st
@@ -400,6 +585,24 @@ if a.eta:
                 e["over"] = True
             else:
                 e["likely"], e["latest"] = g["started"] + med * 60, g["started"] + p80 * 60
+        e["method"] = "history" if e["likely"] or e["over"] else None
+        if g["type"] != "wanjang:pm":
+            try:
+                sc = scan(g["jp"], tools=True)
+                pr = progress(g, sc)
+                ph = None if pr else phase(sc["tools"])
+            except OSError:
+                pr = ph = None
+            if pr:
+                e["likely"], e["latest"], e["basis_n"], e["steps_done"], e["steps_total"] = pr
+                e.update(method="progress", over=False, basis=f"progress: {pr[3]} of {pr[4]} steps done", basis_of=None)
+                key = [pr[3], pr[4]]
+            elif ph and st and st[0] is not None:  # blended with the history median; needs one, else the run log or none
+                el = now - g["started"]
+                e["likely"] = g["started"] + (el / ph[1] + st[0] * 60) / 2
+                e["latest"] = e["likely"] + (st[1] - st[0]) * 60
+                e.update(method="phase", over=False, basis=f"phase: {ph[0]}, blended with {e['basis']}", basis_n=None, basis_of=None)
+                key = [ph[0]]
         dl = max((eta[x["id"]]["likely"] for x in below(g) if x["id"] in eta and eta[x["id"]]["likely"]), default=None)
         if g["waits_on_children"] and dl:
             e["likely"] = max(e["likely"] or 0, dl)
@@ -445,7 +648,7 @@ if a.eta:
         if g["stuck"]:
             held.pop(g["id"], None)
         elif h and h.get("likely") and now < h["likely"] and h.get("key") == key:
-            for k in ("likely", "latest", "basis", "basis_n", "basis_of", "over", "tasks_done", "tasks_total"):
+            for k in ("likely", "latest", "basis", "basis_n", "basis_of", "over", "method", "tasks_done", "tasks_total", "steps_done", "steps_total"):
                 if k in h["e"]:
                     e[k] = h["e"][k]
             e["left_min"] = max(0, round((e["likely"] - now) / 60))
@@ -456,13 +659,13 @@ if a.eta:
             held.pop(g["id"], None)
         eta[g["id"]] = e
     held = {i: h for i, h in held.items() if isinstance(h, dict) and now - h.get("seen", 0) < 86400}
-    if json.dumps(held, sort_keys=True) != held0:
-        try:  # atomic: a deck and a wen may call at once
-            os.makedirs(os.path.dirname(heldf), exist_ok=True)
-            tmp = f"{heldf}.{os.getpid()}"
-            json.dump(held, open(tmp, "w"))
-            os.replace(tmp, heldf)
-        except OSError:
+    if db and json.dumps(held, sort_keys=True) != held0:
+        try:  # a deck and a wen may call at once: one transaction, the busy timeout waits for the other
+            with db:
+                db.execute("DELETE FROM eta_held")
+                db.executemany("INSERT INTO eta_held VALUES(?,?,?,?,?)", [(i, h.get("likely"), json.dumps(h.get("key")), h.get("seen"),
+                                                                       json.dumps(h.get("e"))) for i, h in held.items()])
+        except sqlite3.Error:
             pass
     roots = [eta[g["id"]]["likely"] for g in tree
              if active(g) and not (g["parent"] in byid and active(byid[g["parent"]]))]
@@ -534,7 +737,7 @@ def eta_line(g):
         return "eta: no estimate (fewer than 5 past runs of this type)"
     return (f"eta: likely {clock(e['likely'])} (~{e['left_min']} min left), latest {clock(e['latest'])} "
             f"(~{max(0, round((e['latest'] - now) / 60))} min), from "
-            f"{(str(e['basis_n']) + (' of ' + str(e['basis_of']) if e['basis_n'] != e.get('basis_of') else '') + ' past ') if e['basis_n'] else ''}"
+            f"{(str(e['basis_n']) + (' of ' + str(e['basis_of']) if e['basis_n'] != e.get('basis_of') else '') + ' past ') if e['basis_n'] and e.get('method') != 'progress' else ''}"
             f"{e['basis']}")
 
 if a.eta:

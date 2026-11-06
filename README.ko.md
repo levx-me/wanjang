@@ -185,7 +185,7 @@ Claude 세션에서는 PATH에 있어요. `/wanjang:docs <query> [dir]`가 이�
 | `/wanjang:visual-doc` | 보고서, 대시보드, 설명을 정해진 스타일의 HTML 페이지 하나로 만들어요 |
 | `/wanjang:brief` | 개발자가 아닌 분을 위한 브리프를 써요: 쉬운 말, 승인할 결정, 결정마다 질문 하나 |
 | `/wanjang:now` | 돌아가는 에이전트가 지금 무엇을, 얼마나 오래 하는지, 끝난 것과 막힌 것 같은 것을 알려줘요(`bin/status`, 읽기 전용) |
-| `/wanjang:wen` | 돌아가는 일이 대략 언제 끝날지 에이전트별로, 전체로 알려줘요. 지난 run의 소요 시간으로 추정해 막대로 그려요(`bin/status --eta --bars`, 읽기 전용, 기록은 `~/.claude/wanjang/eta-cache.json`에 캐시해요). Steading 덱에서 실시간으로 볼 수 있어요 |
+| `/wanjang:wen` | 돌아가는 일이 대략 언제 끝날지 에이전트별로, 전체로 알려줘요. 지난 run의 소요 시간으로 추정해 막대로 그려요(`bin/status --eta --bars`, 읽기 전용, 기록은 `~/.claude/wanjang/wanjang.db`에 캐시해요). Steading 덱에서 실시간으로 볼 수 있어요 |
 | `/wanjang:now --week\|--since DATE\|--repo X` | 끝난 run이 만든 것을 장부(`~/.claude/wanjang/ledger.md`, `CLAUDE_CONFIG_DIR` 따라감, `bin/ledger`)에서 한 줄씩 보여줘요 |
 | `/wanjang:manager on\|off\|status` | 이 세션을 열려 있는 다른 세션들의 매니저로 만들어요. 한 시간마다 둘러보고, 한 페이지로 보여주고, 최대 4개를 묻고, 승인한 일은 맡은 세션에 보내요(기본 꺼짐, 사용자당 매니저 하나) |
 | `/wanjang:manager` | 지금 점검하고 페이지를 보여줘요 |

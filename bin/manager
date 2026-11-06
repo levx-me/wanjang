@@ -28,13 +28,13 @@ Its memory is files, so a compaction or a restart loses nothing.
           bare lists them. Kept in state.json
   promises|trust|undo [ARGS]  bin/next promise list | trust | undo
 
-State: ${CLAUDE_CONFIG_DIR:-~/.claude}/wanjang/manager/ (ledger.jsonl, state.json, digest.txt, page.html).
+State: ${CLAUDE_CONFIG_DIR:-~/.claude}/wanjang/manager/ (state.json, digest.txt, page.html; the ledger is the ledger table of ../wanjang.db).
 Sessions: $WANJANG_SESSIONS_DIR, else ${CLAUDE_CONFIG_DIR:-~/.claude}/sessions (<pid>.json from Claude Code).
 Clock: env WANJANG_NOW (epoch seconds or ISO 8601) replaces the current time, for tests.
 With no config dir or no registry every command exits 0 with a one-line reason.
 
 Exit codes: 0 ok, 1 no such item, 2 bad arguments, 3 nothing new (scan), 4 refused (on)."""
-import argparse, contextlib, fcntl, glob, hashlib, io, json, os, subprocess, sys, tempfile, time
+import argparse, contextlib, glob, hashlib, io, json, os, sqlite3, subprocess, sys, tempfile, time
 from datetime import datetime
 from types import SimpleNamespace
 
@@ -137,13 +137,57 @@ def alive(pid):
         return False
 
 
-# ---- files: one lock for the ledger and state.json
+# ---- the ledger: the ledger table of wanjang.db (bin/schema.sql); one lock for the ledger and state.json
+_db = None
+
+
+def db():
+    """the shared connection (autocommit, WAL, 30 s busy timeout). The first open imports the old manager/ledger.jsonl in
+    write order and renames it, and the empty ledger.lock, to *.migrated (never deleted)"""
+    global _db
+    if _db is None:
+        os.makedirs(mdir(), exist_ok=True)
+        c = sqlite3.connect(os.path.join(cfg(), "wanjang", "wanjang.db"), timeout=30, isolation_level=None)
+        c.execute("PRAGMA journal_mode=WAL")
+        c.executescript(open(os.path.join(BIN, "schema.sql")).read())
+        old = mp("ledger.jsonl")
+        if os.path.exists(old):
+            c.execute("BEGIN IMMEDIATE")
+            try:
+                if os.path.exists(old):  # another process may have imported it while this one waited
+                    for l in open(old, errors="replace"):
+                        try:
+                            e = json.loads(l)
+                        except ValueError:
+                            continue
+                        if isinstance(e, dict) and e.get("ev"):
+                            c.execute("INSERT INTO ledger(t, ev, id, data) VALUES(?,?,?,?)",
+                                      (e.get("t"), e.get("ev"), e.get("id"), json.dumps(e)))
+                    for f in ("ledger.jsonl", "ledger.lock"):
+                        if os.path.exists(mp(f)):
+                            os.replace(mp(f), mp(f) + ".migrated")
+                c.execute("COMMIT")
+            except BaseException:
+                c.execute("ROLLBACK")
+                raise
+        _db = c
+    return _db
+
+
 @contextlib.contextmanager
 def lock():
-    os.makedirs(mdir(), exist_ok=True)
-    with open(mp("ledger.lock"), "w") as lk:
-        fcntl.flock(lk, fcntl.LOCK_EX)
+    """a write transaction: every read-modify-write of the ledger and state.json waits for it"""
+    c = db()
+    c.execute("BEGIN IMMEDIATE")
+    try:
         yield
+    except Exception:
+        c.execute("ROLLBACK")
+        raise
+    except BaseException:  # sys.exit inside the block keeps what it wrote, as the file lock did
+        c.execute("COMMIT")
+        raise
+    c.execute("COMMIT")
 
 
 def sload():
@@ -168,25 +212,23 @@ def ssave(d):
 def events():
     out = []
     try:
-        for l in open(mp("ledger.jsonl"), errors="replace"):
+        for (d,) in db().execute("SELECT data FROM ledger ORDER BY seq"):
             try:
-                e = json.loads(l)
+                e = json.loads(d)
             except ValueError:
                 continue
             if isinstance(e, dict) and e.get("ev"):
                 out.append(e)
-    except OSError:
+    except sqlite3.Error:
         pass
     return out
 
 
 def write(now, *evs):
-    """append events; the caller holds lock(). A last line cut short (a crash mid-write) gets its newline first."""
-    with open(mp("ledger.jsonl"), "ab+") as f:
-        if f.seek(0, 2) and (f.seek(-1, 2), f.read(1))[1] != b"\n":
-            f.write(b"\n")
-        f.write("".join(json.dumps({"t": iso(now), **{k: v for k, v in e.items() if v not in (None, "")}}) + "\n"
-                        for e in evs).encode())
+    """append events; the caller holds lock()"""
+    for e in evs:
+        e = {"t": iso(now), **{k: v for k, v in e.items() if v not in (None, "")}}
+        db().execute("INSERT INTO ledger(t, ev, id, data) VALUES(?,?,?,?)", (e["t"], e.get("ev"), e.get("id"), json.dumps(e)))
 
 
 def fold(evs):
@@ -894,8 +936,10 @@ def on_cmd(a, now):
         items, evs = fold(events())[0], events()
         keep = [e for e in evs if now - (ts(e.get("t")) or 0) < PRUNE or
                 (e.get("id") in items and (items[e["id"]]["status"] in OPEN or now - items[e["id"]]["last"] < PRUNE))]
-        if len(keep) < len(evs):
-            wfile(mp("ledger.jsonl"), "".join(json.dumps(e) + "\n" for e in keep))
+        if len(keep) < len(evs):  # inside lock(): one BEGIN IMMEDIATE transaction, so a crash leaves the old ledger
+            db().execute("DELETE FROM ledger")
+            db().executemany("INSERT INTO ledger(t, ev, id, data) VALUES(?,?,?,?)",
+                             [(e.get("t"), e.get("ev"), e.get("id"), json.dumps(e)) for e in keep])
     for f in glob.glob(os.path.join(cfg(), "wanjang", "next", "*.json")):  # the old /wanjang:next session state
         with contextlib.suppress(OSError):
             os.remove(f)
