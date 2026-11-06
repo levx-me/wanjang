@@ -1,5 +1,5 @@
 {
-  "description": "Wanjang: put the routing rule (and any unfinished run) into every session, keep the PM from changing project files, keep it from reporting with its run log still open, record each finished run that shipped something in the ledger, tell the parent when a finished subagent's promised files are missing, with /wanjang:crew-console on, send a wanjang agent called from the main session to bin/crew-run (Console API key), run /wanjang:provider without the model, switch back to the subscription when OpenRouter refuses a turn, and run the /wanjang:manager hourly tick's scan before the model, blocking it when nothing is new",
+  "description": "Wanjang: put the routing rule (and any unfinished run) into every session, keep the PM from changing project files, keep it from reporting with its run log still open, record each finished run that shipped something in the ledger, tell the parent when a finished subagent's promised files are missing, with /wanjang:crew-api on, send a wanjang agent called from the main session to bin/crew-run (Console API key), run /wanjang:provider without the model, switch back to the subscription when OpenRouter refuses a turn, and run the /wanjang:manager hourly tick's scan before the model, blocking it when nothing is new",
   "hooks": {
     "SessionStart": [
       {
@@ -24,7 +24,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "\"${CLAUDE_PLUGIN_ROOT}/bin/crew-console-hook\"",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/bin/crew-api-hook\"",
             "timeout": 5
           }
         ]

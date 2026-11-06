@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# provider openrouter|console|claude|key [console]|status|models|presets [--user] [--file PATH]
+# provider openrouter|api|claude|key [api]|status|models|presets [--user] [--file PATH]
 #          [--opus M] [--sonnet M] [--haiku M] [--preset NAME] [--save NAME] [--slot S] [--search TEXT]
 # Switches Claude Code between the claude.ai login and OpenRouter by rewriting the `env` and
 # `apiKeyHelper` of one settings file; a running session reloads that file when it changes.
@@ -15,17 +15,18 @@
 # the result as `last` (and as --save NAME). `models` lists OpenRouter models to pick from.
 # Before switching, `openrouter` checks the OpenRouter balance and refuses (exit 6) below
 # $PROVIDER_MIN_CREDIT (default 0.50): with no credit every request fails, this command included.
-# `console` bills an Anthropic Console API key (pay as you go) the same way: its own keychain item
-# (anthropic-console-claude), `key console` to enter it, no model slots, Anthropic's own endpoint.
+# `api` (alias `console`) bills an Anthropic Console API key (pay as you go) the same way: its own keychain item
+# (anthropic-console-claude), `key api` to enter it, no model slots, Anthropic's own endpoint.
 # `default`, `subscription` and `anthropic` mean `claude`.
 set -euo pipefail
 here=$(cd "$(dirname "$0")" && pwd -P)
 
 mode=${1:-status}; shift || true
+case "$mode" in console) mode=api ;; esac  # old name
 kp=openrouter  # whose key `key` and the dialog handle
-{ [ "$mode" = console ] || { [ "$mode" = key ] && [ "${1:-}" = console ]; }; } && kp=console
-[ "$mode" = key ] && [ "${1:-}" = console ] && shift
-if [ $kp = console ]; then svc=anthropic-console-claude label="Anthropic Console" name="Anthropic Console" envvar=ANTHROPIC_CONSOLE_API_KEY
+{ [ "$mode" = api ] || { [ "$mode" = key ] && { [ "${1:-}" = api ] || [ "${1:-}" = console ]; }; }; } && kp=api
+[ "$mode" = key ] && { [ "${1:-}" = api ] || [ "${1:-}" = console ]; } && shift
+if [ $kp = api ]; then svc=anthropic-console-claude label="Anthropic Console" name="Anthropic Console" envvar=ANTHROPIC_CONSOLE_API_KEY
 else svc=openrouter-claude label=OpenRouter name=OpenRouter envvar=OPENROUTER_API_KEY; fi
 case "$mode" in default|subscription|anthropic) mode=claude ;; esac
 root=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
@@ -155,11 +156,11 @@ models() {  # list OpenRouter models that take tools, by slot; no key is sent
 
 case "$mode" in
   key) ask_and_store; exit 0 ;;
-  console)
+  api)
     # Under a fake HOME only the env key counts, as for openrouter.
-    if [ -n "$home_ok" ]; then "$here/console-key" >/dev/null 2>&1; else [ -n "${ANTHROPIC_CONSOLE_API_KEY:-}" ]; fi || ask_and_store
+    if [ -n "$home_ok" ]; then "$here/api-key" >/dev/null 2>&1; else [ -n "${ANTHROPIC_CONSOLE_API_KEY:-}" ]; fi || ask_and_store
     # Anthropic's own endpoint and names; blank credentials so a shell-exported value cannot win.
-    write --arg k "$here/console-key" '
+    write --arg k "$here/api-key" '
       .apiKeyHelper = $k
       | .env.ANTHROPIC_BASE_URL = "https://api.anthropic.com"
       | .env.ANTHROPIC_AUTH_TOKEN = ""
@@ -194,7 +195,7 @@ case "$mode" in
       | if $s != "" then .env.ANTHROPIC_DEFAULT_SONNET_MODEL = $s else . end
       | if $h != "" then .env.ANTHROPIC_DEFAULT_HAIKU_MODEL = $h else . end' ;;
   claude)
-    # Back to the subscription (also undoes console): no helper, empty credentials, Anthropic's own endpoint and model names.
+    # Back to the subscription (also undoes api): no helper, empty credentials, Anthropic's own endpoint and model names.
     write '
       del(.apiKeyHelper)
       | .env.ANTHROPIC_BASE_URL = "https://api.anthropic.com"
@@ -202,12 +203,12 @@ case "$mode" in
       | .env.ANTHROPIC_API_KEY = ""
       | reduce ("OPUS","SONNET","HAIKU") as $m (.; if .env["ANTHROPIC_DEFAULT_\($m)_MODEL"] then .env["ANTHROPIC_DEFAULT_\($m)_MODEL"] = "" else . end)' ;;
   status) ;;
-  *) echo "usage: provider openrouter|console|claude(=default)|key [console]|status|models|presets [--user] [--file PATH] [--opus M] [--sonnet M] [--haiku M] [--preset NAME] [--save NAME] [--slot opus|sonnet|haiku] [--search TEXT]" >&2; exit 2 ;;
+  *) echo "usage: provider openrouter|api|claude(=default)|key [api]|status|models|presets [--user] [--file PATH] [--opus M] [--sonnet M] [--haiku M] [--preset NAME] [--save NAME] [--slot opus|sonnet|haiku] [--search TEXT]" >&2; exit 2 ;;
 esac
 
 now=claude
 [ "$(jq -r '.env.ANTHROPIC_BASE_URL // ""' "$file" 2>/dev/null)" = "https://openrouter.ai/api" ] && now=openrouter
-[ "$(jq -r '.apiKeyHelper // "" | split("/") | last' "$file" 2>/dev/null)" = console-key ] && now=console
+case "$(jq -r '.apiKeyHelper // "" | split("/") | last' "$file" 2>/dev/null)" in api-key|console-key) now=api ;; esac
 if [ $now = openrouter ]; then
   m=$(jq -r '[("opus","sonnet","haiku") as $s | .env["ANTHROPIC_DEFAULT_\($s | ascii_upcase)_MODEL"] // "" | select(. != "")] | join(", ")' "$file" 2>/dev/null)
   echo "provider: $now${m:+, models $m} ($file)"

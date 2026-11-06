@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # StopFailure hook: a turn died on a billing or authentication error while this project (or the
-# user settings) pointed at OpenRouter or a Console API key (console mode). Switch back to the subscription so the next prompt works,
+# user settings) pointed at OpenRouter or a Console API key (api mode). Switch back to the subscription so the next prompt works,
 # and say why in a desktop notification: this hook can neither block nor reach the model.
 set -u
 input=$(cat)
@@ -15,7 +15,7 @@ who=""
 for f in "$root/.claude/settings.local.json" "$HOME/.claude/settings.json"; do
   case "$(jq -r '(.env.ANTHROPIC_BASE_URL // "") + "|" + (.apiKeyHelper // "")' "$f" 2>/dev/null)" in
     "https://openrouter.ai/api|"*) who=OpenRouter ;;
-    *"|"*/console-key) who="The Console API key" ;;  # console mode: e.g. credits that do not cover Claude Code
+    *"|"*/api-key|*"|"*/console-key) who="The Console API key" ;;  # api mode: e.g. credits that do not cover Claude Code
     *) continue ;;
   esac
   "$(dirname "$0")/provider" claude --file "$f" >/dev/null 2>&1 && switched+="$f "

@@ -137,23 +137,33 @@ rm -f "$T/notified"; fail_ev authentication_failed
 # console: an Anthropic Console API key through its own helper; no OpenRouter slot or URL left in effect.
 cp "$T/before" "$F"; rm -f "$T/stored"
 OPENROUTER_API_KEY=sk-test bin/provider openrouter --file "$F" --haiku x/h >/dev/null
-out=$(PROVIDER_ASK_CMD='printf sk-ant-api03-testsecret' PROVIDER_STORE_CMD="cat > $T/stored" bin/provider console --file "$F" 2>&1) || bad "console first use: exit $?"
+out=$(PROVIDER_ASK_CMD='printf sk-ant-api03-testsecret' PROVIDER_STORE_CMD="cat > $T/stored" bin/provider api --file "$F" 2>&1) || bad "console first use: exit $?"
 [ "$(cat "$T/stored" 2>/dev/null)" = sk-ant-api03-testsecret ] || bad "console: key not stored"
 case "$out$(cat "$F")" in *testsecret*) bad "console: the key reached the output or the settings file" ;; esac
-[ "$(q .apiKeyHelper)" = "$PWD/bin/console-key" ] || bad "console: key helper path"
+[ "$(q .apiKeyHelper)" = "$PWD/bin/api-key" ] || bad "console: key helper path"
 [ "$(q .env.ANTHROPIC_BASE_URL)" = https://api.anthropic.com ] || bad "console: base url"
 [ "$(q .env.ANTHROPIC_AUTH_TOKEN)" = "" ] && [ "$(q .env.ANTHROPIC_API_KEY)" = "" ] || bad "console: tokens not blank"
 [ -z "$(q '.env.ANTHROPIC_DEFAULT_HAIKU_MODEL // empty')" ] || bad "console: an OpenRouter model slot stayed in effect"
 [ "$(q .env.FOO)" = 1 ] || bad "console: other settings lost"
-case "$(bin/provider status --file "$F")" in "provider: console"*) ;; *) bad "console: status" ;; esac
-[ "$(ANTHROPIC_CONSOLE_API_KEY=sk-ant-x bin/console-key)" = sk-ant-x ] || bad "console-key: env fallback"
-case "$(jq -r .stopReason <<<"$(ANTHROPIC_CONSOLE_API_KEY=sk-ant-x hook wanjang:provider "console --file $F")")" in "Done."*"provider: console"*) ;; *) bad "hook: console" ;; esac
+case "$(bin/provider status --file "$F")" in "provider: api"*) ;; *) bad "console: status" ;; esac
+[ "$(ANTHROPIC_CONSOLE_API_KEY=sk-ant-x bin/api-key)" = sk-ant-x ] || bad "console-key: env fallback"
+case "$(jq -r .stopReason <<<"$(ANTHROPIC_CONSOLE_API_KEY=sk-ant-x hook wanjang:provider "api --file $F")")" in "Done."*"provider: api"*) ;; *) bad "hook: console" ;; esac
+# the old name still works: `console` and `key console` are `api`, and a settings file naming bin/console-key reads as api
 bin/provider claude --file "$F" >/dev/null
-[ -z "$(q '.apiKeyHelper // empty')" ] && [ "$(q .env.ANTHROPIC_BASE_URL)" = https://api.anthropic.com ] || bad "claude did not undo console"
+ANTHROPIC_CONSOLE_API_KEY=sk-ant-x bin/provider console --file "$F" >/dev/null
+[ "$(q .apiKeyHelper)" = "$PWD/bin/api-key" ] || bad "console alias: key helper path"
+[ "$(ANTHROPIC_CONSOLE_API_KEY=sk-ant-x bin/console-key)" = sk-ant-x ] || bad "console-key shim"
+jq '.apiKeyHelper = "/old/bin/console-key"' "$F" > "$F.t" && mv "$F.t" "$F"
+case "$(bin/provider status --file "$F")" in "provider: api"*) ;; *) bad "console-key helper path: status" ;; esac
+bin/provider claude --file "$F" >/dev/null
+[ -z "$(q '.apiKeyHelper // empty')" ] && [ "$(q .env.ANTHROPIC_BASE_URL)" = https://api.anthropic.com ] || bad "claude did not undo api"
 # A billing error on the console key switches back too, and says which provider refused.
-ANTHROPIC_CONSOLE_API_KEY=sk-ant-x bin/provider console --file "$P/.claude/settings.local.json" >/dev/null
+ANTHROPIC_CONSOLE_API_KEY=sk-ant-x bin/provider api --file "$P/.claude/settings.local.json" >/dev/null
 rm -f "$T/notified"; fail_ev billing_error
 [ -z "$(jq -r '.apiKeyHelper // empty' "$P/.claude/settings.local.json")" ] && grep -q "Console API key" "$T/notified" 2>/dev/null || bad "fail: console billing_error did not switch back or say why"
+jq '.apiKeyHelper = "/old/bin/console-key"' "$P/.claude/settings.local.json" > "$T/s.t" && mv "$T/s.t" "$P/.claude/settings.local.json"
+rm -f "$T/notified"; fail_ev billing_error
+[ -z "$(jq -r '.apiKeyHelper // empty' "$P/.claude/settings.local.json")" ] && grep -q "Console API key" "$T/notified" 2>/dev/null || bad "fail: old console-key helper not matched"
 [ ! -e "$T/REAL-CALLED" ] || bad "a real dialog or secret store was called"
 [ $fail = 0 ] && echo "provider: all cases pass"
 exit $fail

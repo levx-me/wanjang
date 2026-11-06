@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# crew-run, crew-console and crew-console-hook with a stub `claude` on PATH; no network, no real key.
+# crew-run, crew-api and crew-api-hook with a stub `claude` on PATH; no network, no real key.
 cd "$(dirname "$0")/.." || exit 2
 ROOT=$PWD
 T=$(mktemp -d); trap 'rm -rf "${T:?}"' EXIT
 fail=0
 bad() { echo "FAIL $1"; fail=1; }
-unset WANJANG_CREW_CONSOLE  # (run from inside a crew-run child, the hook would pass everything)
+unset WANJANG_CREW_API WANJANG_CREW_CONSOLE  # (run from inside a crew-run child, the hook would pass everything)
 export CLAUDE_CONFIG_DIR=$T/cfg USER=wanjang-test-nobody HOME=$T/home XDG_CONFIG_HOME= ANTHROPIC_CONSOLE_API_KEY=sk-ant-testsecret
 mkdir -p "$T/home" "$T/shim" "$T/projA" "$T/projB"; A=$T/projA; B=$T/projB
 printf '#!/bin/sh\n[ "$1" = find-generic-password ] && exit 44\nexit 1\n' > "$T/shim/security"
@@ -13,7 +13,7 @@ printf '#!/bin/sh\nexit 1\n' > "$T/shim/secret-tool"
 # stub claude: records argv and env marker; STUB_OUT is the JSON it prints
 cat > "$T/shim/claude" <<SH
 #!/bin/sh
-printf '%s\n' "\$*" > "$T/argv"; printf '%s' "\${WANJANG_CREW_CONSOLE:-}" > "$T/marker"
+printf '%s\n' "\$*" > "$T/argv"; printf '%s' "\${WANJANG_CREW_API:-}" > "$T/marker"
 cat > /dev/null
 printf '%s' "\${STUB_OUT:-}"
 exit "\${STUB_RC:-0}"
@@ -25,16 +25,16 @@ OK='[{"type":"system"},{"type":"result","subtype":"success","is_error":false,"re
 # crew-run: ok path, marker, flags, key never in argv or log
 out=$(echo brief | STUB_OUT=$OK bin/crew-run scout --model haiku --effort low 2>&1); rc=$?
 [ $rc = 0 ] || bad "ok: exit $rc"
-case $out in *hello*"crew-console: scout haiku \$0.0123 2s session abc"*) ;; *) bad "ok: output: $out" ;; esac
+case $out in *hello*"crew-api: scout haiku \$0.0123 2s session abc"*) ;; *) bad "ok: output: $out" ;; esac
 [ "$(cat "$T/marker")" = 1 ] || bad "marker not set"
 grep -q -- '--agent wanjang:scout' "$T/argv" && grep -q -- '--model haiku' "$T/argv" && grep -q -- '--effort low' "$T/argv" || bad "flags missing: $(cat "$T/argv")"
 grep -q -- '--max-budget-usd 10 ' "$T/argv" || bad "default budget not 10"
 grep -q 'apiKeyHelper' "$T/argv" && grep -q 'ANTHROPIC_API_KEY' "$T/argv" || bad "settings shape"
 grep -rq testsecret "$T/argv" "$T/cfg" && bad "key leaked into argv or logs"
-[ "$(ls "$T"/cfg/wanjang/crew-console/*.json 2>/dev/null | wc -l)" -eq 1 ] || bad "log not kept"
+[ "$(ls "$T"/cfg/wanjang/crew-api/*.json 2>/dev/null | wc -l)" -eq 1 ] || bad "log not kept"
 # budget: flag, then the switch's value
 echo b | STUB_OUT=$OK bin/crew-run scout --budget 2.5 >/dev/null 2>&1; grep -q -- '--max-budget-usd 2.5 ' "$T/argv" || bad "budget flag"
-(cd "$T/projA" && "$ROOT/bin/crew-console" on --budget 4 >/dev/null) || bad "on: exit $?"
+(cd "$T/projA" && "$ROOT/bin/crew-api" on --budget 4 >/dev/null) || bad "on: exit $?"
 echo b | STUB_OUT=$OK bin/crew-run scout --cwd "$T/projA" >/dev/null 2>&1; grep -q -- '--max-budget-usd 4 ' "$T/argv" || bad "switch budget"
 # exit codes
 echo b | bin/crew-run nosuch >/dev/null 2>&1; [ $? = 2 ] || bad "unknown agent should exit 2"
@@ -47,13 +47,13 @@ echo b | ANTHROPIC_CONSOLE_API_KEY= bin/crew-run scout >/dev/null 2>&1; [ $? = 3
 bin/crew-run scout --dry-run | grep -q testsecret && bad "dry-run shows the key"
 
 # switch: on refuses without a key; off; status
-ANTHROPIC_CONSOLE_API_KEY= bin/crew-console on >/dev/null 2>&1; [ $? = 3 ] || bad "on without key should exit 3"
-cd "$T/projA"; "$ROOT/bin/crew-console" status | grep -q '^crew-console: on for .*, budget \$4' || bad "status on keeps budget"
-"$ROOT/bin/crew-console" off >/dev/null; "$ROOT/bin/crew-console" status | grep -q '^crew-console: off' || bad "status off"
-"$ROOT/bin/crew-console" on >/dev/null; cd "$ROOT"
+ANTHROPIC_CONSOLE_API_KEY= bin/crew-api on >/dev/null 2>&1; [ $? = 3 ] || bad "on without key should exit 3"
+cd "$T/projA"; "$ROOT/bin/crew-api" status | grep -q '^crew-api: on for .*, budget \$4' || bad "status on keeps budget"
+"$ROOT/bin/crew-api" off >/dev/null; "$ROOT/bin/crew-api" status | grep -q '^crew-api: off' || bad "status off"
+"$ROOT/bin/crew-api" on >/dev/null; cd "$ROOT"
 
 # hook matrix
-h() { printf '%s' "$1" | bin/crew-console-hook; }
+h() { printf '%s' "$1" | bin/crew-api-hook; }
 
 MAIN='{"cwd":"'$A'","tool_name":"Agent","tool_input":{"subagent_type":"wanjang:builder","model":"sonnet","effort":"high"}}'
 SUB='{"agent_id":"a1","agent_type":"wanjang:pm","tool_name":"Agent","tool_input":{"subagent_type":"wanjang:builder"}}'
@@ -62,8 +62,15 @@ d=$(h "$MAIN" | jq -r .hookSpecificOutput.permissionDecision+.hookSpecificOutput
 [ -z "$(h "${MAIN/$A/$B}")" ] || bad "project B should pass while A is on"
 [ -z "$(h "$SUB")" ] || bad "subagent call should pass"
 [ -z "$(h "$OTHER")" ] || bad "non-wanjang type should pass"
-[ "$(WANJANG_CREW_CONSOLE=1 bin/crew-console-hook <<<"$MAIN" | jq -r .hookSpecificOutput.updatedInput.run_in_background)" = false ] || bad "crew-run child: an Agent call with run_in_background omitted runs in the foreground"
-[ -z "$(WANJANG_CREW_CONSOLE=1 bin/crew-console-hook <<<"$(jq -c '.tool_input.run_in_background=false' <<<"$MAIN")")" ] || bad "crew-run child: explicit foreground passes untouched"
-(cd "$A" && "$ROOT/bin/crew-console" off >/dev/null)
+[ "$(WANJANG_CREW_API=1 bin/crew-api-hook <<<"$MAIN" | jq -r .hookSpecificOutput.updatedInput.run_in_background)" = false ] || bad "crew-run child: an Agent call with run_in_background omitted runs in the foreground"
+[ -z "$(WANJANG_CREW_API=1 bin/crew-api-hook <<<"$(jq -c '.tool_input.run_in_background=false' <<<"$MAIN")")" ] || bad "crew-run child: explicit foreground passes untouched"
+(cd "$A" && "$ROOT/bin/crew-api" off >/dev/null)
 [ -z "$(h "$MAIN")" ] || bad "switch off should pass"
+# the old env marker still makes the hook treat the caller as a crew-run child
+[ "$(WANJANG_CREW_CONSOLE=1 bin/crew-api-hook <<<"$MAIN" | jq -r .hookSpecificOutput.updatedInput.run_in_background)" = false ] || bad "old env marker not accepted"
+# migration: old state file and logs dir move on first use; the hook reads the old file meanwhile
+M=$T/mig; mkdir -p "$M/wanjang/crew-console/runs"; echo '{"projects":{"'$A'":{"on":true,"budget":7}}}' > "$M/wanjang/crew-console.json"; echo '{}' > "$M/wanjang/crew-console/runs/s.json"
+[ -n "$(CLAUDE_CONFIG_DIR=$M bin/crew-api-hook <<<"$MAIN")" ] || bad "hook should read the old state file before migration"
+(cd "$A" && CLAUDE_CONFIG_DIR=$M "$ROOT/bin/crew-api" status | grep -q '^crew-api: on for .*budget \$7') || bad "migration: status after move"
+[ -f "$M/wanjang/crew-api.json" ] && [ ! -e "$M/wanjang/crew-console.json" ] && [ -f "$M/wanjang/crew-api/runs/s.json" ] && [ ! -e "$M/wanjang/crew-console" ] || bad "migration: files not moved"
 exit $fail

@@ -201,8 +201,8 @@ field: know-how for a field comes from playbooks.
 | `/wanjang:slim` | Move rules only the main session needs out of what every subagent loads (see below) |
 | `/wanjang:relay <session> <request>` · `status` | Hand work to the Claude session that owns another repo on this machine (Claude Code's ListAgents/SendMessage) and track its report |
 | `/wanjang:optimize` | See where this session's tokens go and fix what applies, with agents still running |
-| `/wanjang:provider openrouter\|console\|models\|presets\|claude\|key [console]\|status` | Move this session between the claude.ai subscription, OpenRouter and an Anthropic Console API key, no restart |
-| `/wanjang:crew-console on [--budget USD]\|off\|status` | Bill every wanjang agent (the PM, its workers, the builder/scout/checker you call) to the Console API key as its own `claude -p` run, capped per run (default $10); the main chat stays on the subscription |
+| `/wanjang:provider openrouter\|api\|models\|presets\|claude\|key [api]\|status` | Move this session between the claude.ai subscription, OpenRouter and an Anthropic Console API key, no restart |
+| `/wanjang:crew-api on [--budget USD]\|off\|status` | Bill every wanjang agent (the PM, its workers, the builder/scout/checker you call) to the Console API key as its own `claude -p` run, capped per run (default $10); the main chat stays on the subscription |
 
 `/wanjang:optimize` runs `bin/usage`, which reads the session's transcripts on disk and prints a short report: the
 main context, the tool results that took the most, files read again and again, agents active in the last ten
@@ -219,10 +219,10 @@ keychain; `/wanjang:provider key` enters or replaces it later; `status` and `cla
 SSH) it prints the command to store the key yourself; the subscription's login token goes only to Anthropic and is never proxied (Anthropic does not allow
 subscription logins in third-party tools or proxies). While on OpenRouter, features that need the claude.ai login
 (Remote Control, voice, claude.ai connectors) are off.
-`/wanjang:provider console` bills an Anthropic Console API key (pay as you go) instead of the subscription, for this
+`/wanjang:provider api` bills an Anthropic Console API key (pay as you go) instead of the subscription, for this
 project only: Claude Code ranks `apiKeyHelper` above the `/login` subscription. The key is its own item (keychain service
 `anthropic-console-claude`, `secret-tool`, or `ANTHROPIC_CONSOLE_API_KEY`), entered through the same password dialog on the
-first `console` or with `/wanjang:provider key console`; `claude` goes back. Promotional Console credits may be limited
+first `api` or with `/wanjang:provider key api`; `claude` goes back. `console` still works as the old name. Promotional Console credits may be limited
 to some products (API, Agent SDK, Batch) and may not cover Claude Code, so check the Console usage page after a first call.
 Measured: one session answered on the subscription, then on OpenRouter, then on the subscription again, with no restart.
 
@@ -390,7 +390,7 @@ and leaving browser testing to QA.
 | `bin/manager`, `bin/manager-page` | The scan, ledger, dispatch and prompt hook behind `/wanjang:manager`, and its page renderer |
 | `bin/next` | The scan and the promise and trust records the manager uses |
 | `bin/usage` | The token report behind `/wanjang:optimize` |
-| `bin/provider`, `bin/openrouter-key`, `bin/console-key`, `bin/provider-hook`, `bin/provider-fail` | `/wanjang:provider`, its key helper, the hook that runs it with no model, and the one that switches back on a billing error |
+| `bin/provider`, `bin/openrouter-key`, `bin/api-key`, `bin/provider-hook`, `bin/provider-fail` | `/wanjang:provider`, its key helper, the hook that runs it with no model, and the one that switches back on a billing error |
 | `bin/docindex` | The local doc index behind `/wanjang:docs` |
 | `skills/` | `/wanjang:wanjang`, `/wanjang:optimize`, `/wanjang:now`, `/wanjang:wen`, `/wanjang:manager`, `/wanjang:next` (a stub), `/wanjang:docs`, `/wanjang:slim`, `/wanjang:relay`, `/wanjang:provider`, `/wanjang:visual-doc` and `/wanjang:brief` |
 | `test/` | `guard.sh`, `read-warn.sh`, `deliverables.sh`, `docindex.sh`, `main-rules.sh`, `route.sh`, `close.sh`, `ledger.sh`, `usage.sh`, `status.sh`, `provider.sh`, `next.sh`, `manager.sh`, `manager-page.sh`, `playbooks.sh` and `skills.sh` |
