@@ -153,4 +153,15 @@ echo "{\"type\":\"user\",\"cwd\":\"$U/repo\",\"timestamp\":\"$(isoN 9000)\"}" > 
 E3=$Q/s5/subagents; mkdir -p "$E3"; pmrun pmD Write "{\"file_path\":\"$R5/log.md\",\"content\":\"x\"}"
 json=$(CLAUDE_CONFIG_DIR=$U WANJANG_NOW=$NOW bin/status --session s5 --cwd "$U/repo" --json --eta)
 want '.agents[] | select(.id=="pmD") | .eta | [.tasks_done, .tasks_total] | @csv' '1,4'   # the short T3 row has no status cell: counted as a row, neither done nor running
+# --- crew-api run under the session: listed as an agent [api], eta like a builder, its own worker nested
+echo "{\"type\":\"user\",\"cwd\":\"$U/repo\",\"timestamp\":\"$(isoN 9000)\"}" > "$Q/s6.jsonl"
+mkdir -p "$U/wanjang/crew-api/runs" "$Q/c1/subagents"
+echo "{\"session_id\":\"c1\",\"parent_session_id\":\"s6\",\"agent\":\"builder\",\"model\":\"sonnet\",\"title\":\"Api build\",\"pid\":$$,\"started\":$((NOW - 180)),\"status\":\"running\"}" > "$U/wanjang/crew-api/runs/c1.json"
+E=$Q; mkdir -p "$Q/c1"; run c1 wanjang:builder '"sonnet"' x 180; mv "$Q/agent-c1.jsonl" "$Q/c1.jsonl"; rm "$Q/agent-c1.meta.json"
+E=$Q/c1/subagents; run cw wanjang:scout '"sonnet"' "Api worker" 60
+json=$(CLAUDE_CONFIG_DIR=$U WANJANG_NOW=$NOW bin/status --session s6 --cwd "$U/repo" --json --eta)
+want '.agents[] | select(.id=="c1") | [.api, .running, .type, .eta.likely != null] | @csv' 'true,true,"wanjang:builder",true'
+want '[.agents[].id] | index("cw") - index("c1")' 1
+want '.agents[] | select(.id=="cw") | .api' false
+CLAUDE_CONFIG_DIR=$U WANJANG_NOW=$NOW bin/status --session s6 --cwd "$U/repo" --eta | grep -q '\[RUNNING\] wanjang:builder \[api\] - Api build' || { echo "FAIL [api] text"; fail=1; }
 [ $fail = 0 ] && echo "status.sh ok"; exit $fail

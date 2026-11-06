@@ -2,7 +2,7 @@
 """status [--session ID|PATH] [--cwd DIR] [--json] [--eta] [--bars]: a compact snapshot of what this Claude Code
 session's agents are doing now, read from transcripts on disk (only the last 200 KB of each).
 
-  agents  subagents written to in the last 2 hours, nested under their parent: type, task, age,
+  agents  subagents (and crew-api runs: tagged [api], `"api": true`) written to in the last 2 hours, nested under their parent: type, task, age,
           running or finished, last tool call, a tool call still waiting for its result, last text
   stuck   running, silent for over 10 minutes and not waiting on a tool result
   runs    Wanjang run folders touched in the last 2 hours: status line and last 5 log lines
@@ -139,29 +139,82 @@ def digest(path):
 
 # --- agents
 agents, models = [], {}
-for mp in glob.glob(f"{os.path.splitext(main)[0]}/subagents/agent-*.meta.json"):
-    jp = mp[: -len(".meta.json")] + ".jsonl"
+
+
+def add_agents(base, root=None):
+    """subagents under <base>/subagents; for a crew-api child they hang under its run entry `root`"""
+    for mp in glob.glob(f"{base}/subagents/agent-*.meta.json"):
+        jp = mp[: -len(".meta.json")] + ".jsonl"
+        try:
+            mt = os.path.getmtime(jp)
+            if now - mt > WINDOW:
+                continue
+            meta = json.load(open(mp))
+            d = digest(jp)
+        except (OSError, ValueError):
+            continue
+        aid = os.path.basename(jp)[6:-6]
+        last = d["last"] or mt
+        running = not (meta.get("finished") or d["final"])
+        w = d["waiting"][0] if d["waiting"] and running else None
+        depth = meta.get("spawnDepth", 1) + bool(root)
+        ag = dict(id=aid, type=meta.get("agentType", "?"), desc=meta.get("description", ""),
+                  depth=depth, parent=meta.get("parentAgentId") or (root if depth == 2 else None),
+                  started=first_ts(jp) or mt, last_write=mt, running=running, api=False, died=False, jp=jp,
+                  last_tool=d["last_tool"] and f"{d['last_tool'][0]} {d['last_tool'][1]}".strip(),
+                  waiting=w and dict(tool=w[0], what=w[1], secs=int(now - (w[2] or last))),
+                  text=d["text"], stuck=False)
+        models[aid] = None if meta.get("model") in (None, "inherit") else meta["model"]
+        ag["stuck"] = running and not w and now - mt > STUCK
+        agents.append(ag)
+
+
+def alive(pid):
+    try:
+        os.kill(int(pid), 0)
+        return True
+    except PermissionError:
+        return True
+    except (OSError, ValueError, TypeError):
+        return False
+
+
+def crew_records():
+    """crew-api run records (crew-console is the old name), as (record, path)"""
+    for n in ("crew-api", "crew-console"):
+        for rp in glob.glob(f"{home}/wanjang/{n}/runs/*.json"):
+            try:
+                yield json.load(open(rp)), rp
+            except (OSError, ValueError):
+                pass
+
+
+add_agents(os.path.splitext(main)[0])
+for rec, _ in crew_records():  # crew-api runs of this session: separate `claude -p` sessions, agents like subagents
+    if rec.get("parent_session_id") != sid or not rec.get("session_id"):
+        continue
+    rid = rec["session_id"]
+    f = glob.glob(f"{home}/projects/*/{rid}.jsonl")
+    if not f or any(g["id"] == rid for g in agents):
+        continue
+    jp = f[0]
     try:
         mt = os.path.getmtime(jp)
         if now - mt > WINDOW:
             continue
-        meta = json.load(open(mp))
         d = digest(jp)
-    except (OSError, ValueError):
+    except OSError:
         continue
-    aid = os.path.basename(jp)[6:-6]
-    last = d["last"] or mt
-    running = not (meta.get("finished") or d["final"])
-    w = d["waiting"][0] if d["waiting"] and running else None
-    ag = dict(id=aid, type=meta.get("agentType", "?"), desc=meta.get("description", ""),
-              depth=meta.get("spawnDepth", 1), parent=meta.get("parentAgentId"),
-              started=first_ts(jp) or mt, last_write=mt, running=running,
-              last_tool=d["last_tool"] and f"{d['last_tool'][0]} {d['last_tool'][1]}".strip(),
-              waiting=w and dict(tool=w[0], what=w[1], secs=int(now - (w[2] or last))),
-              text=d["text"], stuck=False)
-    models[aid] = None if meta.get("model") in (None, "inherit") else meta["model"]
-    ag["stuck"] = running and not w and now - mt > STUCK
-    agents.append(ag)
+    up = rec.get("status") == "running" and (alive(rec.get("pid")) or now - mt <= STUCK)
+    w = d["waiting"][0] if d["waiting"] and up else None
+    agents.append(dict(id=rid, type="wanjang:" + str(rec.get("agent") or "?"), desc=rec.get("title", ""), depth=1,
+                       parent=None, started=rec.get("started") or first_ts(jp) or mt, last_write=mt, running=up,
+                       api=True, jp=jp, died=rec.get("status") == "running" and not up,
+                       last_tool=d["last_tool"] and f"{d['last_tool'][0]} {d['last_tool'][1]}".strip(),
+                       waiting=w and dict(tool=w[0], what=w[1], secs=int(now - (w[2] or d["last"] or mt))),
+                       text=d["text"], stuck=bool(up and not w and now - mt > STUCK)))
+    models[rid] = rec.get("model")
+    add_agents(os.path.splitext(jp)[0], rid)
 agents.sort(key=lambda g: g["started"])
 byid = {g["id"]: g for g in agents}
 for g in agents:  # no recorded parent: nearest earlier agent one level up
@@ -236,7 +289,7 @@ if a.eta:
     cache = f"{home}/wanjang/eta-cache.json"
     try:  # warm: under 10 min old and no meta file written since (one stat each)
         cm = os.path.getmtime(cache)
-        if now - cm < 600 and max((os.path.getmtime(m) for m in metas), default=0) <= cm:
+        if now - cm < 600 and max((os.path.getmtime(m) for m in metas + [p for _, p in crew_records()]), default=0) <= cm:
             hist = {(t, m): v for t, m, v in json.load(open(cache))["hist"]}
     except (OSError, ValueError, KeyError, TypeError):
         hist = {}
@@ -256,6 +309,10 @@ if a.eta:
             mod = None if m.get("model") == "inherit" else m.get("model")
             for k in ((m.get("agentType"), mod), (m.get("agentType"), "*")):
                 hist.setdefault(k, []).append((t1 - t0) / 60)
+    for rec, _ in () if warm else crew_records():  # finished crew-api runs count like finished subagents
+        if rec.get("status") == "done" and rec.get("ended") and rec.get("started") and rec["ended"] > rec["started"]:
+            for k in ((f"wanjang:{rec.get('agent')}", rec.get("model")), (f"wanjang:{rec.get('agent')}", "*")):
+                hist.setdefault(k, []).append((rec["ended"] - rec["started"]) / 60)
     if hist and not warm:
         try:  # atomic; a failed write only costs the next call a rebuild
             os.makedirs(os.path.dirname(cache), exist_ok=True)
@@ -302,7 +359,7 @@ if a.eta:
         """the run log this PM named last in its tool_use inputs (`wanjang/<run>/log.md` in a repository, `wanjang/runs/<run>/log.md` outside one), as an rlogs path"""
         found = None
         try:
-            for r in tail_rows(f"{os.path.splitext(main)[0]}/subagents/agent-{g['id']}.jsonl"):
+            for r in tail_rows(g["jp"]):
                 c = (r.get("message") or {}).get("content")
                 for b in c if isinstance(c, list) else ():
                     i = b.get("input") if isinstance(b, dict) and b.get("type") == "tool_use" else None
@@ -454,8 +511,8 @@ if a.eta:
              if eta_all else "nothing running" if not any(active(g) for g in tree) else "running work: no estimate")
 for g in tree:
     ind = "  " * (1 + (g["depth"] - 1 if g["parent"] in byid else 0))
-    st = "RUNNING" if g["running"] else "WAITING" if g["waits_on_children"] else "done"
-    L.append(f"{ind}[{st}] {g['type']} - {short(g['desc'], 60)} (started {ago(g['started'])} ago, last write {ago(g['last_write'])} ago)")
+    st = "RUNNING" if g["running"] else "STOPPED" if g["died"] else "WAITING" if g["waits_on_children"] else "done"
+    L.append(f"{ind}[{st}] {g['type']}{' [api]' if g['api'] else ''} - {short(g['desc'], 60)} (started {ago(g['started'])} ago, last write {ago(g['last_write'])} ago)")
     if a.eta and active(g):
         L.append(f"{ind}    {eta_line(g)}")
     if g["waiting"]:
