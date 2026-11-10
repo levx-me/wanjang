@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+# redframe on [seconds] | off: red border around all screens while Claude drives the desktop (macOS).
+# Builds bin/redframe.swift on first `on` into the cache dir. Never fails: unsupported platform = notice, exit 0.
+D="$(cd "$(dirname "$0")" && pwd)"
+C="${CLAUDE_CONFIG_DIR:-$HOME/.claude}/wanjang/cache"; BIN="$C/redframe-bin"; PIDF="$C/redframe.pid"
+stop() { [ -f "$PIDF" ] && kill "$(cat "$PIDF")" 2>/dev/null; rm -f "$PIDF"; }
+case "$1" in
+  on)
+    [ "$(uname)" = Darwin ] && command -v swiftc >/dev/null 2>&1 || { echo "redframe: needs macOS and swiftc; skipped" >&2; exit 0; }
+    mkdir -p "$C"
+    if [ ! -x "$BIN" ] || [ "$D/redframe.swift" -nt "$BIN" ]; then
+      swiftc -O -o "$BIN" "$D/redframe.swift" >/dev/null 2>&1 || { echo "redframe: build failed; skipped" >&2; exit 0; }
+    fi
+    stop; nohup "$BIN" "${2:-180}" >/dev/null 2>&1 & echo $! > "$PIDF" ;;
+  off) stop ;;
+  *) echo "usage: redframe on [seconds] | off" >&2; exit 2 ;;
+esac
+exit 0

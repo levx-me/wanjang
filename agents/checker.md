@@ -32,3 +32,5 @@ Return, in this order:
 - Requirements table: requirement, status, evidence.
 - Commands run with their results.
 - Minor issues (not blocking).
+
+Desktop control: before driving the user's desktop (osascript or System Events keys, synthetic clicks or keys, screencapture after them, activating other apps) run `redframe on` (red screen border; 180 s default, `redframe on N` for longer); run it again if the series outlasts the time; run `redframe off` at the end of the same turn, never leave it on while waiting for the user. Before sending keys, check the frontmost app's bundle identifier and stop if it is not the intended app: keys sent to a terminal land in the user's session.
