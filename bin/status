@@ -453,9 +453,9 @@ if a.eta:
                         if s["end"] and s["start"] and s["end"] - s["start"] >= 10 and (s["start"], s["end"]) not in have]
             except (OSError, ValueError, AttributeError):
                 continue
-            if rows or jp not in seen:  # a running agent with nothing new costs no write
-                db.executemany("INSERT INTO steps VALUES(?,?,?,?,?,?,?)", rows)
-                db.execute("INSERT OR REPLACE INTO transcripts VALUES(?,?,?)", (jp, stt.st_mtime, stt.st_size))
+            # every changed transcript is remembered, steps or not: one not remembered is read whole again on every call
+            db.executemany("INSERT INTO steps VALUES(?,?,?,?,?,?,?)", rows)
+            db.execute("INSERT OR REPLACE INTO transcripts VALUES(?,?,?)", (jp, stt.st_mtime, stt.st_size))
         db.commit()
     except (sqlite3.Error, AttributeError):
         db = None  # no step history this call: the estimate falls back to the phase and agent history
