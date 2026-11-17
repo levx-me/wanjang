@@ -1,18 +1,29 @@
 #!/usr/bin/env bash
-# redframe on [seconds] | off: red border around all screens while Claude drives the desktop (macOS).
+# redframe on [seconds] | off | secs [seconds]: red border around all screens while Claude drives the desktop (macOS).
+# The border is a 60 s lease: `on` lasts at most 60 s (default 60, larger N capped), so an agent that dies
+# without `off` leaves it up for at most 60 s. Drivers run `on` again to renew. Hooks run `off` when an agent ends.
 # Builds bin/redframe.swift on first `on` into the cache dir. Never fails: unsupported platform = notice, exit 0.
 D="$(cd "$(dirname "$0")" && pwd)"
 C="${CLAUDE_CONFIG_DIR:-$HOME/.claude}/wanjang/cache"; BIN="$C/redframe-bin"; PIDF="$C/redframe.pid"
 stop() { [ -f "$PIDF" ] && kill "$(cat "$PIDF")" 2>/dev/null; rm -f "$PIDF"; }
+# secs [N]: print the lease length; a notice on stderr when N is capped. Non-numeric N = 60.
+secs() {
+  case "$1" in ''|*[!0-9]*) echo 60; return ;; esac
+  if [ "$1" -gt 60 ]; then echo "redframe: capped to 60 s; run 'redframe on' again to renew" >&2; echo 60
+  elif [ "$1" -lt 1 ]; then echo 60
+  else echo "$1"; fi
+}
 case "$1" in
   on)
+    n=$(secs "$2")
     [ "$(uname)" = Darwin ] && command -v swiftc >/dev/null 2>&1 || { echo "redframe: needs macOS and swiftc; skipped" >&2; exit 0; }
     mkdir -p "$C"
     if [ ! -x "$BIN" ] || [ "$D/redframe.swift" -nt "$BIN" ]; then
       swiftc -O -o "$BIN" "$D/redframe.swift" >/dev/null 2>&1 || { echo "redframe: build failed; skipped" >&2; exit 0; }
     fi
-    stop; nohup "$BIN" "${2:-180}" >/dev/null 2>&1 & echo $! > "$PIDF" ;;
+    stop; nohup "$BIN" "$n" >/dev/null 2>&1 & echo $! > "$PIDF" ;;
   off) stop ;;
+  secs) secs "$2" ;;
   *) echo "usage: redframe on [seconds] | off" >&2; exit 2 ;;
 esac
 exit 0

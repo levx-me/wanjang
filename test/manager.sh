@@ -290,8 +290,8 @@ out=$(echo '[{"sessionId":"aaaa1111-x","name":"repo-a","cwd":"'"$R"'","status":"
 "$M" trust --cwd "$R" | grep -q '^trust ladder on' || bad "trust passthrough"
 "$M" undo --cwd "$R" | grep -q 'Nothing to undo' || bad "undo passthrough"
 
-# ---- hooks.json: no Stop hook; the tick hook waits up to 45 s
-jq -e '(.hooks|has("Stop")|not) and (.hooks.UserPromptSubmit[0].hooks[0]|(.command|endswith("bin/manager\" prompt")) and .timeout==45)' hooks/hooks.json >/dev/null \
+# ---- hooks.json: the only Stop hook is redframe off; the tick hook waits up to 45 s
+jq -e '([.hooks.Stop[]?.hooks[].command]|all(endswith("bin/redframe\" off"))) and (.hooks.UserPromptSubmit[0].hooks[0]|(.command|endswith("bin/manager\" prompt")) and .timeout==45)' hooks/hooks.json >/dev/null \
   || bad "hooks.json: Stop hook left or prompt hook wrong"
 
 # ---- ignore: a retired repo gets no repo findings, its session still shows
