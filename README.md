@@ -155,6 +155,10 @@ URL and a verified / snippet / unverified flag). Builders then write the parts i
 conclusion and recomputes every derived number, and the checker verifies the key numbers and quotes. You get
 `research.md` and its source notes (plus `dataset.json` when you ask for data).
 
+### Interview
+
+For a big, new or vague feature, `/wanjang:interview` asks the decisions through the question wizard in rounds of up to four, plays back what is settled and what was assumed, runs a premortem ("it shipped and failed: why?") and writes one spec to `docs/specs/YYYY-MM-DD-<slug>.md`. The PM and planner treat its decisions as settled and only ask about its open questions.
+
 ### Pages and briefs
 
 Two skills turn work into something you read. `/wanjang:visual-doc` builds a report, a dashboard or an explainer as one
@@ -187,6 +191,7 @@ field: know-how for a field comes from playbooks.
 | `/wanjang:wanjang resume [run]` | Pick up a run that stopped (a crash, a lost connection, a restart) |
 | `/wanjang:docs <query> [dir]` | Find a section in .md/.txt/.html docs with `docindex` and answer from only those lines |
 | `/wanjang:visual-doc` | Turn a report, dashboard or explanation into one HTML page in a fixed style |
+| `/wanjang:interview` | Before a big, new or vague feature: a planning interview in the question wizard (short rounds, play-backs, a premortem on how it could fail), ending in one spec file in `docs/specs/` that the PM and planner build from. Main session only |
 | `/wanjang:brief` | Write a brief for non-developers: plain words, the decisions to approve, each paired with a question |
 | `/wanjang:now` | What each running agent is doing now, for how long, what is done and what looks stuck (`bin/status`, read-only) |
 | `/wanjang:wen` | Roughly when the running work will be done, per agent and overall, estimated from past runs, drawn as bars (`bin/status --eta --bars`, read-only; history cached in `~/.claude/wanjang/wanjang.db`). The Steading deck shows it live |
@@ -392,7 +397,7 @@ and leaving browser testing to QA.
 | `bin/usage` | The token report behind `/wanjang:optimize` |
 | `bin/provider`, `bin/openrouter-key`, `bin/api-key`, `bin/provider-hook`, `bin/provider-fail` | `/wanjang:provider`, its key helper, the hook that runs it with no model, and the one that switches back on a billing error |
 | `bin/docindex` | The local doc index behind `/wanjang:docs` |
-| `skills/` | `/wanjang:wanjang`, `/wanjang:optimize`, `/wanjang:now`, `/wanjang:wen`, `/wanjang:manager`, `/wanjang:next` (a stub), `/wanjang:docs`, `/wanjang:slim`, `/wanjang:relay`, `/wanjang:provider`, `/wanjang:visual-doc` and `/wanjang:brief` |
+| `skills/` | `/wanjang:wanjang`, `/wanjang:optimize`, `/wanjang:now`, `/wanjang:wen`, `/wanjang:manager`, `/wanjang:next` (a stub), `/wanjang:docs`, `/wanjang:slim`, `/wanjang:relay`, `/wanjang:provider`, `/wanjang:visual-doc`, `/wanjang:brief` and `/wanjang:interview` |
 | `test/` | `guard.sh`, `read-warn.sh`, `deliverables.sh`, `docindex.sh`, `main-rules.sh`, `route.sh`, `close.sh`, `ledger.sh`, `usage.sh`, `status.sh`, `provider.sh`, `next.sh`, `manager.sh`, `manager-page.sh`, `playbooks.sh` and `skills.sh` |
 
 ```sh
