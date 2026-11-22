@@ -20,7 +20,7 @@ Each round is one `AskUserQuestion` call. Every decision goes through the wizard
 3-5 lines: what is now decided, what was assumed (mark "assumed"), and the coverage table, one line per area: settled / assumed / open. The user can correct it in the next round's "Other", or say so in chat.
 
 ## 3. Premortem round
-Once the main areas are settled or assumed, run it once. Frame: "Imagine this shipped and failed. Why?" Details in `${CLAUDE_PLUGIN_ROOT}/skills/interview/references/premortem.md`: generate the likely holes, ask about the top ones (address / defer / accept the risk), record signal, kill criterion and fallback for the top 1-3, finish with a bias check.
+Once the main areas are settled or assumed, run it once. Frame: "Imagine this shipped and failed. Why?" Details in `${CLAUDE_PLUGIN_ROOT}/skills/interview/references/premortem.md`: helper agents (scouts, different angles) find the likely holes, ask about the top ones (address / defer / accept the risk), record signal, kill criterion and fallback for the top 1-3, finish with a bias check.
 
 ## 4. Stop rule
 Stop asking when no frontier is left. Soft cap: about 5 rounds or 20 questions, then ask whether to continue (continue / write the spec with what we have). Questions left unanswered become "Open questions", not blockers.
