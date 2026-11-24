@@ -1,0 +1,161 @@
+#!/usr/bin/env python3
+"""slow [--top N] [--json]: one snapshot of what is using this machine, for /wanjang:slow.
+
+  system   load average against CPU cores, memory in use, swap, memory pressure (macOS),
+           free disk on /
+  apps     processes summed per app (a .app bundle, or the command name), by CPU then memory
+  procs    the heaviest single processes, with how long they have run; a Claude Code or
+           node process also shows its working folder
+  flags    lines starting with "!" mark what looks wrong (swap in use, disk nearly full, load
+           above the cores, many Claude sessions, old dev servers, a runaway process)
+
+Read-only: it never stops or changes anything. Exit codes: 0 printed, 2 `ps` failed."""
+import argparse, json, os, re, shutil, subprocess, sys
+from collections import defaultdict
+
+ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
+ap.add_argument("--top", type=int, default=12, help="how many apps and processes to list (default 12)")
+ap.add_argument("--json", action="store_true", help="machine-readable output on stdout")
+a = ap.parse_args()
+MAC = sys.platform == "darwin"
+GB = 1024 ** 3
+
+
+def run(cmd):
+    try:
+        return subprocess.run(cmd, capture_output=True, text=True, timeout=10).stdout
+    except (OSError, subprocess.TimeoutExpired):
+        return ""
+
+
+def secs(etime):
+    """ps etime ([[dd-]hh:]mm:ss) as seconds."""
+    d, _, rest = etime.strip().rpartition("-")
+    parts = [int(x) for x in rest.split(":")]
+    while len(parts) < 3:
+        parts.insert(0, 0)
+    return (int(d) if d else 0) * 86400 + parts[0] * 3600 + parts[1] * 60 + parts[2]
+
+
+def human(s):
+    return f"{s // 86400}d" if s >= 86400 else f"{s // 3600}h" if s >= 3600 else f"{s // 60}m"
+
+
+def app_of(args, comm):
+    m = re.search(r"/([^/]+)\.app/", comm) or re.search(r"/([^/]+)\.app/", args)
+    if m:
+        return m.group(1)
+    name = os.path.basename(comm)
+    return re.sub(r" Helper.*$", "", name)
+
+
+def cwd_of(pid):
+    if MAC:
+        out = run(["lsof", "-a", "-p", str(pid), "-d", "cwd", "-Fn"])
+        return next((l[1:] for l in out.splitlines() if l.startswith("n")), "")
+    try:
+        return os.readlink(f"/proc/{pid}/cwd")
+    except OSError:
+        return ""
+
+
+out = run(["ps", "-axo", "pid=,pcpu=,rss=,etime=,args="])
+comms = dict(l.strip().split(None, 1) for l in run(["ps", "-axo", "pid=,comm="]).splitlines() if len(l.split()) > 1)
+if not out:
+    print("slow: ps gave nothing", file=sys.stderr)
+    sys.exit(2)
+procs = []
+for line in out.splitlines():
+    f = line.split(None, 4)
+    if len(f) < 5:
+        continue
+    pid, cpu, rss, et, args = int(f[0]), float(f[1]), int(f[2]) * 1024, f[3], f[4]
+    comm = comms.get(f[0], args.split()[0])
+    if pid == os.getpid() or comm.startswith("("):  # "(ps)": a process exiting, often our own
+        continue
+    procs.append({"pid": pid, "cpu": cpu, "mem": rss, "age": secs(et), "name": os.path.basename(comm),
+                  "app": app_of(args, comm), "args": args[:160]})
+
+# system
+cores = os.cpu_count() or 1
+load = os.getloadavg()
+total = used = swap = 0
+pressure = ""
+if MAC:
+    total = int(run(["sysctl", "-n", "hw.memsize"]) or 0)
+    vm = run(["vm_stat"])
+    page = int((re.search(r"page size of (\d+)", vm) or [0, 16384])[1])
+    pages = {k: int(v) for k, v in re.findall(r'"?([A-Za-z -]+)"?:\s+(\d+)\.', vm)}
+    used = page * (pages.get("Anonymous pages", 0) - pages.get("Pages purgeable", 0)
+                   + pages.get("Pages wired down", 0) + pages.get("Pages occupied by compressor", 0))
+    m = re.search(r"used = ([\d.]+)M", run(["sysctl", "-n", "vm.swapusage"]))
+    swap = int(float(m.group(1)) * 1024 * 1024) if m else 0
+    m = re.search(r"free percentage: (\d+)%", run(["memory_pressure", "-Q"]))
+    pressure = f"{100 - int(m.group(1))}%" if m else ""
+else:
+    try:
+        mi = {k: int(v.split()[0]) * 1024 for k, v in (l.split(":", 1) for l in open("/proc/meminfo"))}
+        total, used = mi["MemTotal"], mi["MemTotal"] - mi["MemAvailable"]
+        swap = mi["SwapTotal"] - mi["SwapFree"]
+    except (OSError, KeyError, ValueError):
+        pass
+disk = shutil.disk_usage("/")
+
+apps = defaultdict(lambda: {"cpu": 0.0, "mem": 0, "n": 0})
+for p in procs:
+    g = apps[p["app"]]
+    g["cpu"] += p["cpu"]; g["mem"] += p["mem"]; g["n"] += 1
+top_apps = sorted(apps.items(), key=lambda kv: (kv[1]["cpu"] + kv[1]["mem"] / GB * 10), reverse=True)[:a.top]
+heavy = sorted(procs, key=lambda p: (p["cpu"] + p["mem"] / GB * 10), reverse=True)[:a.top]
+for p in heavy:
+    if p["name"].split()[0] in ("claude", "node", "bun", "python3", "deno", "next-server", "vite"):
+        p["cwd"] = cwd_of(p["pid"])
+
+# flags
+flags = []
+if load[0] > cores:
+    flags.append(f"load {load[0]:.1f} is above the {cores} cores: work is queueing for the CPU")
+if total and used / total > 0.85:
+    flags.append(f"memory {used / total:.0%} in use")
+if pressure and int(pressure[:-1]) >= 70:
+    flags.append(f"memory pressure {pressure}: macOS is compressing and evicting to keep up")
+if swap > GB:
+    flags.append(f"swap {swap / GB:.1f} GB in use: memory has run short and the disk is standing in")
+if disk.free / disk.total < 0.1:
+    flags.append(f"disk / has {disk.free / GB:.0f} GB free ({disk.free / disk.total:.0%})")
+claudes = [p for p in procs if p["name"] == "claude"]
+if len(claudes) >= 6:
+    flags.append(f"{len(claudes)} Claude Code processes, {sum(p['mem'] for p in claudes) / GB:.1f} GB together")
+for p in procs:
+    if p["cpu"] >= 90 and p["age"] > 600:
+        flags.append(f"pid {p['pid']} {p['name']} at {p['cpu']:.0f}% CPU for {human(p['age'])}: maybe runaway")
+dev = [p for p in procs if re.search(r"\b(vite|next dev|webpack|nodemon|tsc --watch|jest --watch|anvil|hardhat node)\b", p["args"])
+       and p["age"] > 86400]
+if dev:
+    flags.append(f"{len(dev)} dev servers or watchers older than a day: "
+                 + ", ".join(f"{p['pid']} {p['name']} ({human(p['age'])})" for p in dev[:5]))
+for name in ("mds_stores", "mdworker_shared", "backupd", "kernel_task", "WindowServer"):
+    cpu = sum(p["cpu"] for p in procs if p["name"] == name)
+    if cpu >= 50:
+        flags.append(f"{name} at {cpu:.0f}% CPU")
+
+if a.json:
+    json.dump({"cores": cores, "load": load, "mem_total": total, "mem_used": used, "swap_used": swap,
+               "pressure": pressure, "disk_free": disk.free, "disk_total": disk.total,
+               "apps": [{"app": k, **v} for k, v in top_apps], "procs": heavy, "flags": flags}, sys.stdout, indent=1)
+    print()
+    sys.exit(0)
+
+print(f"system  load {load[0]:.1f} {load[1]:.1f} {load[2]:.1f} on {cores} cores · "
+      f"memory {used / GB:.1f}/{total / GB:.0f} GB" + (f" (pressure {pressure})" if pressure else "")
+      + f" · swap {swap / GB:.1f} GB · disk free {disk.free / GB:.0f} GB")
+print("\napps    cpu%   mem GB  procs")
+for k, v in top_apps:
+    print(f"  {v['cpu']:6.0f} {v['mem'] / GB:7.2f}  {v['n']:5}  {k}")
+print("\nprocs   pid   cpu%  mem GB  age  name")
+for p in heavy:
+    extra = f"  [{p['cwd']}]" if p.get("cwd") else ""
+    print(f"  {p['pid']:7} {p['cpu']:5.0f} {p['mem'] / GB:7.2f} {human(p['age']):>4}  {p['name']}{extra}")
+print()
+for f in flags or ["nothing obviously wrong"]:
+    print(("! " if flags else "  ") + f)
