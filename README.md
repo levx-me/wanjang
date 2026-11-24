@@ -192,6 +192,7 @@ field: know-how for a field comes from playbooks.
 | `/wanjang:docs <query> [dir]` | Find a section in .md/.txt/.html docs with `docindex` and answer from only those lines |
 | `/wanjang:visual-doc` | Turn a report, dashboard or explanation into one HTML page in a fixed style |
 | `/wanjang:interview` | Before a big, new or vague feature: a planning interview in the question wizard (short rounds, play-backs, a premortem on how it could fail), ending in one spec file in `docs/specs/` that the PM and planner build from. Main session only |
+| `/wanjang:humanize <text or file>` | Rewrite text that sounds machine-made (English or Korean) so it reads like a person wrote it, keeping every claim (playbook `humanize`) |
 | `/wanjang:brief` | Write a brief for non-developers: plain words, the decisions to approve, each paired with a question |
 | `/wanjang:advance [hint]` | Pick the work back up after a compaction or an unanswered reply: finds what is left in this conversation (the last reply, pending tasks, due promises, stopped runs, uncommitted work); one item is done at once, several are put to you in the wizard. Main session only |
 | `/wanjang:now` | What each running agent is doing now, for how long, what is done and what looks stuck (`bin/status`, read-only) |
@@ -398,7 +399,7 @@ and leaving browser testing to QA.
 | `bin/usage` | The token report behind `/wanjang:optimize` |
 | `bin/provider`, `bin/openrouter-key`, `bin/api-key`, `bin/provider-hook`, `bin/provider-fail` | `/wanjang:provider`, its key helper, the hook that runs it with no model, and the one that switches back on a billing error |
 | `bin/docindex` | The local doc index behind `/wanjang:docs` |
-| `skills/` | `/wanjang:wanjang`, `/wanjang:optimize`, `/wanjang:now`, `/wanjang:wen`, `/wanjang:manager`, `/wanjang:next` (a stub), `/wanjang:docs`, `/wanjang:slim`, `/wanjang:relay`, `/wanjang:provider`, `/wanjang:visual-doc`, `/wanjang:brief`, `/wanjang:interview` and `/wanjang:advance` |
+| `skills/` | `/wanjang:wanjang`, `/wanjang:optimize`, `/wanjang:now`, `/wanjang:wen`, `/wanjang:manager`, `/wanjang:next` (a stub), `/wanjang:docs`, `/wanjang:slim`, `/wanjang:relay`, `/wanjang:provider`, `/wanjang:visual-doc`, `/wanjang:brief`, `/wanjang:interview`, `/wanjang:advance` and `/wanjang:humanize` |
 | `test/` | `guard.sh`, `read-warn.sh`, `deliverables.sh`, `docindex.sh`, `main-rules.sh`, `route.sh`, `close.sh`, `ledger.sh`, `usage.sh`, `status.sh`, `provider.sh`, `next.sh`, `manager.sh`, `manager-page.sh`, `playbooks.sh` and `skills.sh` |
 
 ```sh

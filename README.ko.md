@@ -188,6 +188,7 @@ Claude 세션에서는 PATH에 있어요. `/wanjang:docs <query> [dir]`가 이�
 | `/wanjang:docs <query> [dir]` | .md/.txt/.html 문서에서 `docindex`로 섹션을 찾고, 찾은 줄만으로 답해요 |
 | `/wanjang:visual-doc` | 보고서, 대시보드, 설명을 정해진 스타일의 HTML 페이지 하나로 만들어요 |
 | `/wanjang:interview` | 크거나 새롭거나 막연한 기능을 만들기 전에 질문 위저드로 기획 인터뷰를 해요(짧은 라운드, 중간 정리, 실패 시나리오 premortem). 결과는 `docs/specs/`의 스펙 파일 하나이고 PM과 planner가 이걸 보고 만들어요. 메인 세션 전용 |
+| `/wanjang:humanize <글이나 파일>` | 기계가 쓴 티가 나는 글(영어, 한국어)을 사람이 쓴 것처럼 고쳐요. 주장과 세부 내용은 그대로 둬요(플레이북 `humanize`) |
 | `/wanjang:brief` | 개발자가 아닌 분을 위한 브리프를 써요: 쉬운 말, 승인할 결정, 결정마다 질문 하나 |
 | `/wanjang:advance [힌트]` | 압축 뒤나, 마지막 답을 읽고 대답하지 않았을 때 이어서 해요: 이 대화에서 남은 일(마지막 답, 대기 작업, 때가 된 약속, 멈춘 run, 커밋 안 한 변경)을 찾아 하나면 바로 하고, 여럿이면 위저드로 무엇부터 할지 물어요. 메인 세션 전용 |
 | `/wanjang:now` | 돌아가는 에이전트가 지금 무엇을, 얼마나 오래 하는지, 끝난 것과 막힌 것 같은 것을 알려줘요(`bin/status`, 읽기 전용) |
@@ -390,7 +391,7 @@ Sonnet, 오래 일한 워커를 이어 쓰는 대신 새로 띄우기, 브라우
 | `bin/usage` | `/wanjang:optimize`의 토큰 보고서 |
 | `bin/provider`, `bin/openrouter-key`, `bin/api-key`, `bin/provider-hook`, `bin/provider-fail` | `/wanjang:provider`, 키 도우미, 모델 없이 실행하는 훅, 결제 오류 때 되돌리는 훅 |
 | `bin/docindex` | `/wanjang:docs`가 쓰는 로컬 문서 색인 |
-| `skills/` | `/wanjang:wanjang`, `/wanjang:optimize`, `/wanjang:now`, `/wanjang:wen`, `/wanjang:manager`, `/wanjang:next`(껍데기), `/wanjang:docs`, `/wanjang:slim`, `/wanjang:relay`, `/wanjang:provider`, `/wanjang:visual-doc`, `/wanjang:brief`, `/wanjang:interview`, `/wanjang:advance` |
+| `skills/` | `/wanjang:wanjang`, `/wanjang:optimize`, `/wanjang:now`, `/wanjang:wen`, `/wanjang:manager`, `/wanjang:next`(껍데기), `/wanjang:docs`, `/wanjang:slim`, `/wanjang:relay`, `/wanjang:provider`, `/wanjang:visual-doc`, `/wanjang:brief`, `/wanjang:interview`, `/wanjang:advance`, `/wanjang:humanize` |
 | `test/` | `guard.sh`, `read-warn.sh`, `deliverables.sh`, `docindex.sh`, `main-rules.sh`, `route.sh`, `close.sh`, `ledger.sh`, `usage.sh`, `status.sh`, `provider.sh`, `next.sh`, `manager.sh`, `manager-page.sh`, `playbooks.sh`, `skills.sh` |
 
 ```sh

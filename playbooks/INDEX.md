@@ -50,6 +50,7 @@ tells two similar playbooks apart.
 ## Documents
 - [deck](deck.md) — slides for investors, a board, sales or a status review: story, one message per slide, text-fit checks (a memo is business-doc, a PDF file problem is pdf-pipeline)
 - [business-doc](business-doc.md) — a written Word (docx) document: memo, one-pager, proposal, SOW, report, policy; answer first, real styles, accessible (not slides, not fixed-layout PDF)
+- [humanize](humanize.md) — text that sounds machine-written (English or Korean: notice, README, blog, product copy, report) and must keep every claim: patterns, rewrite rules, claim check (not strategy; that is marketing-copy)
 - [pdf-pipeline](pdf-pipeline.md) — the file format is the problem: Markdown/HTML to PDF, fill forms, merge/split/redact, extract text or tables, OCR, PDF accessibility
 
 ## Finance and data
