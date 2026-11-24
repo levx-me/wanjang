@@ -1,6 +1,6 @@
 ---
-name: continue
-description: Pick the work back up after a compaction, or after the user read the last reply without answering it. Finds what is left to do from this conversation; one item is done at once, several are put to the user in the wizard to choose which comes first. /wanjang:continue [hint]
+name: advance
+description: Pick the work back up after a compaction, or after the user read the last reply without answering it. Finds what is left to do from this conversation; one item is done at once, several are put to the user in the wizard to choose which comes first. /wanjang:advance [hint]
 argument-hint: "[what to focus on]"
 ---
 Main session only: if you are a subagent, stop at once.
