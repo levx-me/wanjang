@@ -53,7 +53,7 @@ A crash, a lost connection or a restart kills you and every worker you started; 
   - **Contract**: API shapes, types, testids.
   - **Decisions**: one line each for every choice workers must share (names, style, interfaces, libraries) or the user may want to revisit, numbered and added as they are made: `D<n> [<phase>] <what>, because <why> (by PM|advisor|<worker>; instead: <alternatives>; revert: <how>)`, leaving out the parts that do not apply.
   - **For you**: the steps only the user can do (a secret to set, a deploy, migration or paid service to approve), added as they turn up.
-  - **Tasks**: a table of task, worker and model, files it owns, status (todo / running / done / failed), result (commits, brief and return paths, verdict).
+  - **Tasks**: a table of task, worker and model, files it owns, status (todo / running / done / failed), result (commits, brief and return paths, verdict). Every row a worker takes, QA and the checker too, gets that worker's agent id in its worker cell the moment it starts: `/wanjang:wen` reads each row's progress by that id, and a row without one is guessed from the average.
   - **Files touched**: each path changed so far, with the task that changed it.
   - **Bad news**: the notices sent (see Bad news now).
   - **Next**: what happens next.
