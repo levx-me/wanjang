@@ -59,8 +59,10 @@ run chk wanjang:checker '"opus"' "Check it" 60               # model has 2, type
 run scx wanjang:scout '"sonnet"' "Look around" 60            # 2 samples only: no estimate
 run pm1 wanjang:pm null "Lead" 120                           # history +8 min, run log says more
 run pmw wanjang:builder '"sonnet"' "Task 2" 180
-sed -i.bak 's/"spawnDepth":1/"spawnDepth":2,"parentAgentId":"pm1"/' "$E/agent-pmw.meta.json"; rm -f "$E"/*.bak
-printf 'Status: in progress\n\n## Tasks\n| task | worker | files | status |\n| one | builder sonnet | a | done |\n| two pmw | builder sonnet | b | running |\n| three | builder sonnet | c | todo |\n' > "$RL/log.md"
+run pmd wanjang:designer '"opus"' "Task 4" 600            # (a designer: no builder history) finished, but the PM has not marked its row: counts as done
+sed -i.bak 's/"spawnDepth":1/"spawnDepth":2,"parentAgentId":"pm1"/' "$E/agent-pmw.meta.json" "$E/agent-pmd.meta.json"
+sed -i.bak 's/"agentType"/"finished":true,"agentType"/' "$E/agent-pmd.meta.json"; rm -f "$E"/*.bak
+printf 'Status: in progress\n\n## Tasks\n| task | worker | files | status |\n| one | builder sonnet | a | done |\n| two pmw | builder sonnet | b | running |\n| three | builder sonnet | c | todo |\n| four pmd | builder sonnet | d | running |\n' > "$RL/log.md"
 ej=$(CLAUDE_CONFIG_DIR=$U bin/status --session s2 --cwd "$U/repo" --json --eta)
 et=$(CLAUDE_CONFIG_DIR=$U bin/status --session s2 --cwd "$U/repo" --eta)
 json=$ej
@@ -68,15 +70,15 @@ want '.agents[] | select(.id=="bnew") | .eta | [.likely - '"$NOW"', .latest - '"
 want '.agents[] | select(.id=="bold") | .eta | [.likely, .latest, .over] | @csv' ',,true'
 want '.agents[] | select(.id=="chk") | .eta | [.basis_n, .basis] | @csv' '4,"wanjang:checker that ran this long"'
 want '.agents[] | select(.id=="scx") | .eta | [.likely, .basis_n, .over] | @csv' ',,false'
-want '.agents[] | select(.id=="pm1") | .eta | .tasks_done' 1
-want '.agents[] | select(.id=="pm1") | .eta | .basis | endswith("1 of 3 tasks done")' true
+want '.agents[] | select(.id=="pm1") | .eta | .tasks_done' 2
+want '.agents[] | select(.id=="pm1") | .eta | .basis | endswith("2 of 4 tasks done")' true
 # pm: history gives start+10 min (8 left); the table gives the worker 3.5 left plus the todo row 6.5 = 10 left
 want '.agents[] | select(.id=="pm1") | .eta | .likely - '"$NOW" 600
 want '.eta_all' "$(printf '%s' "$ej" | jq '.agents[] | select(.id=="pm1") | .eta.likely')"   # latest likely among top-level
 echo "$et" | grep -q 'all running work should be done by' || { echo "FAIL eta overall line"; fail=1; }
 echo "$et" | grep -q 'taking longer than usual (most finish within 8 min)' || { echo "FAIL overdue wording"; fail=1; }
 echo "$et" | grep -q 'eta: no estimate' || { echo "FAIL no-estimate wording"; fail=1; }
-echo "$et" | grep -q '1 of 3 tasks done' || { echo "FAIL tasks done text"; fail=1; }
+echo "$et" | grep -q '2 of 4 tasks done' || { echo "FAIL tasks done text"; fail=1; }
 echo "$et" | grep -q 'eta: likely [0-9: -]* (~4 min left), latest' || { echo "FAIL likely wording"; fail=1; }
 # without --eta nothing changes: no eta keys, no eta text
 CLAUDE_CONFIG_DIR=$U bin/status --session s2 --cwd "$U/repo" --json | jq -e 'has("eta_all") or ([.agents[] | has("eta")] | any)' >/dev/null && { echo "FAIL eta leaked into --json"; fail=1; }
@@ -147,7 +149,7 @@ echo "$bars" | head -1 | grep -q '^Overall [0-9:]* · about [0-9]* min left$' ||
 echo "$bars" | grep -q '^Fresh build *██████░░░░░░░░ *4 min  [0-9:]*$' || { echo "FAIL bars fresh"; fail=1; }   # 180 of 390 s
 echo "$bars" | grep -q '^Slow build *█████████████▒  longer than usual$' || { echo "FAIL bars over"; fail=1; }
 echo "$bars" | grep -q '^Look around *░* *no estimate$' || { echo "FAIL bars no estimate"; fail=1; }
-echo "$bars" | grep -q '└ 1/3 tasks done' || { echo "FAIL bars tasks"; fail=1; }
+echo "$bars" | grep -q "└ 1/3 tasks done" || { echo "FAIL bars tasks"; fail=1; }   # by now the newest run log is run3
 unset WANJANG_NOW
 # status cell counted by its first word: "done f71b50a; cold 1.77s" is done, "running ..." is running
 R5=$U/repo/.git/wanjang/run5; mkdir -p "$R5"

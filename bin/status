@@ -12,7 +12,8 @@ session's agents are doing now, read from transcripts on disk (only the last 200
           likely, 80th percentile = latest; needs 5 samples and 3 longer, else the type alone, else
           no estimate). A finished agent with a running descendant is [WAITING] (--json:
           waits_on_children) and is estimated too. A wanjang:pm with a `## Tasks` table in its run log is
-          refined by that table (k of n done, running and todo rows). Ends with when all top-level
+          refined by that table (k of n done, running and todo rows; a row naming a worker id that has finished
+          counts as done, since the PM often marks it late, and a todo row whose worker already runs uses that worker's eta). Ends with when all top-level
           running work should be done. In --json each agent gets eta {likely, latest, left_min,
           basis_n, basis, over} (epoch seconds, null when none) and the top level eta_all.
           A worker that keeps a step list (TaskCreate with a "[tag] " subject prefix: read, plan, edit, test, review, docs,
@@ -624,20 +625,25 @@ if a.eta:
                     s = first(r)
                     if s not in ("running", "todo"):
                         continue
+                    named = [x for x in tree if x["id"] != g["id"] and re.search(rf"\b{re.escape(x['id'])}\b", r["_line"])]
+                    if named and not any(active(x) for x in named):
+                        done += 1  # its worker has finished: the PM has not marked the row yet
+                        continue
                     ws = stat(*worker(r.get("worker", ""))) or stat("wanjang:builder", "sonnet")
-                    mine = [x for x in tree if x["running"] and x["id"] != g["id"] and x["id"] in eta
-                            and re.search(rf"\b{re.escape(x['id'])}\b", r["_line"])]
-                    if s == "running" and mine and eta[mine[0]["id"]]["likely"]:
+                    mine = [x for x in named if x["running"] and x["id"] in eta]
+                    if mine and eta[mine[0]["id"]]["likely"]:
                         left.append(max(0, eta[mine[0]["id"]]["likely"] - now) / 60)
                     elif s == "running":
                         left.append(ws[0] if ws else 0)
                     else:
                         todo += ws[0] if ws else 0
                 end = now + (max(left, default=0) + todo) * 60
-                e["likely"] = max(e["likely"] or 0, end)
+                # the table and the workers at work say more than how long past PMs ran: history is not a floor here
+                # (conditioned on "ran this long", it moves later the longer a run goes)
+                e["likely"] = max(end, dl or 0)
                 e["latest"] = max(e["latest"] or 0, e["likely"])
                 e["over"] = False
-                e["basis"] = f"{e['basis'] or 'run log'}; {done} of {len(rows)} tasks done"
+                e["basis"] = f"run log and the workers at work; {done} of {len(rows)} tasks done"
                 e["tasks_done"], e["tasks_total"] = done, len(rows)
                 key = [done, len(rows), sum(first(r) == "running" for r in rows)]
         if e["likely"]:
