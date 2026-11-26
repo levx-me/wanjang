@@ -9,6 +9,7 @@ since the last check, for /wanjang:gh.
            check are marked `*` (new PR, new commits, CI or review state changed, new activity)
   closed   pull requests open last time and gone now (merged or closed)
   review   open pull requests that ask for your review
+  triage   pull requests opened by someone else since the last check, for /wanjang:gh to read and ask about
   issues   open issues assigned to you, and issues or PRs mentioning you, new or updated
 
 It keeps what it saw per repository in ~/.claude/wanjang/gh/ (or --state DIR). The first check marks
@@ -85,7 +86,7 @@ if gone:
 repo = gh_json("repo", "view", "--json", "nameWithOwner")
 me = old.get("me") or ((gh_json("api", "user") or {}).get("login") if repo else None)
 new["me"] = me
-review, issues = [], []
+review, triage, issues = [], [], []
 prs = gh_json("pr", "list", "--state", "open", "--limit", "100", "--json",
               "number,title,author,isDraft,headRefOid,updatedAt,reviewDecision,statusCheckRollup,reviewRequests,url") if repo else None
 if prs is None:  # keep what was seen: an outage must not read as "every PR closed", then "every PR new"
@@ -128,6 +129,8 @@ else:
                 what.append("new activity")
         if asks_me:
             review.append(p["number"])
+        if "new" in what and "prs" in old and me and (p.get("author") or {}).get("login") != me:  # not on the first check: that would be every open PR
+            triage.append(p["number"])  # someone else's new PR: /wanjang:gh reads it and asks what to do
         state = f"CI {cur['ci']}" + (f" · {cur['review'].lower().replace('_', ' ')}" if cur["review"] else "")
         draft = " (draft)" if p.get("isDraft") else ""
         rows.append(f"{'*' if what else ' '} #{k} {p['title'][:70]}{draft} — @{(p.get('author') or {}).get('login', '?')} · {state}"
@@ -142,6 +145,8 @@ else:
         lines.append(f"* closed  merged or closed since the last check: {'; '.join(closed[:8])}")
     if review:
         lines.append(f"  review  asking for your review: {', '.join(f'#{n}' for n in review)}")
+    if triage:
+        lines.append(f"* triage  new pull requests by others to look at: {', '.join(f'#{n}' for n in triage)}")
 
     # issues assigned to me, and issues/PRs mentioning me
     found, issues_ok = {}, True
@@ -171,7 +176,7 @@ with open(path + ".tmp", "w") as f:
 os.replace(path + ".tmp", path)
 if a.json:
     json.dump({"repo": top, "branch": branch, "upstream": up if behind or rc == 0 else "", "behind": behind,
-               "gone": gone, "review": review, "changed": changed, "lines": lines}, sys.stdout, indent=1)
+               "gone": gone, "review": review, "triage": triage, "changed": changed, "lines": lines}, sys.stdout, indent=1)
     print()
 else:
     print("\n".join(lines) if lines else "  nothing open")

@@ -32,6 +32,7 @@ run; want 3 '^\s+  #1 Add' "second check: nothing changed"
 echo "[$(pr 1 Add a2 t2 FAILURE), $(pr 2 Fix b1 t1 SUCCESS '{"login":"me"}')]" > "$T/prs.json"
 run; want 0 '\* #1 Add .*new commits, CI fail \(was pass\)' "commits and CI"
 grep -q 'review  asking for your review: #2' <<<"$out" || { echo "FAIL review line"; echo "$out"; fail=1; }
+grep -q '^\* triage  .*: #2$' <<<"$out" || { echo "FAIL triage line (#2 new, #1 not)"; echo "$out"; fail=1; }
 echo "[$(pr 2 Fix b1 t1 SUCCESS '{"login":"me"}')]" > "$T/prs.json"
 echo '[{"number":9,"title":"Bug","updatedAt":"t1"}]' > "$T/issues.json"
 run; want 0 '^\* closed .*#1 Add' "closed PR"

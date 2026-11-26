@@ -195,7 +195,7 @@ Claude 세션에서는 PATH에 있어요. `/wanjang:docs <query> [dir]`가 이�
 | `/wanjang:wen` | 돌아가는 일이 대략 언제 끝날지 에이전트별로, 전체로 알려줘요. 지난 run의 소요 시간으로 추정해 막대로 그려요(`bin/status --eta --bars`, 읽기 전용, 기록은 `~/.claude/wanjang/wanjang.db`에 캐시해요). Steading 덱에서 실시간으로 볼 수 있어요 |
 | `/wanjang:now --week\|--since DATE\|--repo X` | 끝난 run이 만든 것을 장부(`~/.claude/wanjang/ledger.md`, `CLAUDE_CONFIG_DIR` 따라감, `bin/ledger`)에서 한 줄씩 보여줘요 |
 | `/wanjang:slow [느린 증상]` | 컴퓨터가 왜 느린지 알려줘요. CPU, 메모리, 스왑, 디스크를 누가 쓰는지, 어느 세션이나 서버 것인지, 어떻게 빠르게 할지 말해요. 읽기 전용이고, 무언가를 끄려면 먼저 물어봐요(`bin/slow`) |
-| `/wanjang:gh [on\|off\|status]` | 이 저장소의 GitHub을 1시간마다 봐요. fetch만 하고 병합은 안 해요. 새로 들어온 커밋, 원격이 지워진 로컬 브랜치, 지난번 이후 바뀐 열린 PR·내게 할당된 이슈·나를 멘션한 글을 요약하고, 내 리뷰를 기다리는 PR은 `/code-review`를 돌릴지 물어봐요. 바뀐 게 없으면 조용해요(`bin/ghwatch`) |
+| `/wanjang:gh [on\|off\|status]` | 이 저장소의 GitHub을 1시간마다 봐요. fetch만 하고 병합은 안 해요. 새로 들어온 커밋, 원격이 지워진 로컬 브랜치, 지난번 이후 바뀐 열린 PR·내게 할당된 이슈·나를 멘션한 글을 요약하고, 남이 새로 연 PR(그리고 내 리뷰를 기다리는 PR)은 내용을 분석해서 리뷰, 받아서 테스트, 코멘트 초안, 그냥 두기 중 어떻게 할지 위저드로 물어봐요. 바뀐 게 없으면 조용해요(`bin/ghwatch`) |
 | `/wanjang:manager on\|off\|status` | 이 세션을 열려 있는 다른 세션들의 매니저로 만들어요. 한 시간마다 둘러보고, 한 페이지로 보여주고, 최대 4개를 묻고, 승인한 일은 맡은 세션에 보내요(기본 꺼짐, 사용자당 매니저 하나) |
 | `/wanjang:manager` | 지금 점검하고 페이지를 보여줘요 |
 | `/wanjang:manager approve ID\|reject ID` | 위저드 대신 페이지에서 본 항목에 답해요 |
