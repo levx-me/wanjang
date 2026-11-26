@@ -30,6 +30,7 @@ tells two similar playbooks apart.
 
 ## Quality
 - [debugging](debugging.md) — a bug, failure or slowdown with no known cause: feedback loop first, reproduce, instrument boundaries, bisect, fix the cause
+- [qa-testing](qa-testing.md) — checking a running product as its user (the QA agent's method): scope and scenario table, act-then-assert, console and network errors, a two-width layout sweep, severity and evidence rules
 - [test-writing](test-writing.md) — writing or fixing tests: seams, independent expected values, determinism, mocks, e2e locators, flaky tests
 - [code-review](code-review.md) — reviewing a PR or a worker's diff for design, behaviour, tests and readability; blocking vs nits
 - [security-review](security-review.md) — reviewing or building anything that touches auth, payments, permissions, secrets or user data; the checker's security review mode
