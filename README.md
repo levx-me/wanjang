@@ -199,6 +199,7 @@ field: know-how for a field comes from playbooks.
 | `/wanjang:wen` | Roughly when the running work will be done, per agent and overall, estimated from past runs, drawn as bars (`bin/status --eta --bars`, read-only; history cached in `~/.claude/wanjang/wanjang.db`). The Steading deck shows it live |
 | `/wanjang:now --week\|--since DATE\|--repo X` | What finished runs shipped, one line each, from the ledger at `~/.claude/wanjang/ledger.md` (honours `CLAUDE_CONFIG_DIR`; `bin/ledger`) |
 | `/wanjang:slow [what feels slow]` | Why the machine is slow: what uses the CPU, memory, swap and disk, which session or server it belongs to, and how to speed it up. Read-only; stopping anything is asked first (`bin/slow`) |
+| `/wanjang:gh [on\|off\|status]` | Watches this repository's GitHub every hour: fetches (never merges), says what came in and which local branches lost their remote, and summarizes open PRs, your assigned issues and mentions that changed since the last check; offers `/code-review` for a PR that asks for your review. Silent when nothing changed (`bin/ghwatch`) |
 | `/wanjang:manager on\|off\|status` | Make this session the manager of your other open sessions: an hourly look, one page, up to 4 questions, approved items sent to their sessions (off by default, one manager per user) |
 | `/wanjang:manager` | Check now, and show the page |
 | `/wanjang:manager approve ID\|reject ID` | Answer an item from the page instead of the wizard |
@@ -395,13 +396,14 @@ and leaving browser testing to QA.
 | `bin/close` | SubagentStop hook: sends the PM back once if it tries to report with its run log still open |
 | `bin/status` | The snapshot behind `/wanjang:now` (`--eta` adds the finish estimates behind `/wanjang:wen`): agents (nested, waiting tool call, stuck), run logs, open tasks |
 | `bin/slow` | The snapshot behind `/wanjang:slow`: load, memory, swap, disk, the heaviest apps and processes with their folders, and `!` flags (`--json`) |
+| `bin/ghwatch` | The check behind `/wanjang:gh`: fetch, commits behind upstream, gone branches, open PRs with CI and review state, issues and mentions, changes since the last run marked `*` (exit 0 changed, 3 nothing new; `--json`) |
 | `bin/ledger` | SubagentStop hook: adds a finished PM run's `Shipped:` line to the per-user ledger; `ledger show` prints it |
 | `bin/manager`, `bin/manager-page` | The scan, ledger, dispatch and prompt hook behind `/wanjang:manager`, and its page renderer |
 | `bin/next` | The scan and the promise and trust records the manager uses |
 | `bin/usage` | The token report behind `/wanjang:optimize` |
 | `bin/provider`, `bin/openrouter-key`, `bin/api-key`, `bin/provider-hook`, `bin/provider-fail` | `/wanjang:provider`, its key helper, the hook that runs it with no model, and the one that switches back on a billing error |
 | `bin/docindex` | The local doc index behind `/wanjang:docs` |
-| `skills/` | `/wanjang:wanjang`, `/wanjang:optimize`, `/wanjang:now`, `/wanjang:wen`, `/wanjang:manager`, `/wanjang:next` (a stub), `/wanjang:docs`, `/wanjang:slim`, `/wanjang:relay`, `/wanjang:provider`, `/wanjang:visual-doc`, `/wanjang:brief`, `/wanjang:interview`, `/wanjang:advance`, `/wanjang:humanize` and `/wanjang:slow` |
+| `skills/` | `/wanjang:wanjang`, `/wanjang:optimize`, `/wanjang:now`, `/wanjang:wen`, `/wanjang:manager`, `/wanjang:next` (a stub), `/wanjang:docs`, `/wanjang:slim`, `/wanjang:relay`, `/wanjang:provider`, `/wanjang:visual-doc`, `/wanjang:brief`, `/wanjang:interview`, `/wanjang:advance`, `/wanjang:humanize`, `/wanjang:slow` and `/wanjang:gh` |
 | `test/` | `guard.sh`, `read-warn.sh`, `deliverables.sh`, `docindex.sh`, `main-rules.sh`, `route.sh`, `close.sh`, `ledger.sh`, `usage.sh`, `status.sh`, `provider.sh`, `next.sh`, `manager.sh`, `manager-page.sh`, `playbooks.sh` and `skills.sh` |
 
 ```sh

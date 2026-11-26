@@ -195,6 +195,7 @@ Claude 세션에서는 PATH에 있어요. `/wanjang:docs <query> [dir]`가 이�
 | `/wanjang:wen` | 돌아가는 일이 대략 언제 끝날지 에이전트별로, 전체로 알려줘요. 지난 run의 소요 시간으로 추정해 막대로 그려요(`bin/status --eta --bars`, 읽기 전용, 기록은 `~/.claude/wanjang/wanjang.db`에 캐시해요). Steading 덱에서 실시간으로 볼 수 있어요 |
 | `/wanjang:now --week\|--since DATE\|--repo X` | 끝난 run이 만든 것을 장부(`~/.claude/wanjang/ledger.md`, `CLAUDE_CONFIG_DIR` 따라감, `bin/ledger`)에서 한 줄씩 보여줘요 |
 | `/wanjang:slow [느린 증상]` | 컴퓨터가 왜 느린지 알려줘요. CPU, 메모리, 스왑, 디스크를 누가 쓰는지, 어느 세션이나 서버 것인지, 어떻게 빠르게 할지 말해요. 읽기 전용이고, 무언가를 끄려면 먼저 물어봐요(`bin/slow`) |
+| `/wanjang:gh [on\|off\|status]` | 이 저장소의 GitHub을 1시간마다 봐요. fetch만 하고 병합은 안 해요. 새로 들어온 커밋, 원격이 지워진 로컬 브랜치, 지난번 이후 바뀐 열린 PR·내게 할당된 이슈·나를 멘션한 글을 요약하고, 내 리뷰를 기다리는 PR은 `/code-review`를 돌릴지 물어봐요. 바뀐 게 없으면 조용해요(`bin/ghwatch`) |
 | `/wanjang:manager on\|off\|status` | 이 세션을 열려 있는 다른 세션들의 매니저로 만들어요. 한 시간마다 둘러보고, 한 페이지로 보여주고, 최대 4개를 묻고, 승인한 일은 맡은 세션에 보내요(기본 꺼짐, 사용자당 매니저 하나) |
 | `/wanjang:manager` | 지금 점검하고 페이지를 보여줘요 |
 | `/wanjang:manager approve ID\|reject ID` | 위저드 대신 페이지에서 본 항목에 답해요 |
@@ -387,13 +388,14 @@ Sonnet, 오래 일한 워커를 이어 쓰는 대신 새로 띄우기, 브라우
 | `bin/close` | SubagentStop 훅: run 기록이 열린 채로 보고하려 하면 PM을 한 번 돌려보내요 |
 | `bin/status` | `/wanjang:now`의 스냅샷(`--eta`를 주면 `/wanjang:wen`의 완료 추정이 붙어요): 에이전트(중첩, 기다리는 도구 호출, 막힘), run 로그, 열린 작업 |
 | `bin/slow` | `/wanjang:slow`의 스냅샷: 부하, 메모리, 스왑, 디스크, 가장 무거운 앱과 프로세스(폴더 포함), `!` 경고(`--json`) |
+| `bin/ghwatch` | `/wanjang:gh`의 검사: fetch, upstream보다 뒤처진 커밋, 원격이 사라진 브랜치, CI·리뷰 상태가 붙은 열린 PR, 이슈와 멘션. 지난번 이후 바뀐 줄은 `*`(exit 0 바뀜, 3 없음; `--json`) |
 | `bin/ledger` | SubagentStop 훅: 끝난 PM run의 `Shipped:` 줄을 사용자별 장부에 더하고, `ledger show`로 보여줘요 |
 | `bin/manager`, `bin/manager-page` | `/wanjang:manager`의 스캔, 장부, 전달, 프롬프트 훅과 페이지 렌더러 |
 | `bin/next` | 매니저가 쓰는 스캔과 약속·믿고 맡기기 기록 |
 | `bin/usage` | `/wanjang:optimize`의 토큰 보고서 |
 | `bin/provider`, `bin/openrouter-key`, `bin/api-key`, `bin/provider-hook`, `bin/provider-fail` | `/wanjang:provider`, 키 도우미, 모델 없이 실행하는 훅, 결제 오류 때 되돌리는 훅 |
 | `bin/docindex` | `/wanjang:docs`가 쓰는 로컬 문서 색인 |
-| `skills/` | `/wanjang:wanjang`, `/wanjang:optimize`, `/wanjang:now`, `/wanjang:wen`, `/wanjang:manager`, `/wanjang:next`(껍데기), `/wanjang:docs`, `/wanjang:slim`, `/wanjang:relay`, `/wanjang:provider`, `/wanjang:visual-doc`, `/wanjang:brief`, `/wanjang:interview`, `/wanjang:advance`, `/wanjang:humanize`, `/wanjang:slow` |
+| `skills/` | `/wanjang:wanjang`, `/wanjang:optimize`, `/wanjang:now`, `/wanjang:wen`, `/wanjang:manager`, `/wanjang:next`(껍데기), `/wanjang:docs`, `/wanjang:slim`, `/wanjang:relay`, `/wanjang:provider`, `/wanjang:visual-doc`, `/wanjang:brief`, `/wanjang:interview`, `/wanjang:advance`, `/wanjang:humanize`, `/wanjang:slow`, `/wanjang:gh` |
 | `test/` | `guard.sh`, `read-warn.sh`, `deliverables.sh`, `docindex.sh`, `main-rules.sh`, `route.sh`, `close.sh`, `ledger.sh`, `usage.sh`, `status.sh`, `provider.sh`, `next.sh`, `manager.sh`, `manager-page.sh`, `playbooks.sh`, `skills.sh` |
 
 ```sh

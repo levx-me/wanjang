@@ -1,0 +1,178 @@
+#!/usr/bin/env python3
+"""ghwatch [--json] [--state DIR]: fetch this repository (never merge) and say what changed on GitHub
+since the last check, for /wanjang:gh.
+
+  fetch    `git fetch --all --prune`; if the current branch is behind its upstream, how far, and the
+           titles of up to 5 commits that came in (nothing is merged or pulled)
+  gone     local branches whose remote branch was deleted (merged PRs, usually): cleanup candidates
+  prs      every open pull request with its CI, review state and author; changes since the last
+           check are marked `*` (new PR, new commits, CI or review state changed, new activity)
+  closed   pull requests open last time and gone now (merged or closed)
+  review   open pull requests that ask for your review
+  issues   open issues assigned to you, and issues or PRs mentioning you, new or updated
+
+It keeps what it saw per repository in ~/.claude/wanjang/gh/ (or --state DIR). The first check marks
+everything as new. Exit codes: 0 something changed, 3 nothing changed, 2 not a git repository or
+git fetch failed. Without gh, or without a GitHub remote, only the fetch part runs."""
+import argparse, hashlib, json, os, subprocess, sys
+
+ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
+ap.add_argument("--json", action="store_true", help="machine-readable output on stdout")
+ap.add_argument("--state", default=os.path.expanduser("~/.claude/wanjang/gh"), help="where to keep what was seen")
+a = ap.parse_args()
+ENV = {**os.environ, "GIT_TERMINAL_PROMPT": "0", "GH_PROMPT_DISABLED": "1"}
+
+
+def run(cmd, timeout=60):
+    try:
+        p = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, env=ENV)
+        return p.returncode, p.stdout.strip()
+    except (OSError, subprocess.TimeoutExpired):
+        return 1, ""
+
+
+def gh_json(*args):
+    rc, out = run(["gh", *args])
+    try:
+        return json.loads(out) if rc == 0 and out else None
+    except ValueError:
+        return None
+
+
+rc, top = run(["git", "rev-parse", "--show-toplevel"])
+if rc:
+    print("ghwatch: not a git repository", file=sys.stderr)
+    sys.exit(2)
+path = os.path.join(a.state, hashlib.sha1(top.encode()).hexdigest()[:12] + ".json")
+try:
+    old = json.load(open(path))
+except (OSError, ValueError):
+    old = {}
+new = {"repo": top}
+changed = []
+lines = []
+
+# fetch, never merge
+rc, _ = run(["git", "-C", top, "fetch", "--all", "--prune", "--quiet"], timeout=120)
+if rc:
+    print("ghwatch: git fetch failed (offline, or the remote asks for a login)", file=sys.stderr)
+    sys.exit(2)
+_, branch = run(["git", "-C", top, "rev-parse", "--abbrev-ref", "HEAD"])
+rc, up = run(["git", "-C", top, "rev-parse", "--abbrev-ref", "@{u}"])
+behind = 0
+if rc == 0:
+    _, tip = run(["git", "-C", top, "rev-parse", "@{u}"])
+    _, n = run(["git", "-C", top, "rev-list", "--count", "HEAD..@{u}"])
+    behind = int(n or 0)
+    new["upstream_tip"] = tip
+    if behind:
+        _, log = run(["git", "-C", top, "log", "--format=%h %s", "-5", "HEAD..@{u}"])
+        mark = "*" if tip != old.get("upstream_tip") else " "
+        if mark == "*":
+            changed.append("fetch")
+        lines.append(f"{mark} fetch   {branch} is {behind} behind {up} (not merged; `git pull` takes them)")
+        lines += [f"           {l}" for l in log.splitlines()]
+_, refs = run(["git", "-C", top, "for-each-ref", "--format=%(refname:short) %(upstream:track)", "refs/heads"])
+gone = sorted(r.split()[0] for r in refs.splitlines() if r.endswith("[gone]"))
+new["gone"] = gone
+if gone:
+    mark = "*" if set(gone) - set(old.get("gone", [])) else " "
+    if mark == "*":
+        changed.append("gone")
+    lines.append(f"{mark} gone    {len(gone)} local branches whose remote branch was deleted: {', '.join(gone[:8])}")
+
+# GitHub
+repo = gh_json("repo", "view", "--json", "nameWithOwner")
+me = old.get("me") or ((gh_json("api", "user") or {}).get("login") if repo else None)
+new["me"] = me
+review, issues = [], []
+prs = gh_json("pr", "list", "--state", "open", "--limit", "100", "--json",
+              "number,title,author,isDraft,headRefOid,updatedAt,reviewDecision,statusCheckRollup,reviewRequests,url") if repo else None
+if prs is None:  # keep what was seen: an outage must not read as "every PR closed", then "every PR new"
+    new["prs"], new["issues"] = old.get("prs", {}), old.get("issues", {})
+    lines.append("  github  no GitHub remote, or gh failed (missing, logged out, offline): PRs and issues not checked")
+else:
+
+    def ci(roll):
+        s = [((c.get("conclusion") or c.get("state") or "") + "/" + (c.get("status") or "COMPLETED")).upper() for c in roll or []]
+        if not s:
+            return "none"
+        if any(x.split("/")[0] in ("FAILURE", "ERROR", "CANCELLED", "TIMED_OUT", "ACTION_REQUIRED", "STARTUP_FAILURE") for x in s):
+            return "fail"
+        if any(x.split("/")[1] != "COMPLETED" or x.split("/")[0] in ("PENDING", "EXPECTED", "") for x in s):
+            return "pending"
+        return "pass"
+
+    seen = old.get("prs", {})
+    new["prs"] = {}
+    rows = []
+    for p in prs:
+        k = str(p["number"])
+        asks_me = any(r.get("login") == me for r in p.get("reviewRequests") or [])
+        cur = {"title": p["title"], "oid": p["headRefOid"], "ci": ci(p.get("statusCheckRollup")),
+               "review": p.get("reviewDecision") or "", "asks_me": asks_me, "updated": p["updatedAt"]}
+        new["prs"][k] = cur
+        o, what = seen.get(k), []
+        if not o:
+            what.append("new")
+        else:
+            if cur["oid"] != o["oid"]:
+                what.append("new commits")
+            if cur["ci"] != o["ci"]:
+                what.append(f"CI {cur['ci']} (was {o['ci']})")
+            if cur["review"] != o["review"] and cur["review"]:
+                what.append(cur["review"].lower().replace("_", " "))
+            if asks_me and not o["asks_me"]:
+                what.append("asks for your review")
+            if not what and cur["updated"] != o["updated"]:
+                what.append("new activity")
+        if asks_me:
+            review.append(p["number"])
+        state = f"CI {cur['ci']}" + (f" · {cur['review'].lower().replace('_', ' ')}" if cur["review"] else "")
+        draft = " (draft)" if p.get("isDraft") else ""
+        rows.append(f"{'*' if what else ' '} #{k} {p['title'][:70]}{draft} — @{(p.get('author') or {}).get('login', '?')} · {state}"
+                    + (f" · {', '.join(what)}" if what else ""))
+        if what:
+            changed.append(f"pr#{k}")
+    closed = [f"#{k} {v['title'][:70]}" for k, v in seen.items() if k not in new["prs"]]
+    lines.append(f"  prs     {len(prs)} open in {repo['nameWithOwner']}" + (f", {sum(r[0] == '*' for r in rows)} changed" if rows else ""))
+    lines += [f"  {r}" for r in rows]
+    if closed:
+        changed.append("closed")
+        lines.append(f"* closed  merged or closed since the last check: {'; '.join(closed[:8])}")
+    if review:
+        lines.append(f"  review  asking for your review: {', '.join(f'#{n}' for n in review)}")
+
+    # issues assigned to me, and issues/PRs mentioning me
+    found, issues_ok = {}, True
+    for q, why in (("assignee:@me", "assigned to you"), ("mentions:@me", "mentions you")):
+        for kind in ("issue", "pr"):
+            if kind == "pr" and why == "assigned to you":
+                continue
+            got = gh_json(kind, "list", "--state", "open", "--search", q, "--limit", "30", "--json", "number,title,updatedAt")
+            issues_ok = issues_ok and got is not None
+            for i in got or []:
+                found.setdefault(str(i["number"]), {"title": i["title"], "updated": i["updatedAt"], "why": why})
+    oi = old.get("issues", {})
+    if not issues_ok:
+        found = oi
+        lines.append("  issues  gh failed: issues and mentions not checked")
+    new["issues"] = found
+    for k, v in found.items():
+        what = "new" if k not in oi else "updated" if v["updated"] != oi[k]["updated"] else ""
+        if what:
+            changed.append(f"issue#{k}")
+            issues.append(f"* issue   #{k} {v['title'][:70]} ({v['why']}, {what})")
+
+lines += issues
+os.makedirs(a.state, exist_ok=True)
+with open(path + ".tmp", "w") as f:
+    json.dump(new, f, indent=1)
+os.replace(path + ".tmp", path)
+if a.json:
+    json.dump({"repo": top, "branch": branch, "upstream": up if behind or rc == 0 else "", "behind": behind,
+               "gone": gone, "review": review, "changed": changed, "lines": lines}, sys.stdout, indent=1)
+    print()
+else:
+    print("\n".join(lines) if lines else "  nothing open")
+sys.exit(0 if changed else 3)
